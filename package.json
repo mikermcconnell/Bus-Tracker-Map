@@ -1,0 +1,26 @@
+{
+  "name": "barrie-bus",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "@turf/turf": "6.5.0",
+    "adm-zip": "0.5.12",
+    "cors": "2.8.5",
+    "csv-parse": "5.5.6",
+    "dotenv": "16.4.5",
+    "express": "4.19.2",
+    "gtfs-realtime-bindings": "1.1.1",
+    "node-fetch": "2.7.0"
+  },
+  "scripts": {
+    "build": "node scripts/build-geojson.js",
+    "build:data": "node scripts/build-geojson.js",
+    "start": "node server/server.js",
+    "dev": "node scripts/build-geojson.js --skip-if-cache && node server/server.js"
+  },
+  "devDependencies": {
+    "connect-livereload": "^0.6.1",
+    "livereload": "^0.9.3"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "cache/**"
+    }
+  },
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/index.js" },
+    { "src": "/(.*)", "dest": "/frontend/index.html" }
+  ],
+  "build": {
+    "env": {
+      "GTFS_STATIC_URL": "https://www.myridebarrie.ca/gtfs/google_transit.zip"
+    }
+  }
+}
