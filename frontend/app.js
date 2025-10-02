@@ -16,26 +16,14 @@
     }
   };
 
-  var routeLaneOverrides = {
-    '2A': -8,
-    '2B': 8,
-    '7A': -8,
-    '7B': 8,
-    '8A': -8,
-    '8B': 8,
-    '10': -7,
-    '11': 7,
-    '100': -6,
-    '101': 6,
-    '400': 0
-  };
+  var routeLaneOverrides = {};
 
   var routeLabelOffsetOverrides = {
     '10': -14,
     '100': -18
   };
 
-  var ROUTE_OFFSET_SCALE = 4;
+  var ROUTE_OFFSET_SCALE = 0;
   var ROUTE_OVERLAP_TOLERANCE = 0.00018; // ~20 meters to capture near-coincident lines
   var ROUTE_OVERLAP_DASH = 22;
 
@@ -758,63 +746,18 @@
   }
 
   function renderRouteOverlaps(candidates) {
-    var segments = computeOverlapSegments(candidates);
-    if (!segments.length) return;
+    Object.keys(routeLayers).forEach(function (routeId) {
+      var entry = routeLayers[routeId];
+      if (!entry || !entry.layer || !entry.overlapLayers || !entry.overlapLayers.length) return;
 
-    for (var i = 0; i < segments.length; i++) {
-      var segment = segments[i];
-      var routes = (segment.routes || []).slice();
-      if (routes.length < 2) continue;
-
-      routes.sort(function (a, b) {
-        var aStr = String(a);
-        var bStr = String(b);
-        var aNum = parseFloat(aStr);
-        var bNum = parseFloat(bStr);
-        if (Number.isFinite(aNum) && Number.isFinite(bNum) && aNum !== bNum) {
-          return aNum - bNum;
+      for (var i = 0; i < entry.overlapLayers.length; i++) {
+        var layer = entry.overlapLayers[i];
+        if (layer && typeof entry.layer.removeLayer === 'function') {
+          entry.layer.removeLayer(layer);
         }
-        return aStr.localeCompare(bStr, undefined, { sensitivity: 'base', numeric: true });
-      });
-
-      var feature = {
-        type: 'Feature',
-        properties: { routes: routes.slice() },
-        geometry: segment.geometry
-      };
-
-      for (var r = 0; r < routes.length; r++) {
-        var routeId = routes[r];
-        var entry = routeLayers[routeId];
-        if (!entry || !entry.layer) continue;
-        var meta = getRouteMeta(routeId);
-        var color = (meta && meta.color) || '#202124';
-        var dashOffsetValue = ROUTE_OVERLAP_DASH * r;
-
-        (function (targetEntry, strokeColor, offsetValue) {
-          var layer = L.geoJSON(feature, {
-            pane: 'routeOverlapPane',
-            interactive: false,
-            smoothFactor: 1.4,
-            style: function () {
-              return {
-                color: strokeColor,
-                weight: 7,
-                opacity: 1,
-                dashArray: ROUTE_OVERLAP_DASH + ' ' + ROUTE_OVERLAP_DASH,
-                dashOffset: String(offsetValue),
-                lineCap: 'butt',
-                lineJoin: 'round'
-              };
-            }
-          });
-
-          targetEntry.layer.addLayer(layer);
-          if (!targetEntry.overlapLayers) targetEntry.overlapLayers = [];
-          targetEntry.overlapLayers.push(layer);
-        })(entry, color, dashOffsetValue);
       }
-    }
+      entry.overlapLayers.length = 0;
+    });
   }
 
   function computeLabelTargets(totalLength, labelCount) {
@@ -1490,6 +1433,7 @@
     init();
   }
 })();
+
 
 
 
