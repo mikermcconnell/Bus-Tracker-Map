@@ -229,6 +229,10 @@
     }
     var safeName = sanitizeStopLabel(name);
     var safeId = sanitizeStopLabel(identifier);
+    var labelHtml = safeName;
+    if (identifier === '9005') {
+      labelHtml += '<span class="stop-highlight-note">Your Are Here</span>';
+    }
 
     var override = stopHighlightOverrides[identifier] || null;
     var includeCallout = !(override && override.offsetPx);
@@ -244,7 +248,7 @@
     var html = '' +
       '<div class="stop-highlight"' + wrapperAttrs + '>' +
       (includeCallout ? '  <div class="stop-highlight-callout"></div>' : '') +
-      '  <div class="stop-highlight-label">' + safeName + '</div>' +
+      '  <div class="stop-highlight-label">' + labelHtml + '</div>' +
       '</div>';
 
     var markerOptions = {
