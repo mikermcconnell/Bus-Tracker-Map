@@ -77,6 +77,7 @@ app.get('/api/config', (req, res) => {
     tiles: MAPTILER_KEY
       ? `https://api.maptiler.com/maps/streets/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`
       : `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`,
+    rt_feed_configured: Boolean(RT_URL),
   });
 });
 
