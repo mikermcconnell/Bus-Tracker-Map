@@ -1,4 +1,7 @@
 {
+  "buildCommand": "npm run build",
+  "outputDirectory": "frontend",
+  "framework": null,
   "functions": {
     "api/index.js": {
       "includeFiles": "cache/**"
@@ -6,7 +9,7 @@
   },
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/index.js" },
-    { "src": "/(.*)", "dest": "/frontend/index.html" }
+    { "src": "/(.*)", "dest": "/index.html" }
   ],
   "build": {
     "env": {
