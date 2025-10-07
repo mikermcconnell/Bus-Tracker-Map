@@ -67,7 +67,8 @@
 
 
   var ROUTE_OFFSET_SCALE = 0;
-  var LABEL_CLUSTER_SPACING_METERS = 26;
+  var LABEL_CLUSTER_SPACING_METERS = 45;
+  var LABEL_CLUSTER_KEY_SCALE = 10000;
   var ROUTE_OVERLAP_TOLERANCE = 0.00018; // ~20 meters to capture near-coincident lines
   var ROUTE_OVERLAP_DASH = 22;
 
@@ -952,8 +953,8 @@
     if (!position || !Number.isFinite(position.lat) || !Number.isFinite(position.lng)) {
       return '';
     }
-    var latKey = Math.round(position.lat * 100000);
-    var lngKey = Math.round(position.lng * 100000);
+    var latKey = Math.round(position.lat * LABEL_CLUSTER_KEY_SCALE);
+    var lngKey = Math.round(position.lng * LABEL_CLUSTER_KEY_SCALE);
     return latKey + ':' + lngKey;
   }
 
