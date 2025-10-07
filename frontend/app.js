@@ -19,9 +19,25 @@
   var routeLaneOverrides = {};
 
   var routeLabelOffsetOverrides = {
-    '10': -14,
-    '100': -18
+    '8': 26,
+    '10': -20,
+    '100': -18,
+    '101': 22
   };
+
+  var hiddenRouteLabels = {
+    '7B': true
+  };
+
+  var routeLabelCountOverrides = {
+    '8': 3
+  };
+
+  var routeLabelBudgetOverrides = {
+    '2': 1,
+    '400': 1
+  };
+
 
   var ROUTE_OFFSET_SCALE = 0;
   var ROUTE_OVERLAP_TOLERANCE = 0.00018; // ~20 meters to capture near-coincident lines
@@ -812,6 +828,36 @@
     return 0;
   }
 
+  function resolveRouteLabelCount(meta, routeId) {
+    var candidates = [];
+    if (routeId) candidates.push(routeId);
+    if (meta && meta.id) candidates.push(meta.id);
+    if (meta && meta.displayName) candidates.push(meta.displayName);
+    if (meta && meta.longName) candidates.push(meta.longName);
+    var numericLabel = deriveRouteLabelCode(meta);
+    if (numericLabel) candidates.push(numericLabel);
+    for (var i = 0; i < candidates.length; i++) {
+      var candidate = candidates[i];
+      if (!candidate && candidate !== 0) continue;
+      var normalized = String(candidate).trim();
+      if (!normalized) continue;
+      var digits = normalized.match(/[0-9]+/);
+      var key = digits && digits[0] ? digits[0] : normalizeRouteKey(normalized);
+      if (key && Object.prototype.hasOwnProperty.call(routeLabelCountOverrides, key)) {
+        return routeLabelCountOverrides[key];
+      }
+    }
+    return 1;
+  }
+
+  function resolveRouteLabelBudgetKey(meta) {
+    var label = deriveRouteLabelCode(meta);
+    if (label) return String(label).trim().toUpperCase();
+    if (meta && meta.displayName) return String(meta.displayName).trim().toUpperCase();
+    if (meta && meta.id) return String(meta.id).trim().toUpperCase();
+    return '';
+  }
+
   function movePointByBearing(lat, lng, bearingDeg, distanceMeters) {
     if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(distanceMeters) || distanceMeters === 0) {
       return { lat: lat, lng: lng };
@@ -1107,11 +1153,27 @@
   function buildRouteLabels() {
     var BASE_MIN_DISTANCE = 90;
 
+    var remainingLabelBudgets = {};
+    Object.keys(routeLabelBudgetOverrides).forEach(function (key) {
+      remainingLabelBudgets[key] = routeLabelBudgetOverrides[key];
+    });
+
     Object.keys(routeLayers).forEach(function (routeId) {
       var entry = routeLayers[routeId];
       if (!entry || !entry.labelLayer || !entry.labelGeometries || !entry.meta) return;
 
       entry.labelLayer.clearLayers();
+
+      var labelKey = entry.meta && entry.meta.displayName ? String(entry.meta.displayName).trim().toUpperCase() : '';
+      if (labelKey && hiddenRouteLabels[labelKey]) {
+        return;
+      }
+
+      var budgetKey = resolveRouteLabelBudgetKey(entry.meta);
+      var hasBudgetLimit = budgetKey && Object.prototype.hasOwnProperty.call(remainingLabelBudgets, budgetKey);
+      if (hasBudgetLimit && remainingLabelBudgets[budgetKey] <= 0) {
+        return;
+      }
 
       var coordinateSets = [];
       for (var i = 0; i < entry.labelGeometries.length; i++) {
@@ -1136,11 +1198,15 @@
 
       var minDistance = Math.min(BASE_MIN_DISTANCE, Math.max(35, totalLength / 2.8));
 
-      var targets = computeLabelTargets(totalLength, 1);
+      var labelCount = resolveRouteLabelCount(entry.meta, routeId);
+      var targets = computeLabelTargets(totalLength, labelCount);
       if (!targets.length) return;
 
       var placed = [];
       for (var t = 0; t < targets.length; t++) {
+        if (hasBudgetLimit && remainingLabelBudgets[budgetKey] <= 0) {
+          break;
+        }
         var position = locatePointAlongLines(lineLatLngs, targets[t]);
         if (!position) continue;
 
@@ -1189,23 +1255,28 @@
         if (!marker) continue;
 
         entry.labelLayer.addLayer(marker);
+        if (hasBudgetLimit) {
+          remainingLabelBudgets[budgetKey] = Math.max(0, remainingLabelBudgets[budgetKey] - 1);
+        }
         placed.push(marker.getLatLng());
       }
 
       var layers = entry.labelLayer.getLayers();
-      if (!layers.length) {
+      if (!layers.length && (!hasBudgetLimit || remainingLabelBudgets[budgetKey] > 0)) {
         var midpoint = locatePointAlongLines(lineLatLngs, totalLength / 2);
         if (midpoint) {
           var fallbackMid = createRouteLabelMarker(entry.meta, midpoint, routeId);
           if (fallbackMid) {
             entry.labelLayer.addLayer(fallbackMid);
+            if (hasBudgetLimit) {
+              remainingLabelBudgets[budgetKey] = Math.max(0, remainingLabelBudgets[budgetKey] - 1);
+            }
             layers = entry.labelLayer.getLayers();
           }
         }
       }
     });
   }
-
 
   function loadRoutes() {
     fetchJson('/api/routes.geojson')
