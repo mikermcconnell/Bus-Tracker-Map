@@ -8,11 +8,38 @@
   var routeMetadata = {};
   var routeKeyIndex = {};
   var markers = {}; // id -> { marker, routeId, iconSignature, lastSeen, lastLat, lastLon }
-  var highlightedStopKeys = ['1', '9005'];
+  var highlightedStopKeys = ['725', '330', '333', '76', '777', '488', '9002', '1'];
   var stopHighlightOverrides = {
     '9005': {
-      offsetPx: { x: 25, y: -12 },
-      cssOffsets: { x: '-50%', y: '-50%' }
+      cssOffsets: { x: '-50%', y: '-50%' },
+      label: 'Barrie Allandale Transit Terminal',
+      note: 'You Are Here'
+    },
+    '725': {
+      label: 'Barrie South GO'
+    },
+    '330': {
+      label: 'Georgian College'
+    },
+    '333': {
+      label: 'Royal Victoria Hospital'
+    },
+    '76': {
+      label: 'Georgian Mall'
+    },
+    '777': {
+      label: 'Park Place'
+    },
+    '488': {
+      label: 'Peggy Hill Community Centre'
+    },
+    '9002': {
+      label: 'Barrie Allandale Transit Terminal',
+      note: 'You Are Here',
+      coords: { lat: 44.3740170437343, lng: -79.6899831810679 }
+    },
+    '1': {
+      label: 'Downtown Barrie'
     }
   };
 
@@ -21,7 +48,7 @@
   var routeLabelOffsetOverrides = {
     '8': 26,
     '10': -20,
-    '100': -18,
+    '100': 18,
     '101': 22
   };
 
@@ -40,6 +67,7 @@
 
 
   var ROUTE_OFFSET_SCALE = 0;
+  var LABEL_CLUSTER_SPACING_METERS = 26;
   var ROUTE_OVERLAP_TOLERANCE = 0.00018; // ~20 meters to capture near-coincident lines
   var ROUTE_OVERLAP_DASH = 22;
 
@@ -238,20 +266,29 @@
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
 
     var props = feature.properties || {};
+    var override = stopHighlightOverrides[identifier] || null;
     var rawName = props.stop_name || ('Stop ' + identifier);
     var name = rawName;
     if (identifier === '9005') {
       name = rawName.replace(/\s*Platform\s*\d+$/i, '').trim();
     }
+    if (override && override.label) {
+      name = override.label;
+    }
     var safeName = sanitizeStopLabel(name);
     var safeId = sanitizeStopLabel(identifier);
     var labelHtml = safeName;
-    if (identifier === '9005') {
-      labelHtml += '<span class="stop-highlight-note">Your Are Here</span>';
+    var safeNote = null;
+    if (override && override.note) {
+      safeNote = sanitizeStopLabel(override.note);
+    } else if (identifier === '9005') {
+      safeNote = 'You Are Here';
+    }
+    if (safeNote) {
+      labelHtml += '<span class="stop-highlight-note">' + safeNote + '</span>';
     }
 
-    var override = stopHighlightOverrides[identifier] || null;
-    var includeCallout = !(override && override.offsetPx);
+    var includeCallout = false;
     var wrapperAttrs = ' data-stop="' + safeId + '"';
     if (override && override.cssOffsets) {
       var cssParts = [];
@@ -277,33 +314,44 @@
       interactive: false
     };
 
-    if (override && override.offsetPx && map && map.latLngToLayerPoint && map.layerPointToLatLng) {
+    var pixelOffset = { x: 10, y: -5 };
+    if (override && override.offsetPx) {
+      pixelOffset = override.offsetPx;
+    }
+
+    var labelLat = lat;
+    var labelLng = lon;
+
+    if (map && map.latLngToLayerPoint && map.layerPointToLatLng && (pixelOffset.x || pixelOffset.y)) {
       try {
         var baseLatLng = L.latLng(lat, lon);
         var layerPoint = map.latLngToLayerPoint(baseLatLng);
         var offsetPoint = L.point(
-          layerPoint.x + Number(override.offsetPx.x || 0),
-          layerPoint.y + Number(override.offsetPx.y || 0)
+          layerPoint.x + Number(pixelOffset.x || 0),
+          layerPoint.y + Number(pixelOffset.y || 0)
         );
         var offsetLatLng = map.layerPointToLatLng(offsetPoint);
-        var labelMarker = L.marker([offsetLatLng.lat, offsetLatLng.lng], markerOptions);
-        var connector = L.polyline([
-          [lat, lon],
-          [offsetLatLng.lat, offsetLatLng.lng]
-        ], {
-          color: '#202124',
-          weight: 2,
-          opacity: 0.85,
-          dashArray: '6 6',
-          pane: 'stopHighlightPane'
-        });
-        return L.layerGroup([connector, labelMarker]);
+        labelLat = offsetLatLng.lat;
+        labelLng = offsetLatLng.lng;
       } catch (err) {
-        console.warn('Failed to offset highlight for stop 9005:', err);
+        console.warn('Failed to offset highlight for stop ' + identifier + ':', err);
       }
     }
 
-    return L.marker([lat, lon], markerOptions);
+    var dotMarker = L.circleMarker([lat, lon], {
+      radius: 6,
+      color: '#202124',
+      weight: 2,
+      fillColor: '#ffffff',
+      fillOpacity: 1,
+      opacity: 1,
+      pane: 'stopHighlightPane',
+      interactive: false
+    });
+
+    var labelMarker = L.marker([labelLat, labelLng], markerOptions);
+
+    return L.layerGroup([dotMarker, labelMarker]);
   }
 
   function loadStopHighlights() {
@@ -315,11 +363,29 @@
         var features = Array.isArray(gj.features) ? gj.features : [];
         highlightedStopKeys.forEach(function (key) {
           var match = findStopFeatureByKey(features, key);
-          if (!match) {
+          var feature = match ? match.feature : null;
+          var override = stopHighlightOverrides[key] || null;
+          if (!feature && override && override.coords) {
+            var lat = Number(override.coords.lat);
+            var lng = Number(override.coords.lng);
+            if (Number.isFinite(lat) && Number.isFinite(lng)) {
+              feature = {
+                type: 'Feature',
+                properties: {
+                  stop_name: override.label || ('Stop ' + key)
+                },
+                geometry: {
+                  type: 'Point',
+                  coordinates: [lng, lat]
+                }
+              };
+            }
+          }
+          if (!feature) {
             console.warn('Highlight stop not found for key:', key);
             return;
           }
-          var marker = createStopHighlightMarker(match.feature, key);
+          var marker = createStopHighlightMarker(feature, key);
           if (marker) {
             marker.addTo(highlightLayer);
           }
@@ -882,6 +948,39 @@
     return { lat: phi2 * 180 / Math.PI, lng: lambda2 * 180 / Math.PI };
   }
 
+  function computeLabelClusterKey(position) {
+    if (!position || !Number.isFinite(position.lat) || !Number.isFinite(position.lng)) {
+      return '';
+    }
+    var latKey = Math.round(position.lat * 100000);
+    var lngKey = Math.round(position.lng * 100000);
+    return latKey + ':' + lngKey;
+  }
+
+  function computeLabelClusterOffset(index) {
+    if (!Number.isInteger(index) || index <= 0) {
+      return 0;
+    }
+    var step = LABEL_CLUSTER_SPACING_METERS;
+    var band = Math.ceil(index / 2);
+    var direction = (index % 2) === 1 ? 1 : -1;
+    return band * step * direction;
+  }
+
+  function applyLabelClusterOffset(position, offsetMeters) {
+    if (!position || !Number.isFinite(offsetMeters) || offsetMeters === 0) {
+      return position;
+    }
+    var bearing = Number.isFinite(position.bearing) ? position.bearing : 0;
+    var lateralBearing = offsetMeters > 0 ? bearing + 90 : bearing - 90;
+    var target = movePointByBearing(position.lat, position.lng, lateralBearing, Math.abs(offsetMeters));
+    return {
+      lat: target.lat,
+      lng: target.lng,
+      bearing: position.bearing
+    };
+  }
+
   function applyRouteLabelOffset(meta, position, routeId) {
     if (!position) return position;
     var offset = resolveRouteLabelOffset(meta, routeId);
@@ -1158,6 +1257,8 @@
       remainingLabelBudgets[key] = routeLabelBudgetOverrides[key];
     });
 
+    var labelClusterCounts = {};
+
     Object.keys(routeLayers).forEach(function (routeId) {
       var entry = routeLayers[routeId];
       if (!entry || !entry.labelLayer || !entry.labelGeometries || !entry.meta) return;
@@ -1251,8 +1352,17 @@
 
         if (tooClose) continue;
 
-        var marker = createRouteLabelMarker(entry.meta, position, routeId);
+        var clusterKey = computeLabelClusterKey(position);
+        var clusterIndex = clusterKey ? (labelClusterCounts[clusterKey] || 0) : 0;
+        var clusterOffset = computeLabelClusterOffset(clusterIndex);
+        var adjustedPosition = clusterOffset ? applyLabelClusterOffset(position, clusterOffset) : position;
+
+        var marker = createRouteLabelMarker(entry.meta, adjustedPosition, routeId);
         if (!marker) continue;
+
+        if (clusterKey) {
+          labelClusterCounts[clusterKey] = clusterIndex + 1;
+        }
 
         entry.labelLayer.addLayer(marker);
         if (hasBudgetLimit) {
@@ -1265,8 +1375,16 @@
       if (!layers.length && (!hasBudgetLimit || remainingLabelBudgets[budgetKey] > 0)) {
         var midpoint = locatePointAlongLines(lineLatLngs, totalLength / 2);
         if (midpoint) {
-          var fallbackMid = createRouteLabelMarker(entry.meta, midpoint, routeId);
+          var fallbackKey = computeLabelClusterKey(midpoint);
+          var fallbackIndex = fallbackKey ? (labelClusterCounts[fallbackKey] || 0) : 0;
+          var fallbackOffset = computeLabelClusterOffset(fallbackIndex);
+          var adjustedMidpoint = fallbackOffset ? applyLabelClusterOffset(midpoint, fallbackOffset) : midpoint;
+
+          var fallbackMid = createRouteLabelMarker(entry.meta, adjustedMidpoint, routeId);
           if (fallbackMid) {
+            if (fallbackKey) {
+              labelClusterCounts[fallbackKey] = fallbackIndex + 1;
+            }
             entry.labelLayer.addLayer(fallbackMid);
             if (hasBudgetLimit) {
               remainingLabelBudgets[budgetKey] = Math.max(0, remainingLabelBudgets[budgetKey] - 1);
@@ -1508,6 +1626,8 @@
     init();
   }
 })();
+
+
 
 
 
