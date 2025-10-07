@@ -1385,7 +1385,7 @@
     var normalizedBearing = hasBearing ? normalizeBearing(bearing) : null;
     var bearingValue = normalizedBearing === null ? '0deg' : normalizedBearing.toFixed(1) + 'deg';
     var labelLength = String(label || '').replace(/\s+/g, '').length;
-    var labelSize = labelLength >= 3 ? 20 : 26;
+    var labelSize = labelLength >= 3 ? 15 : 19;
     var arrowColor = (meta.textColor && meta.textColor.toUpperCase() === '#FFFFFF') ? 'rgba(20, 20, 20, 0.88)' : (meta.textColor || '#222222');
     var safeArrow = String(arrowColor || '#222222').replace(/[^#0-9a-zA-Z(),.% -]/g, '');
     var attrs = 'class="vehicle-bubble" style="--route-color:' + safeBg + ';--text-color:' + safeText + ';--label-size:' + labelSize + 'px;--bearing:' + bearingValue + ';--arrow-color:' + safeArrow + ';"';
@@ -1395,9 +1395,9 @@
     return L.divIcon({
       className: 'vehicle-icon',
       html: '\n        <div ' + attrs + '>\n          <svg class="vehicle-arrow" viewBox="0 0 24 16" role="presentation" focusable="false">\n            <path d="M12 0L24 16H0Z"/>\n          </svg>\n          <span class="vehicle-label">' + safeLabel + '</span>\n        </div>\n      ',
-      iconSize: [58, 58],
-      iconAnchor: [29, 29],
-      popupAnchor: [0, -30]
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+      popupAnchor: [0, -22]
     });
   }
 
