@@ -177,6 +177,7 @@
       .then(function (geojson) {
         majorRoadLineLayer.clearLayers();
         majorRoadLabelLayer.clearLayers();
+        geojson = appendManualMajorRoads(geojson);
 
         L.geoJSON(geojson, {
           pane: 'majorRoadPane',
@@ -199,6 +200,103 @@
       .catch(function (err) {
         console.warn('Major road data unavailable', err);
       });
+  }
+
+  function appendManualMajorRoads(geojson) {
+    if (!geojson || typeof geojson !== 'object' || geojson === null) return geojson;
+    if (!Array.isArray(geojson.features)) {
+      geojson.features = [];
+    }
+    var features = geojson.features;
+    var existing = Object.create(null);
+    for (var i = 0; i < features.length; i++) {
+      var feature = features[i];
+      if (!feature || !feature.properties || !feature.properties.name) continue;
+      var key = String(feature.properties.name).trim().toUpperCase();
+      if (key) {
+        existing[key] = true;
+      }
+    }
+
+    var manual = [
+      {
+        type: 'Feature',
+        properties: {
+          name: 'Bradford Street',
+          manual: true
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-79.690961, 44.3753786],
+            [-79.6912517, 44.375482],
+            [-79.6920375, 44.3757165],
+            [-79.6923082, 44.3758372],
+            [-79.6925016, 44.3759716],
+            [-79.6926772, 44.3761671],
+            [-79.69292, 44.3765199],
+            [-79.6933921, 44.3772484],
+            [-79.6934838, 44.3774094]
+          ]
+        }
+      },
+      {
+        type: 'Feature',
+        properties: {
+          name: 'Lakeshore Drive',
+          manual: true
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-79.6851812, 44.3740648],
+            [-79.685328, 44.3740857],
+            [-79.6855098, 44.3741077],
+            [-79.6858369, 44.3741534],
+            [-79.6861882, 44.3742301],
+            [-79.6866591, 44.374371],
+            [-79.686982, 44.3744746],
+            [-79.687405, 44.3747076],
+            [-79.6877481, 44.3748466],
+            [-79.6880335, 44.3749444],
+            [-79.688227, 44.3749769],
+            [-79.6885117, 44.3750024],
+            [-79.6887462, 44.3749726]
+          ]
+        }
+      },
+      {
+        type: 'Feature',
+        properties: {
+          name: 'Anne Street',
+          manual: true
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-79.6988287, 44.3750911],
+            [-79.6992544, 44.3755885],
+            [-79.6995931, 44.3759844],
+            [-79.7002433, 44.376733],
+            [-79.7003386, 44.3768456],
+            [-79.7005449, 44.3770894],
+            [-79.7010845, 44.377727],
+            [-79.7011522, 44.3778061]
+          ]
+        }
+      }
+    ];
+
+    for (var j = 0; j < manual.length; j++) {
+      var addition = manual[j];
+      if (!addition || !addition.properties || !addition.properties.name) continue;
+      var manualKey = String(addition.properties.name).trim().toUpperCase();
+      if (!manualKey || existing[manualKey]) continue;
+      features.push(addition);
+      existing[manualKey] = true;
+    }
+
+    return geojson;
   }
 
   function addMajorRoadLabel(feature, layer) {
