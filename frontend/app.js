@@ -53,12 +53,18 @@
   };
 
   var hiddenRouteLabels = {
-    '7B': true,
-    '100': true
+    '7B': true
   };
 
   var routeLabelCountOverrides = {
+    '100': 2,
+    '11': 2,
     '8': 3
+  };
+
+  var routeLabelTargetOverrides = {
+    '100': [0.27, 0.74],
+    '11': [0.24, 0.72]
   };
 
   var routeLabelBudgetOverrides = {
@@ -192,10 +198,8 @@
 
   function addMajorRoadLabel(feature, layer) {
     if (!feature || !feature.properties || !feature.properties.name) return;
-    if (!layer || !layer.getBounds) return;
-    var bounds = layer.getBounds();
-    if (!bounds || !bounds.isValid()) return;
-    var center = bounds.getCenter();
+    var anchor = resolveMajorRoadLabelAnchor(feature, layer);
+    if (!anchor) return;
     var label = L.tooltip({
       permanent: true,
       direction: 'center',
@@ -204,9 +208,115 @@
       offset: [0, 0],
       opacity: 1
     })
-      .setLatLng(center)
+      .setLatLng(anchor)
       .setContent(feature.properties.name);
     majorRoadLabelLayer.addLayer(label);
+  }
+
+  function resolveMajorRoadLabelAnchor(feature, layer) {
+    var geometry = feature && feature.geometry;
+    var anchor = computeMajorRoadGeometryAnchor(geometry);
+    if (anchor) return anchor;
+    if (layer && layer.getBounds) {
+      var bounds = layer.getBounds();
+      if (bounds && bounds.isValid()) {
+        return bounds.getCenter();
+      }
+    }
+    return null;
+  }
+
+  function computeMajorRoadGeometryAnchor(geometry) {
+    if (!geometry) return null;
+    var lineStrings = collectGeometryLineStrings(geometry);
+    if (!lineStrings.length) return null;
+    var best = null;
+    for (var i = 0; i < lineStrings.length; i++) {
+      var candidate = computeLineMidpoint(lineStrings[i]);
+      if (!candidate) continue;
+      if (!best || candidate.length > best.length) {
+        best = candidate;
+      }
+    }
+    return best ? { lat: best.lat, lng: best.lng } : null;
+  }
+
+  function collectGeometryLineStrings(geometry) {
+    var results = [];
+    if (!geometry || !geometry.type) return results;
+    if (geometry.type === 'LineString') {
+      results.push(geometry.coordinates || []);
+      return results;
+    }
+    if (geometry.type === 'MultiLineString') {
+      var coords = geometry.coordinates || [];
+      for (var i = 0; i < coords.length; i++) {
+        if (Array.isArray(coords[i])) {
+          results.push(coords[i]);
+        }
+      }
+      return results;
+    }
+    if (geometry.type === 'GeometryCollection') {
+      var geoms = geometry.geometries || [];
+      for (var j = 0; j < geoms.length; j++) {
+        var sub = collectGeometryLineStrings(geoms[j]);
+        if (sub.length) {
+          Array.prototype.push.apply(results, sub);
+        }
+      }
+    }
+    return results;
+  }
+
+  function computeLineMidpoint(coords) {
+    if (!Array.isArray(coords) || coords.length < 2) return null;
+    var latlngs = [];
+    for (var i = 0; i < coords.length; i++) {
+      var coord = coords[i];
+      if (!Array.isArray(coord) || coord.length < 2) continue;
+      var lng = Number(coord[0]);
+      var lat = Number(coord[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      latlngs.push(L.latLng(lat, lng));
+    }
+    if (latlngs.length === 0) return null;
+    if (latlngs.length === 1) {
+      return { lat: latlngs[0].lat, lng: latlngs[0].lng, length: 0 };
+    }
+
+    var total = 0;
+    var segments = [];
+    for (var k = 0; k < latlngs.length - 1; k++) {
+      var start = latlngs[k];
+      var end = latlngs[k + 1];
+      var segLen = start.distanceTo(end);
+      segments.push({ start: start, end: end, length: segLen });
+      total += segLen;
+    }
+
+    if (total <= 0) {
+      var mid = latlngs[Math.floor(latlngs.length / 2)];
+      return { lat: mid.lat, lng: mid.lng, length: 0 };
+    }
+
+    var halfway = total / 2;
+    var accumulated = 0;
+    for (var m = 0; m < segments.length; m++) {
+      var segment = segments[m];
+      if (segment.length <= 0) continue;
+      if (accumulated + segment.length >= halfway) {
+        var remainder = halfway - accumulated;
+        var t = remainder / segment.length;
+        var midLat = segment.start.lat + (segment.end.lat - segment.start.lat) * t;
+        var midLng = segment.start.lng + (segment.end.lng - segment.start.lng) * t;
+        return { lat: midLat, lng: midLng, length: total };
+      }
+      accumulated += segment.length;
+    }
+
+    var lastSegment = segments[segments.length - 1];
+    return lastSegment ? { lat: lastSegment.end.lat, lng: lastSegment.end.lng, length: total } : null;
   }
 
   function updateMajorRoadLabelVisibility() {
@@ -976,6 +1086,52 @@
     return 0;
   }
 
+  function resolveRouteLabelTargets(meta, routeId, totalLength) {
+    if (!Number.isFinite(totalLength) || totalLength <= 0) {
+      return null;
+    }
+
+    var candidates = [];
+    if (routeId) candidates.push(routeId);
+    if (meta && meta.id) candidates.push(meta.id);
+    if (meta && meta.displayName) candidates.push(meta.displayName);
+    if (meta && meta.longName) candidates.push(meta.longName);
+    var numericLabel = deriveRouteLabelCode(meta);
+    if (numericLabel) candidates.push(numericLabel);
+
+    for (var i = 0; i < candidates.length; i++) {
+      var candidate = candidates[i];
+      if (!candidate && candidate !== 0) continue;
+      var normalized = String(candidate).trim();
+      if (!normalized) continue;
+      var digits = normalized.match(/[0-9]+/);
+      var key = digits && digits[0] ? digits[0] : normalizeRouteKey(normalized);
+      if (key && Object.prototype.hasOwnProperty.call(routeLabelTargetOverrides, key)) {
+        return normalizeRouteLabelTargets(routeLabelTargetOverrides[key], totalLength);
+      }
+    }
+    return null;
+  }
+
+  function normalizeRouteLabelTargets(source, totalLength) {
+    if (source === null || source === undefined) return null;
+    var values = Array.isArray(source) ? source : [source];
+    var results = [];
+    for (var i = 0; i < values.length; i++) {
+      var raw = Number(values[i]);
+      if (!Number.isFinite(raw)) continue;
+      var distance = raw;
+      if (raw > 0 && raw <= 1) {
+        distance = totalLength * raw;
+      }
+      if (!Number.isFinite(distance)) continue;
+      if (distance <= 0) continue;
+      distance = Math.max(1, Math.min(distance, totalLength - 1));
+      results.push(distance);
+    }
+    return results.length ? results : null;
+  }
+
   function resolveRouteLabelCount(meta, routeId) {
     var candidates = [];
     if (routeId) candidates.push(routeId);
@@ -1382,7 +1538,8 @@
       var minDistance = Math.min(BASE_MIN_DISTANCE, Math.max(35, totalLength / 2.8));
 
       var labelCount = resolveRouteLabelCount(entry.meta, routeId);
-      var targets = computeLabelTargets(totalLength, labelCount);
+      var overrideTargets = resolveRouteLabelTargets(entry.meta, routeId, totalLength);
+      var targets = overrideTargets && overrideTargets.length ? overrideTargets : computeLabelTargets(totalLength, labelCount);
       if (!targets.length) return;
 
       var placed = [];
