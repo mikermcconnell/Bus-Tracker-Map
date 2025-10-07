@@ -1,5 +1,5 @@
 (function () {
-  var map, routesGroup, vehicleLayer, highlightLayer, bannerEl, pollMs = 10000, tileUrl;
+  var map, routesGroup, vehicleLayer, highlightLayer, majorRoadLineLayer, majorRoadLabelLayer, bannerEl, pollMs = 10000, tileUrl;
   var legendEl;
   var bannerMessages = {};
   var bannerPriority = ['routes', 'vehicles'];
@@ -53,7 +53,8 @@
   };
 
   var hiddenRouteLabels = {
-    '7B': true
+    '7B': true,
+    '100': true
   };
 
   var routeLabelCountOverrides = {
@@ -66,6 +67,7 @@
   };
 
 
+  var MAJOR_ROAD_LABEL_MIN_ZOOM = 12;
   var ROUTE_OFFSET_SCALE = 0;
   var LABEL_CLUSTER_SPACING_METERS = 45;
   var LABEL_CLUSTER_KEY_SCALE = 10000;
@@ -87,6 +89,7 @@
         tileUrl = cfg.tiles || 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
         setupMap();
         setupLegend();
+        loadMajorRoads();
         loadRoutes();
         loadStopHighlights();
         startVehiclesPoll();
@@ -95,6 +98,7 @@
         tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
         setupMap();
         setupLegend();
+        loadMajorRoads();
         loadRoutes();
         loadStopHighlights();
         startVehiclesPoll();
@@ -104,6 +108,14 @@
   function setupMap() {
     map = L.map('map', { zoomControl: true, zoomSnap: 0.5, zoomDelta: 0.5 }).setView([44.3894, -79.6903], 13);
     map.zoomControl.setPosition('bottomright');
+
+    map.createPane('majorRoadPane');
+    map.getPane('majorRoadPane').style.zIndex = 410;
+    map.getPane('majorRoadPane').style.pointerEvents = 'none';
+
+    map.createPane('majorRoadLabelPane');
+    map.getPane('majorRoadLabelPane').style.zIndex = 434;
+    map.getPane('majorRoadLabelPane').style.pointerEvents = 'none';
 
     map.createPane('routeOutlinePane');
     map.getPane('routeOutlinePane').style.zIndex = 420;
@@ -134,9 +146,78 @@
       opacity: 0.34,
       detectRetina: true
     }).addTo(map);
+    majorRoadLineLayer = L.layerGroup().addTo(map);
+    majorRoadLabelLayer = L.layerGroup();
     routesGroup = L.layerGroup().addTo(map);
     vehicleLayer = L.layerGroup().addTo(map);
     highlightLayer = L.layerGroup().addTo(map);
+    map.on('zoomend', updateMajorRoadLabelVisibility);
+    updateMajorRoadLabelVisibility();
+  }
+
+  function loadMajorRoads() {
+    if (!majorRoadLineLayer || !majorRoadLabelLayer) return;
+
+    fetch('data/major-roads.geojson')
+      .then(function (response) {
+        if (!response.ok) throw new Error('Major road data request failed: ' + response.status);
+        return response.json();
+      })
+      .then(function (geojson) {
+        majorRoadLineLayer.clearLayers();
+        majorRoadLabelLayer.clearLayers();
+
+        L.geoJSON(geojson, {
+          pane: 'majorRoadPane',
+          style: function () {
+            return {
+              color: '#4a4a4a',
+              weight: 2.5,
+              opacity: 0.85,
+              lineCap: 'round',
+              lineJoin: 'round'
+            };
+          },
+          onEachFeature: function (feature, layer) {
+            addMajorRoadLabel(feature, layer);
+          }
+        }).addTo(majorRoadLineLayer);
+
+        updateMajorRoadLabelVisibility();
+      })
+      .catch(function (err) {
+        console.warn('Major road data unavailable', err);
+      });
+  }
+
+  function addMajorRoadLabel(feature, layer) {
+    if (!feature || !feature.properties || !feature.properties.name) return;
+    if (!layer || !layer.getBounds) return;
+    var bounds = layer.getBounds();
+    if (!bounds || !bounds.isValid()) return;
+    var center = bounds.getCenter();
+    var label = L.tooltip({
+      permanent: true,
+      direction: 'center',
+      className: 'major-road-label',
+      pane: 'majorRoadLabelPane',
+      offset: [0, 0],
+      opacity: 1
+    })
+      .setLatLng(center)
+      .setContent(feature.properties.name);
+    majorRoadLabelLayer.addLayer(label);
+  }
+
+  function updateMajorRoadLabelVisibility() {
+    if (!map || !majorRoadLabelLayer) return;
+    var shouldShow = map.getZoom() >= MAJOR_ROAD_LABEL_MIN_ZOOM;
+    var isShowing = map.hasLayer(majorRoadLabelLayer);
+    if (shouldShow && !isShowing) {
+      majorRoadLabelLayer.addTo(map);
+    } else if (!shouldShow && isShowing) {
+      majorRoadLabelLayer.removeFrom(map);
+    }
   }
 
   function setupLegend() {
@@ -1627,6 +1708,7 @@
     init();
   }
 })();
+
 
 
 
