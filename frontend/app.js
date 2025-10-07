@@ -75,6 +75,7 @@
 
   var MAJOR_ROAD_LABEL_MIN_ZOOM = 12;
   var ROUTE_OFFSET_SCALE = 0;
+  var ROUTE_LABELS_ENABLED = false;
   var LABEL_CLUSTER_SPACING_METERS = 45;
   var LABEL_CLUSTER_KEY_SCALE = 10000;
   var ROUTE_OVERLAP_TOLERANCE = 0.00018; // ~20 meters to capture near-coincident lines
@@ -1488,6 +1489,16 @@
   }
 
   function buildRouteLabels() {
+    if (!ROUTE_LABELS_ENABLED) {
+      Object.keys(routeLayers).forEach(function (routeId) {
+        var entry = routeLayers[routeId];
+        if (entry && entry.labelLayer) {
+          entry.labelLayer.clearLayers();
+        }
+      });
+      return;
+    }
+
     var BASE_MIN_DISTANCE = 90;
 
     var remainingLabelBudgets = {};
