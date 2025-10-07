@@ -74,6 +74,10 @@
 
 
   var MAJOR_ROAD_LABEL_MIN_ZOOM = 12;
+  var MAJOR_ROAD_LABEL_REPEAT_DISTANCE_METERS = 1400;
+  var MAJOR_ROAD_LABEL_MIN_LENGTH_FOR_REPEAT = 900;
+  var MAJOR_ROAD_LABEL_MAX_COUNT = 5;
+  var MAJOR_ROAD_LABEL_MIN_SPACING_METERS = 600;
   var ROUTE_OFFSET_SCALE = 0;
   var ROUTE_LABELS_ENABLED = false;
   var LABEL_CLUSTER_SPACING_METERS = 45;
@@ -199,30 +203,117 @@
 
   function addMajorRoadLabel(feature, layer) {
     if (!feature || !feature.properties || !feature.properties.name) return;
-    var anchor = resolveMajorRoadLabelAnchor(feature, layer);
-    if (!anchor) return;
-    var label = L.tooltip({
-      permanent: true,
-      direction: 'center',
-      className: 'major-road-label',
-      pane: 'majorRoadLabelPane',
-      offset: [0, 0],
-      opacity: 1
-    })
-      .setLatLng(anchor)
-      .setContent(feature.properties.name);
-    majorRoadLabelLayer.addLayer(label);
+    var anchors = computeMajorRoadLabelAnchors(feature, layer);
+    if (!anchors || !anchors.length) return;
+    for (var i = 0; i < anchors.length; i++) {
+      var anchor = anchors[i];
+      var label = L.tooltip({
+        permanent: true,
+        direction: 'center',
+        className: 'major-road-label',
+        pane: 'majorRoadLabelPane',
+        offset: [0, 0],
+        opacity: 1
+      })
+        .setLatLng({ lat: anchor.lat, lng: anchor.lng })
+        .setContent(feature.properties.name);
+      (function (anchorRef, labelRef) {
+        labelRef.on('add', function () {
+          var el = labelRef.getElement();
+          if (!el) return;
+          var angleToken = formatMajorRoadAngle(anchorRef.bearing);
+          if (angleToken) {
+            el.style.setProperty('--major-road-angle', angleToken);
+          } else {
+            el.style.removeProperty('--major-road-angle');
+          }
+        });
+      })(anchor, label);
+      majorRoadLabelLayer.addLayer(label);
+    }
+  }
+
+  function computeMajorRoadLabelAnchors(feature, layer) {
+    var geometry = feature && feature.geometry;
+    var lineStrings = collectGeometryLineStrings(geometry);
+    var lineLatLngs = [];
+    for (var i = 0; i < lineStrings.length; i++) {
+      var latLngs = convertCoordsToLatLngs(lineStrings[i]);
+      if (latLngs.length) {
+        lineLatLngs.push(latLngs);
+      }
+    }
+
+    var totalLength = 0;
+    for (var j = 0; j < lineLatLngs.length; j++) {
+      totalLength += computeLineLengthMeters(lineLatLngs[j]);
+    }
+
+    var anchors = [];
+    var desiredCount = computeMajorRoadLabelCount(totalLength);
+    if (desiredCount > 1) {
+      for (var idx = 0; idx < desiredCount; idx++) {
+        var target = totalLength * (idx + 1) / (desiredCount + 1);
+        var point = locatePointAlongLines(lineLatLngs, target);
+        if (point) {
+          anchors.push({ lat: point.lat, lng: point.lng, bearing: point.bearing });
+        }
+      }
+    } else if (desiredCount === 1) {
+      var fallback = computeMajorRoadGeometryAnchor(geometry);
+      if (fallback) anchors.push(fallback);
+    }
+
+    if (!anchors.length) {
+      var backup = computeMajorRoadGeometryAnchor(geometry);
+      if (backup) anchors.push(backup);
+    }
+    if (!anchors.length && layer && layer.getBounds) {
+      var bounds = layer.getBounds();
+      if (bounds && bounds.isValid()) {
+        var center = bounds.getCenter();
+        anchors.push({ lat: center.lat, lng: center.lng });
+      }
+    }
+    return filterMajorRoadAnchors(anchors);
+  }
+
+  function computeMajorRoadLabelCount(totalLength) {
+    if (!Number.isFinite(totalLength) || totalLength <= 0) return 0;
+    if (totalLength < MAJOR_ROAD_LABEL_MIN_LENGTH_FOR_REPEAT) return 1;
+    var count = Math.floor(totalLength / MAJOR_ROAD_LABEL_REPEAT_DISTANCE_METERS) + 1;
+    count = Math.max(1, count);
+    count = Math.min(MAJOR_ROAD_LABEL_MAX_COUNT, count);
+    return count;
+  }
+
+  function filterMajorRoadAnchors(anchors) {
+    if (!Array.isArray(anchors) || anchors.length <= 1) return anchors || [];
+    var results = [];
+    for (var i = 0; i < anchors.length; i++) {
+      var anchor = anchors[i];
+      if (!anchor || !Number.isFinite(anchor.lat) || !Number.isFinite(anchor.lng)) continue;
+      var latLng = L.latLng(anchor.lat, anchor.lng);
+      var tooClose = false;
+      for (var j = 0; j < results.length; j++) {
+        var existing = results[j];
+        var existingLatLng = L.latLng(existing.lat, existing.lng);
+        if (latLng.distanceTo(existingLatLng) < MAJOR_ROAD_LABEL_MIN_SPACING_METERS) {
+          tooClose = true;
+          break;
+        }
+      }
+      if (!tooClose) {
+        results.push(anchor);
+      }
+    }
+    return results.length ? results : anchors.slice(0, 1);
   }
 
   function resolveMajorRoadLabelAnchor(feature, layer) {
-    var geometry = feature && feature.geometry;
-    var anchor = computeMajorRoadGeometryAnchor(geometry);
-    if (anchor) return anchor;
-    if (layer && layer.getBounds) {
-      var bounds = layer.getBounds();
-      if (bounds && bounds.isValid()) {
-        return bounds.getCenter();
-      }
+    var anchors = computeMajorRoadLabelAnchors(feature, layer);
+    if (anchors && anchors.length) {
+      return { lat: anchors[0].lat, lng: anchors[0].lng };
     }
     return null;
   }
@@ -239,7 +330,24 @@
         best = candidate;
       }
     }
-    return best ? { lat: best.lat, lng: best.lng } : null;
+    return best ? { lat: best.lat, lng: best.lng, bearing: best.bearing } : null;
+  }
+
+  function formatMajorRoadAngle(bearing) {
+    if (!Number.isFinite(bearing)) return null;
+    var normalized = normalizeMajorRoadLabelAngle(bearing);
+    if (!Number.isFinite(normalized)) return null;
+    return normalized.toFixed(1) + 'deg';
+  }
+
+  function normalizeMajorRoadLabelAngle(bearing) {
+    if (!Number.isFinite(bearing)) return 0;
+    var angle = bearing % 360;
+    if (angle < 0) angle += 360;
+    if (angle > 180) angle -= 180;
+    if (angle > 90) angle -= 180;
+    if (angle < -90) angle += 180;
+    return angle;
   }
 
   function collectGeometryLineStrings(geometry) {
@@ -283,7 +391,7 @@
     }
     if (latlngs.length === 0) return null;
     if (latlngs.length === 1) {
-      return { lat: latlngs[0].lat, lng: latlngs[0].lng, length: 0 };
+      return { lat: latlngs[0].lat, lng: latlngs[0].lng, length: 0, bearing: 0 };
     }
 
     var total = 0;
@@ -298,7 +406,7 @@
 
     if (total <= 0) {
       var mid = latlngs[Math.floor(latlngs.length / 2)];
-      return { lat: mid.lat, lng: mid.lng, length: 0 };
+      return { lat: mid.lat, lng: mid.lng, length: 0, bearing: 0 };
     }
 
     var halfway = total / 2;
@@ -311,13 +419,16 @@
         var t = remainder / segment.length;
         var midLat = segment.start.lat + (segment.end.lat - segment.start.lat) * t;
         var midLng = segment.start.lng + (segment.end.lng - segment.start.lng) * t;
-        return { lat: midLat, lng: midLng, length: total };
+        var bearing = computeBearingBetween(segment.start.lat, segment.start.lng, segment.end.lat, segment.end.lng);
+        return { lat: midLat, lng: midLng, length: total, bearing: bearing };
       }
       accumulated += segment.length;
     }
 
     var lastSegment = segments[segments.length - 1];
-    return lastSegment ? { lat: lastSegment.end.lat, lng: lastSegment.end.lng, length: total } : null;
+    if (!lastSegment) return null;
+    var fallbackBearing = computeBearingBetween(lastSegment.start.lat, lastSegment.start.lng, lastSegment.end.lat, lastSegment.end.lng);
+    return { lat: lastSegment.end.lat, lng: lastSegment.end.lng, length: total, bearing: fallbackBearing };
   }
 
   function updateMajorRoadLabelVisibility() {
