@@ -126,3 +126,7 @@ node server/server.js
 - Does the Smart TV browser support Service Workers or IndexedDB for caching static GeoJSON locally?
 - What tile provider and key or licensing constraints will apply in production?
 - What polling interval is acceptable to the data provider and operations team to avoid rate limiting?
+
+
+## Maintenance Notes
+- 2025-10-06: Barrie GTFS static feed rotated route_id GUIDs. When the cache/routes.geojson file was built before the rotation, local dev showed UUIDs on vehicle badges. Fix by rerunning ``node scripts/build-geojson.js --force-refresh`` (or ``npm run build:data -- --force-refresh``) so the route lookup table refreshes.
