@@ -10,8 +10,15 @@
 </head>
 <body>
   <div id="banner" class="banner" hidden>Live data unavailable, retrying</div>
+  <header class="map-title">Barrie Allandale Transit Terminal Routes</header>
   <div id="map"></div>
   <div id="legend" class="legend"></div>
+  <div id="service-notice" class="service-notice" role="status" aria-live="polite" hidden>
+    <div class="service-notice__track">
+      <span class="service-notice__text">Service Notice: There will be no Barrie Transit service on Thanksgiving Day, Monday, October 13.</span>
+      <span class="service-notice__text" aria-hidden="true">Service Notice: There will be no Barrie Transit service on Thanksgiving Day, Monday, October 13.</span>
+    </div>
+  </div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
   <script src="./app.js"></script>

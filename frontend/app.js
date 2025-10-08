@@ -1,6 +1,8 @@
 (function () {
   var map, routesGroup, vehicleLayer, highlightLayer, majorRoadLineLayer, majorRoadLabelLayer, bannerEl, pollMs = 10000, tileUrl;
   var legendEl;
+  var serviceNoticeEl;
+  var serviceNoticeTimer = null;
   var bannerMessages = {};
   var bannerPriority = ['routes', 'vehicles'];
   var bannerDefaultText = '';
@@ -31,7 +33,9 @@
       label: 'Park Place'
     },
     '488': {
-      label: 'Peggy Hill Community Centre'
+      label: 'Peggy Hill Community Centre',
+      cssOffsets: { x: '-55%', y: '-20%' },
+      offsetPx: { x: -38, y: -6 }
     },
     '9002': {
       label: 'Barrie Allandale Transit Terminal',
@@ -78,6 +82,32 @@
   var MAJOR_ROAD_LABEL_MIN_LENGTH_FOR_REPEAT = 900;
   var MAJOR_ROAD_LABEL_MAX_COUNT = 5;
   var MAJOR_ROAD_LABEL_MIN_SPACING_METERS = 600;
+  var MAJOR_ROAD_LABEL_MANUAL_LIMITS = {
+    'BAYFIELD STREET': 2,
+    'BIG BAY POINT ROAD': 1,
+    'MAPLEVIEW DRIVE EAST': 1,
+    'MAPLEVIEW DRIVE WEST': 1,
+    'HURONIA ROAD': 2,
+    'DUNLOP STREET EAST': 1,
+    'DUNLOP STREET WEST': 1,
+    'ESSA ROAD': 2,
+    'CUNDLES ROAD EAST': 1,
+    'DUCKWORTH STREET': 0,
+    'YONGE STREET': 2
+  };
+  var DEFAULT_VISIBLE_ROUTE_IDS = ['7A', '7B', '8A', '8B', '12A', '12B'];
+  var DEFAULT_VISIBLE_ROUTE_KEYS = (function () {
+    var map = Object.create(null);
+    for (var i = 0; i < DEFAULT_VISIBLE_ROUTE_IDS.length; i++) {
+      var key = normalizeRouteKey(DEFAULT_VISIBLE_ROUTE_IDS[i]);
+      if (key) {
+        map[key] = true;
+      }
+    }
+    return map;
+  })();
+  var SERVICE_NOTICE_TEXT = 'Service Notice: There will be no Barrie Transit service on Thanksgiving Day, Monday, October 13.';
+  var SERVICE_NOTICE_END = new Date(2025, 9, 14);
   var ROUTE_OFFSET_SCALE = 0;
   var ROUTE_LABELS_ENABLED = false;
   var LABEL_CLUSTER_SPACING_METERS = 45;
@@ -88,10 +118,12 @@
   function init() {
     bannerEl = document.getElementById('banner');
     legendEl = document.getElementById('legend');
+    serviceNoticeEl = document.getElementById('service-notice');
     if (bannerEl) {
       bannerDefaultText = bannerEl.textContent || 'Live data unavailable, retrying';
       bannerEl.hidden = true;
     }
+    setupServiceNotice();
 
     fetch('/api/config')
       .then(function (r) { return r.json(); })
@@ -145,7 +177,7 @@
     map.getPane('routeLabelPane').style.pointerEvents = 'none';
 
     map.createPane('vehiclePane');
-    map.getPane('vehiclePane').style.zIndex = 440;
+    map.getPane('vehiclePane').style.zIndex = 460;
 
     map.createPane('stopHighlightPane');
     map.getPane('stopHighlightPane').style.zIndex = 450;
@@ -200,6 +232,57 @@
       .catch(function (err) {
         console.warn('Major road data unavailable', err);
       });
+  }
+
+  function setupServiceNotice() {
+    if (!serviceNoticeEl) return;
+    var track = serviceNoticeEl.querySelector('.service-notice__track');
+    if (track) {
+      var segments = track.querySelectorAll('.service-notice__text');
+      for (var i = 0; i < segments.length; i++) {
+        segments[i].textContent = SERVICE_NOTICE_TEXT;
+      }
+    }
+    updateServiceNoticeVisibility();
+    scheduleServiceNoticeCheck();
+  }
+
+  function shouldShowServiceNotice(now) {
+    if (!(now instanceof Date)) {
+      now = new Date(now);
+    }
+    if (!Number.isFinite(now.getTime())) return false;
+    if (!(SERVICE_NOTICE_END instanceof Date) || !Number.isFinite(SERVICE_NOTICE_END.getTime())) {
+      return false;
+    }
+    return now < SERVICE_NOTICE_END;
+  }
+
+  function updateServiceNoticeVisibility() {
+    if (!serviceNoticeEl) return;
+    serviceNoticeEl.hidden = !shouldShowServiceNotice(new Date());
+  }
+
+  function scheduleServiceNoticeCheck() {
+    if (!serviceNoticeEl) return;
+    if (serviceNoticeTimer) {
+      clearTimeout(serviceNoticeTimer);
+      serviceNoticeTimer = null;
+    }
+    var now = new Date();
+    if (!shouldShowServiceNotice(now)) return;
+    var remaining = SERVICE_NOTICE_END.getTime() - now.getTime();
+    if (remaining <= 0) {
+      updateServiceNoticeVisibility();
+      return;
+    }
+    var maxDelay = 6 * 60 * 60 * 1000;
+    var delay = Math.min(remaining, maxDelay);
+    serviceNoticeTimer = setTimeout(function () {
+      serviceNoticeTimer = null;
+      updateServiceNoticeVisibility();
+      scheduleServiceNoticeCheck();
+    }, delay);
   }
 
   function appendManualMajorRoads(geojson) {
@@ -348,7 +431,11 @@
     }
 
     var anchors = [];
-    var desiredCount = computeMajorRoadLabelCount(totalLength);
+    var roadName = feature && feature.properties && feature.properties.name;
+    var desiredCount = computeMajorRoadLabelCount(totalLength, roadName);
+    if (desiredCount <= 0) {
+      return [];
+    }
     if (desiredCount > 1) {
       for (var idx = 0; idx < desiredCount; idx++) {
         var target = totalLength * (idx + 1) / (desiredCount + 1);
@@ -376,13 +463,29 @@
     return filterMajorRoadAnchors(anchors);
   }
 
-  function computeMajorRoadLabelCount(totalLength) {
+  function computeMajorRoadLabelCount(totalLength, roadName) {
     if (!Number.isFinite(totalLength) || totalLength <= 0) return 0;
+    var manualLimit = resolveMajorRoadLabelManualLimit(roadName);
+    if (manualLimit !== null) {
+      return Math.max(0, Math.floor(manualLimit));
+    }
     if (totalLength < MAJOR_ROAD_LABEL_MIN_LENGTH_FOR_REPEAT) return 1;
     var count = Math.floor(totalLength / MAJOR_ROAD_LABEL_REPEAT_DISTANCE_METERS) + 1;
     count = Math.max(1, count);
     count = Math.min(MAJOR_ROAD_LABEL_MAX_COUNT, count);
     return count;
+  }
+
+  function resolveMajorRoadLabelManualLimit(name) {
+    if (!name && name !== 0) return null;
+    var key = String(name).trim().toUpperCase();
+    if (!key) return null;
+    if (!Object.prototype.hasOwnProperty.call(MAJOR_ROAD_LABEL_MANUAL_LIMITS, key)) {
+      return null;
+    }
+    var value = MAJOR_ROAD_LABEL_MANUAL_LIMITS[key];
+    if (!Number.isFinite(value)) return null;
+    return value;
   }
 
   function filterMajorRoadAnchors(anchors) {
@@ -940,6 +1043,23 @@
   function normalizeRouteKey(value) {
     if (!value) return '';
     return String(value).trim().toUpperCase();
+  }
+
+  function shouldRouteStartVisible(routeId, props, meta) {
+    var candidates = [
+      routeId,
+      props && props.route_short_name,
+      props && props.route_long_name,
+      meta && meta.displayName,
+      meta && meta.longName
+    ];
+    for (var i = 0; i < candidates.length; i++) {
+      var key = normalizeRouteKey(candidates[i]);
+      if (key && DEFAULT_VISIBLE_ROUTE_KEYS[key]) {
+        return true;
+      }
+    }
+    return false;
   }
 
   function deriveAlphaSuffixOffset(value) {
@@ -1878,8 +1998,11 @@
           var entry = routeLayers[routeId];
           if (!entry) {
             var layerGroup = L.layerGroup();
-            routesGroup.addLayer(layerGroup);
-            entry = routeLayers[routeId] = { layer: layerGroup, visible: true };
+            var startVisible = shouldRouteStartVisible(routeId, props, meta);
+            if (startVisible) {
+              routesGroup.addLayer(layerGroup);
+            }
+            entry = routeLayers[routeId] = { layer: layerGroup, visible: startVisible };
             entry.labelLayer = L.layerGroup();
             entry.labelGeometries = [];
             entry.overlapLayers = [];

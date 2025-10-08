@@ -319,6 +319,23 @@ body {
   display: none;
 }
 
+.map-title {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 21, 24, 0.86);
+  color: #ffffff;
+  padding: 10px 22px;
+  border-radius: 18px;
+  font: 700 18px/1.2 "Inter", "Segoe UI", sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  z-index: 460;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+
 
 
 .stop-highlight-icon {
@@ -348,7 +365,7 @@ body {
   gap: 2px;
   padding: 6px 14px;
   border-radius: 14px;
-  background: rgba(20, 21, 24, 0.9);
+  background: rgba(20, 21, 24, 0.72);
   color: #ffffff;
   font-size: 14px;
   font-weight: 700;
@@ -364,6 +381,48 @@ body {
   letter-spacing: 0.08em;
   text-transform: none;
   opacity: 0.85;
+}
+
+.service-notice {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 14px 0;
+  background: linear-gradient(90deg, #b71c1c, #d84315);
+  border-top: 3px solid #fdd835;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  z-index: 470;
+  pointer-events: none;
+}
+
+.service-notice__track {
+  display: inline-flex;
+  width: max-content;
+  gap: 64px;
+  transform: translateX(100%);
+  animation: service-notice-scroll 24s linear infinite;
+  will-change: transform;
+}
+
+.service-notice__text {
+  white-space: nowrap;
+  padding: 0 8px;
+}
+
+@keyframes service-notice-scroll {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
 }
 
 
