@@ -15,6 +15,9 @@
       ]
     }
   ],
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.js" }
+  ],
   "env": {
     "GTFS_RT_VEHICLES_URL": "https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb",
     "POLL_MS": "10000"
