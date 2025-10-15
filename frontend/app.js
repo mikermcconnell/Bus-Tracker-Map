@@ -1785,24 +1785,42 @@
     routeKeyIndex = {};
   }
 
+  function resolveRouteEntry(routeId) {
+    if (!routeId) return null;
+    var directEntry = routeLayers[routeId];
+    if (directEntry) {
+      return { id: routeId, entry: directEntry };
+    }
+    var normalized = normalizeRouteKey(routeId);
+    if (!normalized) return null;
+    var meta = routeKeyIndex[normalized];
+    if (!meta || !meta.id) return null;
+    var canonicalEntry = routeLayers[meta.id];
+    if (!canonicalEntry) return null;
+    return { id: meta.id, entry: canonicalEntry };
+  }
+
   function isRouteVisible(routeId) {
-    var entry = routeLayers[routeId];
-    if (!entry) return true;
-    return entry.visible !== false;
+    var resolved = resolveRouteEntry(routeId);
+    if (!resolved) return false;
+    return resolved.entry.visible !== false;
   }
 
   function applyRouteVisibilityToVehicles(routeId) {
-    var visible = isRouteVisible(routeId);
+    var resolved = resolveRouteEntry(routeId);
+    if (!resolved) return;
+    var visible = isRouteVisible(resolved.id);
     Object.keys(markers).forEach(function (id) {
-      if (markers[id].routeId === routeId) {
+      if (markers[id].routeId === resolved.id) {
         markers[id].marker.setOpacity(visible ? 1 : 0);
       }
     });
   }
 
   function setRouteVisibility(routeId, shouldShow) {
-    var entry = routeLayers[routeId];
-    if (!entry) return;
+    var resolved = resolveRouteEntry(routeId);
+    if (!resolved) return;
+    var entry = resolved.entry;
     if (shouldShow) {
       if (entry.visible === false) {
         routesGroup.addLayer(entry.layer);
@@ -1814,7 +1832,7 @@
       }
       entry.visible = false;
     }
-    applyRouteVisibilityToVehicles(routeId);
+    applyRouteVisibilityToVehicles(resolved.id);
   }
 
   function buildRouteLabels() {
@@ -2115,12 +2133,24 @@
 
   function updateVehicles(list) {
     var now = Date.now();
+    var unresolvedRoutes = Object.create(null);
 
     for (var i = 0; i < list.length; i++) {
       var v = list[i];
       if (!Number.isFinite(v.lat) || !Number.isFinite(v.lon)) continue;
 
-      var routeId = v.route_id || 'route';
+      var rawRouteId = v.route_id;
+      var resolved = rawRouteId ? resolveRouteEntry(rawRouteId) : null;
+      if (!resolved) {
+        var warnKey = rawRouteId || '(missing)';
+        if (!unresolvedRoutes[warnKey]) {
+          unresolvedRoutes[warnKey] = true;
+          console.warn('Skipping vehicle update for unresolved route:', warnKey);
+        }
+        continue;
+      }
+
+      var routeId = resolved.id;
       var meta = getRouteMeta(routeId);
       var markerData = markers[v.id];
       var bearing = resolveVehicleBearing(v, markerData);
@@ -2147,7 +2177,6 @@
         };
       } else {
         animateMove(markerData.marker, [markerData.lastLat, markerData.lastLon], [v.lat, v.lon], pollMs * 0.95);
-        markerData.routeId = routeId;
         markerData.lastLat = v.lat;
         markerData.lastLon = v.lon;
         markerData.lastSeen = now;
@@ -2159,6 +2188,7 @@
         }
       }
 
+      markerData.routeId = routeId;
       markerData.marker.setOpacity(isRouteVisible(routeId) ? 1 : 0);
     }
 
