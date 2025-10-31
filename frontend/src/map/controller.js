@@ -152,11 +152,19 @@ export function createMapController({ dataClient, ui }) {
   var ROUTE_OVERLAP_TOLERANCE = 0.00018; // ~20 meters to capture near-coincident lines
   var ROUTE_OVERLAP_DASH = 22;
   var EARTH_RADIUS_METERS = 6371008.8;
+  var requestFrame = typeof globalThis !== 'undefined' && typeof globalThis.requestAnimationFrame === 'function'
+    ? function (cb) { return globalThis.requestAnimationFrame(cb); }
+    : function (cb) { return setTimeout(function () { cb(Date.now()); }, 16); };
+  var cancelFrame = typeof globalThis !== 'undefined' && typeof globalThis.cancelAnimationFrame === 'function'
+    ? function (id) { return globalThis.cancelAnimationFrame(id); }
+    : function (id) { clearTimeout(id); };
   // Terminal focus constants keep the inset map centered on Barrie Allandale Transit Terminal.
   var TERMINAL_COORDS = { lat: 44.3740170437343, lng: -79.6899831810679 };
   var TERMINAL_RADIUS_METERS = 150;
   var MINI_MAP_MEDIA_QUERY = '(min-width: 1025px) and (min-height: 721px)';
   var MINI_MAP_ZOOM = 16.5;
+  var MINI_MAP_ICON_SCALE = 0.8;
+  var MINI_MAP_ANIMATION_RATIO = 0.85;
 
   var miniMapContainer = null;
   var miniMapCanvas = null;
@@ -379,7 +387,7 @@ export function createMapController({ dataClient, ui }) {
     if (!layer) return null;
     var opts = {
       radius: TERMINAL_RADIUS_METERS,
-      color: 'rgba(15, 116, 204, 0.9)',
+      color: 'rgba(0, 78, 128, 0.9)',
       weight: 3,
       dashArray: '6 6',
       fillOpacity: 0,
@@ -405,7 +413,7 @@ export function createMapController({ dataClient, ui }) {
           pane: 'stopHighlightPane',
           weight: 3,
           dashArray: '8 8',
-          color: 'rgba(12, 111, 198, 0.85)'
+          color: 'rgba(0, 78, 128, 0.85)'
         });
       }
     } else if (terminalOutline) {
@@ -436,7 +444,11 @@ export function createMapController({ dataClient, ui }) {
       seen[key] = true;
       var existing = miniMarkers[key];
       var bearing = Number.isFinite(vehicle.bearing) ? vehicle.bearing : null;
-      var icon = createBusIcon(meta, bearing);
+      var icon = createBusIcon(meta, bearing, {
+        scale: MINI_MAP_ICON_SCALE,
+        iconClassName: 'vehicle-icon--mini',
+        bubbleClassName: 'vehicle-bubble--mini'
+      });
       var signature = icon && icon.options ? icon.options.html : '';
 
       if (!existing) {
@@ -446,14 +458,27 @@ export function createMapController({ dataClient, ui }) {
         }).addTo(miniVehicleLayer);
         miniMarkers[key] = {
           marker: marker,
-          signature: signature
+          signature: signature,
+          lastLat: vehicle.lat,
+          lastLon: vehicle.lon
         };
       } else {
-        existing.marker.setLatLng([vehicle.lat, vehicle.lon]);
+        if (Number.isFinite(existing.lastLat) && Number.isFinite(existing.lastLon)) {
+          var duration = pollMs * MINI_MAP_ANIMATION_RATIO;
+          if (!Number.isFinite(duration) || duration <= 0) {
+            duration = 1000;
+          }
+          duration = Math.max(400, Math.min(duration, 2000));
+          animateMove(existing.marker, [existing.lastLat, existing.lastLon], [vehicle.lat, vehicle.lon], duration);
+        } else {
+          existing.marker.setLatLng([vehicle.lat, vehicle.lon]);
+        }
         if (signature && existing.signature !== signature) {
           existing.marker.setIcon(icon);
           existing.signature = signature;
         }
+        existing.lastLat = vehicle.lat;
+        existing.lastLon = vehicle.lon;
       }
     }
 
@@ -2035,7 +2060,21 @@ export function createMapController({ dataClient, ui }) {
     delete markers[key];
   }
 
-  function createBusIcon(meta, bearing) {
+  function createBusIcon(meta, bearing, options) {
+    var opts = options && typeof options === 'object' ? options : null;
+    var scale = opts && Number.isFinite(opts.scale) && opts.scale > 0 ? opts.scale : 1;
+    var bubbleScale = Math.max(0.5, Math.min(2, scale));
+    var bubbleBorderWidth = Math.max(1.5, 3 * bubbleScale);
+    var bubbleInnerInset = Math.max(3, 7 * bubbleScale);
+    var bubbleShadow = bubbleScale < 1 ? 'var(--shadow-soft)' : 'var(--shadow-medium)';
+    var iconExtraClass = '';
+    var bubbleExtraClass = '';
+    if (opts && opts.iconClassName && /^[a-zA-Z0-9 _-]+$/.test(opts.iconClassName)) {
+      iconExtraClass = ' ' + opts.iconClassName.trim();
+    }
+    if (opts && opts.bubbleClassName && /^[a-zA-Z0-9 _-]+$/.test(opts.bubbleClassName)) {
+      bubbleExtraClass = ' ' + opts.bubbleClassName.trim();
+    }
     var label = meta.displayName || '';
     var background = meta.color || '#444444';
     var textColor = meta.textColor || '#FFFFFF';
@@ -2046,7 +2085,9 @@ export function createMapController({ dataClient, ui }) {
     var normalizedBearing = hasBearing ? normalizeBearing(bearing) : null;
     var bearingValue = normalizedBearing === null ? '0deg' : normalizedBearing.toFixed(1) + 'deg';
     var labelLength = String(label || '').replace(/\s+/g, '').length;
-    var labelSize = labelLength >= 3 ? 15 : 19;
+    var baseLabelSize = labelLength >= 3 ? 15 : 19;
+    var labelScale = Math.max(0.75, Math.min(1, bubbleScale));
+    var labelSize = Math.round(baseLabelSize * labelScale);
     var arrowColor;
     var arrowStroke = 'rgba(255, 255, 255, 0.8)';
     if (shouldForceWhiteArrow(meta)) {
@@ -2059,16 +2100,32 @@ export function createMapController({ dataClient, ui }) {
     }
     var safeArrow = sanitizeColorValue(arrowColor, '#222222');
     var safeArrowStroke = sanitizeColorValue(arrowStroke, 'rgba(255, 255, 255, 0.8)');
-    var attrs = 'class="vehicle-bubble" style="--route-color:' + safeBg + ';--text-color:' + safeText + ';--label-size:' + labelSize + 'px;--bearing:' + bearingValue + ';--arrow-color:' + safeArrow + ';--arrow-stroke:' + safeArrowStroke + ';"';
+    var bubbleStyle = [
+      '--route-color:' + safeBg,
+      '--text-color:' + safeText,
+      '--label-size:' + labelSize + 'px',
+      '--bearing:' + bearingValue,
+      '--arrow-color:' + safeArrow,
+      '--arrow-stroke:' + safeArrowStroke,
+      '--bubble-scale:' + bubbleScale,
+      '--bubble-border-width:' + bubbleBorderWidth.toFixed(2) + 'px',
+      '--bubble-inner-inset:' + bubbleInnerInset.toFixed(2) + 'px',
+      '--bubble-shadow:' + bubbleShadow
+    ].join(';');
+    var attrs = 'class="vehicle-bubble' + bubbleExtraClass + '" style="' + bubbleStyle + ';"';
     if (!hasBearing) {
       attrs += ' data-no-bearing="true"';
     }
+    var baseSize = 44;
+    var iconSize = Math.round(baseSize * scale);
+    var anchor = Math.round((baseSize / 2) * scale);
+    var popupAnchor = Math.round(-anchor);
     return L.divIcon({
-      className: 'vehicle-icon',
+      className: 'vehicle-icon' + iconExtraClass,
       html: '\n        <div ' + attrs + '>\n          <svg class="vehicle-arrow" viewBox="0 0 24 16" role="presentation" focusable="false">\n            <path d="M12 0L24 16H0Z"/>\n          </svg>\n          <span class="vehicle-label">' + safeLabel + '</span>\n        </div>\n      ',
-      iconSize: [44, 44],
-      iconAnchor: [22, 22],
-      popupAnchor: [0, -22]
+      iconSize: [iconSize, iconSize],
+      iconAnchor: [anchor, anchor],
+      popupAnchor: [0, popupAnchor]
     });
   }
 
@@ -2692,16 +2749,70 @@ export function createMapController({ dataClient, ui }) {
   }
 
   function animateMove(marker, from, to, duration) {
-    var start = null;
-    function step(ts) {
-      if (!start) start = ts;
-      var t = Math.min(1, (ts - start) / duration);
-      var lat = from[0] + (to[0] - from[0]) * t;
-      var lon = from[1] + (to[1] - from[1]) * t;
-      marker.setLatLng([lat, lon]);
-      if (t < 1) requestAnimationFrame(step);
+    if (!marker || typeof marker.setLatLng !== 'function') return;
+    var targetLat = Array.isArray(to) ? to[0] : (to && Number.isFinite(to.lat) ? to.lat : null);
+    var targetLon = Array.isArray(to) ? to[1] : (to && Number.isFinite(to.lng) ? to.lng : (to && Number.isFinite(to.lon) ? to.lon : null));
+    if (!Number.isFinite(targetLat) || !Number.isFinite(targetLon)) return;
+
+    var currentLatLng = typeof marker.getLatLng === 'function' ? marker.getLatLng() : null;
+    var startLat = currentLatLng && Number.isFinite(currentLatLng.lat) ? currentLatLng.lat : null;
+    var startLon = currentLatLng && Number.isFinite(currentLatLng.lng) ? currentLatLng.lng : null;
+
+    if (!Number.isFinite(startLat) || !Number.isFinite(startLon)) {
+      if (Array.isArray(from)) {
+        startLat = Number(from[0]);
+        startLon = Number(from[1]);
+      } else if (from && Number.isFinite(from.lat) && Number.isFinite(from.lng)) {
+        startLat = Number(from.lat);
+        startLon = Number(from.lng);
+      } else {
+        startLat = targetLat;
+        startLon = targetLon;
+      }
     }
-    requestAnimationFrame(step);
+
+    if (!Number.isFinite(startLat) || !Number.isFinite(startLon)) {
+      marker.setLatLng([targetLat, targetLon]);
+      return;
+    }
+
+    if (!Number.isFinite(duration) || duration <= 0) {
+      marker.setLatLng([targetLat, targetLon]);
+      return;
+    }
+
+    if (marker.__codexAnimFrame) {
+      cancelFrame(marker.__codexAnimFrame);
+      marker.__codexAnimFrame = null;
+    }
+
+    var deltaLat = targetLat - startLat;
+    var deltaLon = targetLon - startLon;
+    if (Math.abs(deltaLat) < 1e-9 && Math.abs(deltaLon) < 1e-9) {
+      marker.setLatLng([targetLat, targetLon]);
+      return;
+    }
+
+    var startTime = null;
+    function ease(t) {
+      return t * t * (3 - 2 * t);
+    }
+    function step(ts) {
+      if (startTime === null) startTime = ts;
+      var elapsed = ts - startTime;
+      var progress = Math.min(1, elapsed / duration);
+      var eased = ease(progress);
+      var lat = startLat + deltaLat * eased;
+      var lon = startLon + deltaLon * eased;
+      marker.setLatLng([lat, lon]);
+      if (progress < 1) {
+        marker.__codexAnimFrame = requestFrame(step);
+      } else {
+        marker.__codexAnimFrame = null;
+        marker.setLatLng([targetLat, targetLon]);
+      }
+    }
+    marker.__codexAnimFrame = requestFrame(step);
   }
 
   function startVehiclesPoll() {
