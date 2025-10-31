@@ -6,21 +6,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="./styles.css?v=20241011">
+  <link rel="stylesheet" href="%APP_CSS%">
+  <meta name="app-build-id" content="%BUILD_ID%">
 </head>
 <body>
   <div id="banner" class="banner" hidden>Live data unavailable, retrying</div>
   <header class="map-title">Barrie Allandale Transit Terminal Routes</header>
   <div id="map"></div>
+  <div id="mini-map" class="mini-map" aria-hidden="true">
+    <div class="mini-map__title">Barrie Allandale Transit Terminal (BATT)</div>
+    <div id="mini-map-canvas" class="mini-map__canvas"></div>
+  </div>
+  <div id="stop-legend" class="stop-legend" hidden></div>
   <div id="legend" class="legend"></div>
   <div id="service-notice" class="service-notice" role="status" aria-live="polite" hidden>
     <div class="service-notice__track">
-      <span class="service-notice__text">Service Notice: There will be no Barrie Transit service on Thanksgiving Day, Monday, October 13.</span>
-      <span class="service-notice__text" aria-hidden="true">Service Notice: There will be no Barrie Transit service on Thanksgiving Day, Monday, October 13.</span>
+      <span class="service-notice__text">For passenger pick up and drop off, please use the passenger vehicle loop beside the GO Train.</span>
+      <span class="service-notice__text" aria-hidden="true">For passenger pick up and drop off, please use the passenger vehicle loop beside the GO Train.</span>
     </div>
   </div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
-  <script src="./app.js"></script>
+  <script src="%APP_JS%"></script>
 </body>
 </html>

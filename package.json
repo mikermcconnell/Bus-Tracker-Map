@@ -14,13 +14,20 @@
     "node-fetch": "2.7.0"
   },
   "scripts": {
-    "build": "node scripts/build-geojson.js",
+    "build": "npm run build:frontend && npm run build:data",
     "build:data": "node scripts/build-geojson.js",
+    "build:frontend": "node scripts/build-frontend.js",
+    "watch:frontend": "node scripts/watch-frontend.js",
     "start": "node server/server.js",
-    "dev": "node scripts/build-geojson.js --skip-if-cache && node server/server.js"
+    "dev": "node scripts/dev.js",
+    "test": "vitest --run"
   },
   "devDependencies": {
+    "chokidar": "^3.6.0",
     "connect-livereload": "^0.6.1",
-    "livereload": "^0.9.3"
+    "esbuild": "^0.24.0",
+    "livereload": "^0.9.3",
+    "supertest": "^7.1.3",
+    "vitest": "^1.6.0"
   }
 }

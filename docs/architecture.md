@@ -44,6 +44,7 @@
   - `/api/routes.geojson` and `/api/stops.geojson` (cached for ~7 days, ETag enabled).
   - `/api/vehicles.json` (cached for 5-10 seconds, always includes generated_at timestamp).
   - `/health` for uptime checks.
+- Honour `BASE_PATH` to mount the SPA and APIs under a subdirectory, and enforce the optional `ALLOWED_ORIGINS` allow-list for cross-origin access (otherwise, the API is same-origin only).
 - Provide a GTFS static conversion script (`scripts/build-geojson.js`) that runs on deploy or cron to refresh cache artifacts.
 - Handle GTFS download or polling failures by serving last-known-good data while flagging degraded status in responses.
 - Enforce rate limiting and guardrails (timeouts, retries, jitter) when communicating with upstream feeds.
@@ -61,10 +62,12 @@
 - Start an interval timer (~10 seconds) to fetch `/api/vehicles.json`; animate marker positions using linear interpolation over the polling interval.
 - Fade or remove markers when no update has arrived for 60 seconds; color-code by route where practical.
 - Display a banner when realtime fetches fail; keep static map content untouched and retry with exponential backoff.
+- The SPA is now split across dedicated modules (`map/controller`, `data/client`, `ui/controller`), bundled via `scripts/build-frontend.js` into hashed assets under `frontend/dist/` so the runtime stays modular without sacrificing bundle size.
 
 ## Performance and Resilience
 - Precompute and minify GeoJSON to keep initial payload <= 2 MB; optionally split by route for finer caching.
 - Use HTTP caching (ETag/If-None-Match) and CDN distribution for static assets.
+- Fingerprinted JS/CSS assets (`app.<hash>.js`, `styles.<hash>.css`) permit `Cache-Control: immutable` in production while the HTML remains short-lived.
 - Introduce jitter to polling schedules to avoid thundering herd effects on the GTFS-Realtime endpoint.
 - Implement retries with exponential backoff and last-known-good fallback data to survive upstream hiccups.
 - Keep the JavaScript bundle small (ES5-compatible build) to respect Smart TV CPU and memory limits.
@@ -74,12 +77,24 @@
 - Deploy the backend as Cloudflare Workers backed by KV storage; maintain an Express deployment path (Fly.io/Railway) for debugging or fallback.
 - Schedule the GTFS static refresh via serverless cron or a managed task; persist GeoJSON artifacts in object storage (S3, KV store).
 - Configure environment variables for feed URLs, polling intervals, tile API keys, and logging destinations.
+- When the SPA is served behind a proxy (e.g., `/apps/transit`), set `BASE_PATH` to ensure every asset/fetch resolves correctly and update `ALLOWED_ORIGINS` with the trusted kiosk domains.
 
 ## Testing Strategy
 - Unit tests for GTFS parsing, transformation accuracy, and protobuf decoding edge cases using Vitest.
 - Integration tests that stub upstream feeds to verify frontend rendering, outage messaging, and smoothing behavior.
 - On-device testing on the target Smart TV to validate load-time performance and UI legibility.
 - Optional visual regression snapshots to safeguard map styling across updates.
+- CI (GitHub Actions) runs `npm run build:frontend` and Vitest smoke suites to guarantee the GTFS build pipeline and `/api` responses remain healthy.
+
+## Configuration Reference
+- `GTFS_STATIC_URL` – source ZIP for static GTFS data (required by `npm run build:data`).
+- `GTFS_RT_VEHICLES_URL` – protobuf feed for live vehicles (optional; map falls back to static view when absent).
+- `MAPTILER_KEY` – optional API key for MapTiler tiles.
+- `POLL_MS` – vehicle poll interval in milliseconds (default 10,000).
+- `BASE_PATH` – mount point for the SPA and API when hosted under a subdirectory (default `/`).
+- `ALLOWED_ORIGINS` – comma-separated list of trusted origins allowed to call the API cross-origin; empty means same-origin-only.
+- `LOG_LEVEL` – `debug` enables verbose GTFS-RT fetch logs and slow-query warnings.
+- `CACHE_DIR` – overrides the cache directory for generated GeoJSON (useful for containerised deployments and automated tests).
 
 ## Security and Privacy
 - Serve only public transit data; do not collect or process user PII.

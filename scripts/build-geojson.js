@@ -10,7 +10,7 @@ const args = process.argv.slice(2);
 const skipIfCache = args.includes('--skip-if-cache');
 const forceRefresh = args.includes('--force-refresh');
 
-const OUT_DIR = path.join(__dirname, '..', 'cache');
+const OUT_DIR = path.resolve(process.env.CACHE_DIR || path.join(__dirname, '..', 'cache'));
 const ROUTES_PATH = path.join(OUT_DIR, 'routes.geojson');
 const STOPS_PATH = path.join(OUT_DIR, 'stops.geojson');
 const hasCache = fs.existsSync(ROUTES_PATH) && fs.existsSync(STOPS_PATH);

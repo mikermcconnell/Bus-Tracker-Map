@@ -2,9 +2,80 @@
 const path = require('path');
 const fs = require('fs');
 const express = require('express');
-const cors = require('cors');
 require('dotenv').config();
 const { fetchVehicles } = require('./vehicles');
+
+function normalizeBasePath(input) {
+  if (!input) return '/';
+  const trimmed = input.trim();
+  if (!trimmed || trimmed === '/') return '/';
+  const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  const withoutTrailing = withLeading.replace(/\/+$/, '');
+  return withoutTrailing || '/';
+}
+
+function parseAllowedOrigins(input) {
+  if (!input) return new Set();
+  return new Set(
+    String(input)
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean)
+  );
+}
+
+function isSameOrigin(req, origin) {
+  if (!origin) return true;
+  try {
+    const parsed = new URL(origin);
+    return parsed.host === req.headers.host;
+  } catch (err) {
+    return false;
+  }
+}
+
+function createCorsMiddleware(allowedOrigins) {
+  return function corsGuard(req, res, next) {
+    const origin = req.headers.origin;
+    if (!origin) {
+      if (req.method === 'OPTIONS') {
+        res.sendStatus(204);
+        return;
+      }
+      return next();
+    }
+    if (isSameOrigin(req, origin)) {
+      if (req.method === 'OPTIONS') {
+        res.sendStatus(204);
+        return;
+      }
+      return next();
+    }
+
+    if (!allowedOrigins.size) {
+      res.status(403).json({ error: 'Cross origin requests are not permitted' });
+      return;
+    }
+
+    if (!allowedOrigins.has(origin)) {
+      console.warn('Blocked cross-origin request:', origin);
+      res.status(403).json({ error: 'Origin not allowed' });
+      return;
+    }
+
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+
+    next();
+  };
+}
 
 function maybeSetupLiveReload(app) {
   const flag = process.env.ENABLE_LIVERELOAD;
@@ -29,7 +100,8 @@ function maybeSetupLiveReload(app) {
   });
 
   const frontendDir = path.join(__dirname, '..', 'frontend');
-  lrServer.watch(frontendDir);
+  lrServer.watch(path.join(frontendDir, 'dist'));
+  lrServer.watch(path.join(frontendDir, 'src'));
 
   app.use(connectLivereload({ port: liveReloadPort }));
 
@@ -46,34 +118,62 @@ const PORT = process.env.PORT || 3000;
 const POLL_MS = Number(process.env.POLL_MS || 10000);
 const MAPTILER_KEY = process.env.MAPTILER_KEY || '';
 const RT_URL = process.env.GTFS_RT_VEHICLES_URL || '';
+const BASE_PATH = normalizeBasePath(process.env.BASE_PATH);
+const FRONTEND_DIR = path.join(__dirname, '..', 'frontend', 'dist');
+const CACHE_DIR = path.resolve(process.env.CACHE_DIR || path.join(__dirname, '..', 'cache'));
+const hashedAssetPattern = /\.[0-9a-f]{10}\.(?:js|css)$/;
+const allowedOrigins = parseAllowedOrigins(process.env.ALLOWED_ORIGINS);
+const corsMiddleware = createCorsMiddleware(allowedOrigins);
 
-app.use(cors());
-app.use(express.static(path.join(__dirname, '..', 'frontend'), { extensions: ['html'] }));
+if (allowedOrigins.size) {
+  console.log('API CORS allowed for origins:', Array.from(allowedOrigins).join(', '));
+} else {
+  console.log('API restricted to same-origin requests (ALLOWED_ORIGINS not set).');
+}
 
-// small helper to send a cached file with ETag
 function sendCachedJson(res, filePath, maxAgeSeconds) {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', `public, max-age=${maxAgeSeconds}`);
   res.sendFile(filePath, (err) => {
-    if (err) res.status(err.statusCode || 500).json({ error: err.message });
+    if (err) {
+      console.error('Failed to send cached JSON:', filePath, err.message);
+      res.status(err.statusCode || 500).json({ error: err.message });
+    }
   });
 }
 
-app.get('/api/routes.geojson', (req, res) => {
-  const fp = path.join(__dirname, '..', 'cache', 'routes.geojson');
+const router = express.Router();
+const apiRouter = express.Router();
+
+router.use(express.static(FRONTEND_DIR, {
+  extensions: ['html'],
+  setHeaders(res, servedPath) {
+    if (servedPath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    } else if (hashedAssetPattern.test(path.basename(servedPath))) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    } else if (servedPath.endsWith('.json') || servedPath.endsWith('.geojson')) {
+      res.setHeader('Cache-Control', 'public, max-age=300');
+    }
+  }
+}));
+
+apiRouter.get('/routes.geojson', (req, res) => {
+  const fp = path.join(CACHE_DIR, 'routes.geojson');
   if (!fs.existsSync(fp)) return res.status(404).json({ error: 'routes.geojson not built yet' });
   sendCachedJson(res, fp, 60 * 60 * 24 * 7);
 });
 
-app.get('/api/stops.geojson', (req, res) => {
-  const fp = path.join(__dirname, '..', 'cache', 'stops.geojson');
+apiRouter.get('/stops.geojson', (req, res) => {
+  const fp = path.join(CACHE_DIR, 'stops.geojson');
   if (!fs.existsSync(fp)) return res.status(404).json({ error: 'stops.geojson not built yet' });
   sendCachedJson(res, fp, 60 * 60 * 24 * 7);
 });
 
-app.get('/api/config', (req, res) => {
+apiRouter.get('/config', (req, res) => {
   res.json({
     poll_ms: POLL_MS,
+    base_path: BASE_PATH,
     tiles: MAPTILER_KEY
       ? `https://api.maptiler.com/maps/streets/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`
       : `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`,
@@ -81,7 +181,7 @@ app.get('/api/config', (req, res) => {
   });
 });
 
-app.get('/api/vehicles.json', async (req, res) => {
+apiRouter.get('/vehicles.json', async (req, res) => {
   try {
     const data = await fetchVehicles(RT_URL);
     // allow short caching to reduce load; front end also polls every 10s
@@ -92,10 +192,16 @@ app.get('/api/vehicles.json', async (req, res) => {
   }
 });
 
-// fallback: serve index.html for root
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html'));
+router.options('/api/*', corsMiddleware);
+router.use('/api', corsMiddleware, apiRouter);
+
+router.get('*', (req, res, next) => {
+  const indexPath = path.join(FRONTEND_DIR, 'index.html');
+  if (!fs.existsSync(indexPath)) return next();
+  res.sendFile(indexPath);
 });
+
+app.use(BASE_PATH, router);
 
 if (require.main === module) {
   const server = app.listen(PORT);
@@ -117,4 +223,3 @@ if (require.main === module) {
 } else {
   module.exports = app;
 }
-

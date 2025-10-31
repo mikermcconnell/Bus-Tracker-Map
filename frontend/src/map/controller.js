@@ -1,49 +1,72 @@
-(function () {
-  var map, routesGroup, vehicleLayer, highlightLayer, majorRoadLineLayer, majorRoadLabelLayer, bannerEl, pollMs = 10000, tileUrl;
-  var legendEl;
-  var serviceNoticeEl;
-  var serviceNoticeTimer = null;
-  var bannerMessages = {};
-  var bannerPriority = ['routes', 'vehicles'];
-  var bannerDefaultText = '';
+import { clusterVehicles, DEFAULT_CLUSTER_THRESHOLD_METERS, distanceBetweenMeters } from './vehicle-groups.js';
+
+export function createMapController({ dataClient, ui }) {
+  var map, routesGroup, vehicleLayer, highlightLayer, majorRoadLineLayer, majorRoadLabelLayer;
+  var pollMs = 10000;
+  var tileUrl;
+  var basePath = '/';
   var routeLayers = {};
   var routeMetadata = {};
   var routeKeyIndex = {};
-  var markers = {}; // id -> { marker, routeId, iconSignature, lastSeen, lastLat, lastLon }
+  var markers = {}; // key -> marker metadata
+  var vehicleClusterThreshold = DEFAULT_CLUSTER_THRESHOLD_METERS;
+  var anonymousVehicleCounter = 0;
+  var COMBINED_MARKER_Z_OFFSET = 1200;
+  var SINGLE_MARKER_Z_OFFSET = 0;
   var highlightedStopKeys = ['725', '330', '333', '76', '777', '488', '9002', '1'];
   var stopHighlightOverrides = {
     '9005': {
       cssOffsets: { x: '-50%', y: '-50%' },
       label: 'Barrie Allandale Transit Terminal',
+      shortLabel: 'BATT',
       note: 'You Are Here'
     },
     '725': {
-      label: 'Barrie South GO'
+      label: 'Barrie South GO',
+      shortLabel: 'BSG'
     },
     '330': {
-      label: 'Georgian College'
+      label: 'Georgian College',
+      shortLabel: 'GC',
+      labelCoords: { lat: 44.4165781268583, lng: -79.6754198957161 },
+      offsetPx: { x: 0, y: 0 }
     },
     '333': {
-      label: 'Royal Victoria Hospital'
+      label: 'Royal Victoria Hospital',
+      shortLabel: 'RVH'
     },
     '76': {
-      label: 'Georgian Mall'
+      label: 'Georgian Mall',
+      shortLabel: 'GM',
+      labelCoords: { lat: 44.4118745345584, lng: -79.7211518849986 },
+      offsetPx: { x: 0, y: 0 }
     },
     '777': {
-      label: 'Park Place'
+      label: 'Park Place',
+      shortLabel: 'PP',
+      labelCoords: { lat: 44.3403906345005, lng: -79.6928865258419 },
+      offsetPx: { x: 0, y: 0 }
     },
     '488': {
       label: 'Peggy Hill Community Centre',
+      shortLabel: 'PHCC',
       cssOffsets: { x: '-55%', y: '-20%' },
-      offsetPx: { x: -38, y: -6 }
+      labelCoords: { lat: 44.34436966587496, lng: -79.71668472 },
+      offsetPx: { x: 0, y: 0 }
     },
     '9002': {
       label: 'Barrie Allandale Transit Terminal',
+      shortLabel: 'BATT',
       note: 'You Are Here',
-      coords: { lat: 44.3740170437343, lng: -79.6899831810679 }
+      coords: { lat: 44.3740170437343, lng: -79.6899831810679 },
+      labelCoords: { lat: 44.375813666084284, lng: -79.6849561868082 },
+      offsetPx: { x: 0, y: 0 }
     },
     '1': {
-      label: 'Downtown Barrie'
+      label: 'Downtown Barrie',
+      shortLabel: 'DB',
+      labelCoords: { lat: 44.387588, lng: -79.68660088028756 },
+      offsetPx: { x: 0, y: 0 }
     }
   };
 
@@ -93,7 +116,23 @@
     'ESSA ROAD': 2,
     'CUNDLES ROAD EAST': 1,
     'DUCKWORTH STREET': 0,
-    'YONGE STREET': 2
+    'YONGE STREET': 2,
+    'LAKESHORE DRIVE': 0,
+    'LAKE SHORE ROAD': 0
+  };
+  var MAJOR_ROAD_LABEL_MANUAL_ANCHORS = {
+    'YONGE STREET': [
+      { lat: 44.3699307, lng: -79.668287 }
+    ],
+    'ESSA ROAD': [
+      { lat: 44.3600686, lng: -79.6975765 }
+    ]
+  };
+  var MAJOR_ROAD_LABEL_MANUAL_OFFSETS = {
+    'DUNLOP STREET EAST': { distanceMeters: 500, bearingDegrees: 90 },
+    'DUNLOP STREET WEST': { distanceMeters: 500, bearingDegrees: 90 },
+    'ANNE STREET': { distanceMeters: 300, bearingDegrees: 180 },
+    'YONGE STREET': { distanceMeters: 300, bearingDegrees: 135 }
   };
   var DEFAULT_VISIBLE_ROUTE_IDS = ['7A', '7B', '8A', '8B', '12A', '12B'];
   var DEFAULT_VISIBLE_ROUTE_KEYS = (function () {
@@ -106,45 +145,70 @@
     }
     return map;
   })();
-  var SERVICE_NOTICE_TEXT = 'Service Notice: There will be no Barrie Transit service on Thanksgiving Day, Monday, October 13.';
-  var SERVICE_NOTICE_END = new Date(2025, 9, 14);
   var ROUTE_OFFSET_SCALE = 0;
   var ROUTE_LABELS_ENABLED = false;
   var LABEL_CLUSTER_SPACING_METERS = 45;
   var LABEL_CLUSTER_KEY_SCALE = 10000;
   var ROUTE_OVERLAP_TOLERANCE = 0.00018; // ~20 meters to capture near-coincident lines
   var ROUTE_OVERLAP_DASH = 22;
+  var EARTH_RADIUS_METERS = 6371008.8;
+  // Terminal focus constants keep the inset map centered on Barrie Allandale Transit Terminal.
+  var TERMINAL_COORDS = { lat: 44.3740170437343, lng: -79.6899831810679 };
+  var TERMINAL_RADIUS_METERS = 150;
+  var MINI_MAP_MEDIA_QUERY = '(min-width: 1025px) and (min-height: 721px)';
+  var MINI_MAP_ZOOM = 16.5;
 
-  function init() {
-    bannerEl = document.getElementById('banner');
-    legendEl = document.getElementById('legend');
-    serviceNoticeEl = document.getElementById('service-notice');
-    if (bannerEl) {
-      bannerDefaultText = bannerEl.textContent || 'Live data unavailable, retrying';
-      bannerEl.hidden = true;
-    }
-    setupServiceNotice();
+  var miniMapContainer = null;
+  var miniMapCanvas = null;
+  var miniMapMediaQueryList = null;
+  var miniMapInitialized = false;
+  var miniMapActive = false;
+  var miniMapVehiclesVisible = true;
+  var miniMap = null;
+  var miniVehicleLayer = null;
+  var miniBorderLayer = null;
+  var miniMarkers = Object.create(null);
+  var terminalOutline = null;
+  var lastMiniSnapshots = [];
 
-    fetch('/api/config')
-      .then(function (r) { return r.json(); })
+  function initialize() {
+    var DEFAULT_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    tileUrl = DEFAULT_TILE_URL;
+
+    ui.showBanner('routes', 'Loading map…');
+    ui.showBanner('vehicles', 'Loading vehicles…');
+
+    return dataClient.fetchConfig()
       .then(function (cfg) {
-        pollMs = cfg.poll_ms || 10000;
-        tileUrl = cfg.tiles || 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-        setupMap();
-        setupLegend();
-        loadMajorRoads();
-        loadRoutes();
-        loadStopHighlights();
-        startVehiclesPoll();
+        if (cfg && typeof cfg === 'object') {
+          if (cfg.poll_ms) {
+            var parsedPollMs = Number(cfg.poll_ms);
+            if (Number.isFinite(parsedPollMs) && parsedPollMs > 0) {
+              pollMs = parsedPollMs;
+            }
+          }
+          if (cfg.tiles) {
+            tileUrl = cfg.tiles;
+          }
+          if (cfg.base_path) {
+            basePath = cfg.base_path;
+            dataClient.setBasePath(basePath);
+          }
+        }
       })
-      .catch(function () {
-        tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      .catch(function (err) {
+        console.warn('Using default configuration (config fetch failed):', err && err.message ? err.message : err);
+      })
+      .then(function () {
         setupMap();
-        setupLegend();
-        loadMajorRoads();
-        loadRoutes();
-        loadStopHighlights();
-        startVehiclesPoll();
+        ui.setupLegend(createLegendContext());
+        return Promise.all([
+          loadMajorRoads(),
+          loadRoutes(),
+          loadStopHighlights()
+        ]).finally(function () {
+          startVehiclesPoll();
+        });
       });
   }
 
@@ -180,7 +244,7 @@
     map.getPane('vehiclePane').style.zIndex = 460;
 
     map.createPane('stopHighlightPane');
-    map.getPane('stopHighlightPane').style.zIndex = 450;
+    map.getPane('stopHighlightPane').style.zIndex = 500;
     map.getPane('stopHighlightPane').style.pointerEvents = 'none';
 
     L.tileLayer(tileUrl, {
@@ -196,16 +260,243 @@
     highlightLayer = L.layerGroup().addTo(map);
     map.on('zoomend', updateMajorRoadLabelVisibility);
     updateMajorRoadLabelVisibility();
+    initializeMiniMapSupport();
+  }
+
+  // Set up responsive listeners for the inset mini-map so it only appears on roomy layouts.
+  function initializeMiniMapSupport() {
+    if (miniMapInitialized) return;
+    miniMapContainer = document.getElementById('mini-map');
+    miniMapCanvas = document.getElementById('mini-map-canvas');
+    if (!miniMapContainer || !miniMapCanvas) return;
+
+    miniMapInitialized = true;
+    miniMapMediaQueryList = window.matchMedia(MINI_MAP_MEDIA_QUERY);
+    if (miniMapMediaQueryList) {
+      var handler = handleMiniMapMediaChange;
+      if (typeof miniMapMediaQueryList.addEventListener === 'function') {
+        miniMapMediaQueryList.addEventListener('change', handler);
+      } else if (typeof miniMapMediaQueryList.addListener === 'function') {
+        miniMapMediaQueryList.addListener(handler);
+      }
+      handleMiniMapMediaChange();
+    } else {
+      setMiniMapActive(true);
+    }
+  }
+
+  function handleMiniMapMediaChange() {
+    var shouldEnable = miniMapMediaQueryList ? miniMapMediaQueryList.matches : true;
+    setMiniMapActive(shouldEnable);
+  }
+
+  function setMiniMapActive(shouldEnable) {
+    if (!!shouldEnable === miniMapActive) return;
+    miniMapActive = !!shouldEnable;
+    if (miniMapActive) {
+      if (miniMapContainer) miniMapContainer.classList.remove('mini-map--hidden');
+      createMiniMapInstance();
+      syncMiniMapMarkers(lastMiniSnapshots);
+    } else {
+      if (miniMapContainer) miniMapContainer.classList.add('mini-map--hidden');
+      clearMiniMapMarkers();
+      destroyMiniMapInstance();
+    }
+    updateTerminalOutlineVisibility();
+  }
+
+  function createMiniMapInstance() {
+    if (miniMap || !miniMapCanvas) return;
+    miniMap = L.map(miniMapCanvas, {
+      zoomControl: false,
+      attributionControl: false,
+      dragging: false,
+      doubleClickZoom: false,
+      scrollWheelZoom: false,
+      boxZoom: false,
+      keyboard: false,
+      zoomAnimation: false,
+      touchZoom: false,
+      tap: false,
+      zoomSnap: 0.5,
+      zoomDelta: 0.5
+    }).setView([TERMINAL_COORDS.lat, TERMINAL_COORDS.lng], MINI_MAP_ZOOM);
+
+    L.tileLayer(tileUrl, {
+      maxZoom: 20,
+      attribution: ' OpenStreetMap contributors',
+      opacity: 1,
+      detectRetina: true,
+      interactive: false
+    }).addTo(miniMap);
+
+    miniVehicleLayer = L.layerGroup().addTo(miniMap);
+    miniBorderLayer = L.layerGroup().addTo(miniMap);
+    // Keep the layout crisp even if the container animates into view.
+    requestAnimationFrame(function () {
+      if (miniMap) miniMap.invalidateSize();
+    });
+  }
+
+  function destroyMiniMapInstance() {
+    if (miniBorderLayer) {
+      miniBorderLayer.clearLayers();
+      miniBorderLayer = null;
+    }
+    if (miniVehicleLayer) {
+      miniVehicleLayer.clearLayers();
+      miniVehicleLayer = null;
+    }
+    miniMarkers = Object.create(null);
+    if (miniMap) {
+      miniMap.remove();
+      miniMap = null;
+    }
+  }
+
+  function clearMiniMapMarkers() {
+    if (miniVehicleLayer) {
+      miniVehicleLayer.clearLayers();
+    }
+    miniMarkers = Object.create(null);
+  }
+
+  function setMiniMapVehicleVisibility(visible) {
+    miniMapVehiclesVisible = !!visible;
+    if (!miniMapVehiclesVisible) {
+      clearMiniMapMarkers();
+    } else if (miniMapActive) {
+      syncMiniMapMarkers(lastMiniSnapshots);
+    }
+  }
+
+  function isWithinTerminalFocus(lat, lon) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+    return distanceBetweenMeters(lat, lon, TERMINAL_COORDS.lat, TERMINAL_COORDS.lng) <= TERMINAL_RADIUS_METERS;
+  }
+
+  function addTerminalPerimeter(layer, overrides) {
+    if (!layer) return null;
+    var opts = {
+      radius: TERMINAL_RADIUS_METERS,
+      color: 'rgba(15, 116, 204, 0.9)',
+      weight: 3,
+      dashArray: '6 6',
+      fillOpacity: 0,
+      fill: false,
+      interactive: false
+    };
+    if (overrides && typeof overrides === 'object') {
+      Object.keys(overrides).forEach(function (key) {
+        opts[key] = overrides[key];
+      });
+    }
+    return L.circle([TERMINAL_COORDS.lat, TERMINAL_COORDS.lng], opts).addTo(layer);
+  }
+
+
+
+  // Keep the terminal outline in sync on the main map so it mirrors the inset state.
+  function updateTerminalOutlineVisibility() {
+    if (!highlightLayer) return;
+    if (miniMapActive) {
+      if (!terminalOutline) {
+        terminalOutline = addTerminalPerimeter(highlightLayer, {
+          pane: 'stopHighlightPane',
+          weight: 3,
+          dashArray: '8 8',
+          color: 'rgba(12, 111, 198, 0.85)'
+        });
+      }
+    } else if (terminalOutline) {
+      highlightLayer.removeLayer(terminalOutline);
+      terminalOutline = null;
+    }
+  }
+
+  // Render only the vehicles that are close enough to the terminal for the inset map to matter.
+  function syncMiniMapMarkers(snapshots) {
+    lastMiniSnapshots = Array.isArray(snapshots) ? snapshots.slice() : [];
+    if (!miniMapActive || !miniMapVehiclesVisible || !miniVehicleLayer) {
+      clearMiniMapMarkers();
+      return;
+    }
+
+    var seen = Object.create(null);
+    for (var i = 0; i < lastMiniSnapshots.length; i++) {
+      var entry = lastMiniSnapshots[i];
+      if (!entry) continue;
+      var vehicle = entry.vehicle;
+      var meta = entry.meta;
+      var key = entry.key;
+      if (!vehicle || !meta || !key) continue;
+      if (!Number.isFinite(vehicle.lat) || !Number.isFinite(vehicle.lon)) continue;
+      if (!isWithinTerminalFocus(vehicle.lat, vehicle.lon)) continue;
+
+      seen[key] = true;
+      var existing = miniMarkers[key];
+      var bearing = Number.isFinite(vehicle.bearing) ? vehicle.bearing : null;
+      var icon = createBusIcon(meta, bearing);
+      var signature = icon && icon.options ? icon.options.html : '';
+
+      if (!existing) {
+        var marker = L.marker([vehicle.lat, vehicle.lon], {
+          icon: icon,
+          interactive: false
+        }).addTo(miniVehicleLayer);
+        miniMarkers[key] = {
+          marker: marker,
+          signature: signature
+        };
+      } else {
+        existing.marker.setLatLng([vehicle.lat, vehicle.lon]);
+        if (signature && existing.signature !== signature) {
+          existing.marker.setIcon(icon);
+          existing.signature = signature;
+        }
+      }
+    }
+
+    Object.keys(miniMarkers).forEach(function (key) {
+      if (seen[key]) return;
+      var record = miniMarkers[key];
+      if (record && record.marker && miniVehicleLayer) {
+        miniVehicleLayer.removeLayer(record.marker);
+      }
+      delete miniMarkers[key];
+    });
+  }
+
+  function createLegendContext() {
+    return {
+      getRouteIds: getSortedRouteIds,
+      getRouteLayers: function () { return routeLayers; },
+      getRouteMeta: getRouteMeta,
+      setRouteVisibility: setRouteVisibility,
+      showVehicles: function () {
+        if (map && vehicleLayer && !map.hasLayer(vehicleLayer)) {
+          vehicleLayer.addTo(map);
+        }
+        setMiniMapVehicleVisibility(true);
+      },
+      hideVehicles: function () {
+        if (map && vehicleLayer && map.hasLayer(vehicleLayer)) {
+          map.removeLayer(vehicleLayer);
+        }
+        setMiniMapVehicleVisibility(false);
+      },
+      isVehiclesVisible: function () {
+        if (!map || !vehicleLayer) return false;
+        return map.hasLayer(vehicleLayer);
+      },
+      getStopLegendEntries: getStopLegendEntries
+    };
   }
 
   function loadMajorRoads() {
-    if (!majorRoadLineLayer || !majorRoadLabelLayer) return;
+    if (!majorRoadLineLayer || !majorRoadLabelLayer) return Promise.resolve();
 
-    fetch('data/major-roads.geojson')
-      .then(function (response) {
-        if (!response.ok) throw new Error('Major road data request failed: ' + response.status);
-        return response.json();
-      })
+    return dataClient.fetchMajorRoads()
       .then(function (geojson) {
         majorRoadLineLayer.clearLayers();
         majorRoadLabelLayer.clearLayers();
@@ -234,57 +525,6 @@
       });
   }
 
-  function setupServiceNotice() {
-    if (!serviceNoticeEl) return;
-    var track = serviceNoticeEl.querySelector('.service-notice__track');
-    if (track) {
-      var segments = track.querySelectorAll('.service-notice__text');
-      for (var i = 0; i < segments.length; i++) {
-        segments[i].textContent = SERVICE_NOTICE_TEXT;
-      }
-    }
-    updateServiceNoticeVisibility();
-    scheduleServiceNoticeCheck();
-  }
-
-  function shouldShowServiceNotice(now) {
-    if (!(now instanceof Date)) {
-      now = new Date(now);
-    }
-    if (!Number.isFinite(now.getTime())) return false;
-    if (!(SERVICE_NOTICE_END instanceof Date) || !Number.isFinite(SERVICE_NOTICE_END.getTime())) {
-      return false;
-    }
-    return now < SERVICE_NOTICE_END;
-  }
-
-  function updateServiceNoticeVisibility() {
-    if (!serviceNoticeEl) return;
-    serviceNoticeEl.hidden = !shouldShowServiceNotice(new Date());
-  }
-
-  function scheduleServiceNoticeCheck() {
-    if (!serviceNoticeEl) return;
-    if (serviceNoticeTimer) {
-      clearTimeout(serviceNoticeTimer);
-      serviceNoticeTimer = null;
-    }
-    var now = new Date();
-    if (!shouldShowServiceNotice(now)) return;
-    var remaining = SERVICE_NOTICE_END.getTime() - now.getTime();
-    if (remaining <= 0) {
-      updateServiceNoticeVisibility();
-      return;
-    }
-    var maxDelay = 6 * 60 * 60 * 1000;
-    var delay = Math.min(remaining, maxDelay);
-    serviceNoticeTimer = setTimeout(function () {
-      serviceNoticeTimer = null;
-      updateServiceNoticeVisibility();
-      scheduleServiceNoticeCheck();
-    }, delay);
-  }
-
   function appendManualMajorRoads(geojson) {
     if (!geojson || typeof geojson !== 'object' || geojson === null) return geojson;
     if (!Array.isArray(geojson.features)) {
@@ -311,40 +551,14 @@
         geometry: {
           type: 'LineString',
           coordinates: [
-            [-79.690961, 44.3753786],
-            [-79.6912517, 44.375482],
-            [-79.6920375, 44.3757165],
-            [-79.6923082, 44.3758372],
-            [-79.6925016, 44.3759716],
-            [-79.6926772, 44.3761671],
-            [-79.69292, 44.3765199],
-            [-79.6933921, 44.3772484],
-            [-79.6934838, 44.3774094]
-          ]
-        }
-      },
-      {
-        type: 'Feature',
-        properties: {
-          name: 'Lakeshore Drive',
-          manual: true
-        },
-        geometry: {
-          type: 'LineString',
-          coordinates: [
-            [-79.6851812, 44.3740648],
-            [-79.685328, 44.3740857],
-            [-79.6855098, 44.3741077],
-            [-79.6858369, 44.3741534],
-            [-79.6861882, 44.3742301],
-            [-79.6866591, 44.374371],
-            [-79.686982, 44.3744746],
-            [-79.687405, 44.3747076],
-            [-79.6877481, 44.3748466],
-            [-79.6880335, 44.3749444],
-            [-79.688227, 44.3749769],
-            [-79.6885117, 44.3750024],
-            [-79.6887462, 44.3749726]
+            [-79.6937164, 44.3813612],
+            [-79.6937486, 44.3822714],
+            [-79.6938303, 44.3832465],
+            [-79.6938775, 44.3840292],
+            [-79.6939289, 44.385048],
+            [-79.6940083, 44.3860846],
+            [-79.6940519, 44.3866546],
+            [-79.6940682, 44.3868676]
           ]
         }
       },
@@ -357,14 +571,20 @@
         geometry: {
           type: 'LineString',
           coordinates: [
-            [-79.6988287, 44.3750911],
-            [-79.6992544, 44.3755885],
-            [-79.6995931, 44.3759844],
-            [-79.7002433, 44.376733],
-            [-79.7003386, 44.3768456],
-            [-79.7005449, 44.3770894],
-            [-79.7010845, 44.377727],
-            [-79.7011522, 44.3778061]
+            [-79.7041077, 44.3812583],
+            [-79.7043268, 44.3815107],
+            [-79.7045358, 44.3817515],
+            [-79.7045763, 44.3817981],
+            [-79.7048056, 44.3820623],
+            [-79.70493, 44.3822056],
+            [-79.7052025, 44.3825195],
+            [-79.7052878, 44.3826178],
+            [-79.7054618, 44.3828267],
+            [-79.7055323, 44.3829113],
+            [-79.7057212, 44.3831382],
+            [-79.7060608, 44.3835459],
+            [-79.7065168, 44.3840588],
+            [-79.7067694, 44.3843443]
           ]
         }
       }
@@ -382,10 +602,31 @@
     return geojson;
   }
 
+  function simplifyRoadName(name) {
+    if (!name) return '';
+    var cleaned = String(name);
+    cleaned = cleaned.replace(/\b(NORTH|SOUTH|EAST|WEST|N|S|E|W)\b/gi, ' ');
+    cleaned = cleaned.replace(/\b(STREET|ST|ROAD|RD|DRIVE|DR|AVENUE|AVE|BOULEVARD|BLVD|COURT|CT|TERRACE|TER|LANE|LN|WAY|PLACE|PKWY|PARKWAY|HIGHWAY|HWY|CIRCLE|CIR|TRAIL|TRL|CRESCENT|CRES|ROW|CLOSE|BYPASS)\b/gi, ' ');
+    cleaned = cleaned.replace(/\s+/g, ' ').trim();
+    if (!cleaned) return String(name).trim();
+    return cleaned;
+  }
+
   function addMajorRoadLabel(feature, layer) {
     if (!feature || !feature.properties || !feature.properties.name) return;
     var anchors = computeMajorRoadLabelAnchors(feature, layer);
     if (!anchors || !anchors.length) return;
+    var rawName = feature.properties.name;
+    var displayName = simplifyRoadName(rawName);
+    if (!displayName) {
+      displayName = rawName;
+    }
+    if (rawName && /^St\.?\s+Vincent\b/i.test(rawName)) {
+      displayName = 'St. Vincent';
+    }
+    if (displayName && displayName.trim().toUpperCase() === 'FURTHER SOUTH') {
+      return;
+    }
     for (var i = 0; i < anchors.length; i++) {
       var anchor = anchors[i];
       var label = L.tooltip({
@@ -397,7 +638,7 @@
         opacity: 1
       })
         .setLatLng({ lat: anchor.lat, lng: anchor.lng })
-        .setContent(feature.properties.name);
+        .setContent(displayName);
       (function (anchorRef, labelRef) {
         labelRef.on('add', function () {
           var el = labelRef.getElement();
@@ -430,8 +671,44 @@
       totalLength += computeLineLengthMeters(lineLatLngs[j]);
     }
 
-    var anchors = [];
     var roadName = feature && feature.properties && feature.properties.name;
+    var roadKey = roadName ? String(roadName).trim().toUpperCase() : '';
+    if (roadKey === 'LAKESHORE DRIVE' || roadKey === 'LAKE SHORE ROAD') {
+      return [];
+    }
+    var manualAnchorDefs = MAJOR_ROAD_LABEL_MANUAL_ANCHORS[roadKey] || null;
+    var manualAnchors = [];
+    if (manualAnchorDefs && manualAnchorDefs.length) {
+      for (var m = 0; m < manualAnchorDefs.length; m++) {
+        var manual = manualAnchorDefs[m];
+        if (!manual) continue;
+        var manualLat = Number(manual.lat);
+        var manualLng = Number(manual.lng);
+        if (!Number.isFinite(manualLat) || !Number.isFinite(manualLng)) continue;
+        var manualBearing = Number.isFinite(manual.bearing) ? Number(manual.bearing) : null;
+        manualAnchors.push({ lat: manualLat, lng: manualLng, bearing: manualBearing });
+      }
+    }
+    var anchors = [];
+    if (roadKey === 'ESSA ROAD') {
+      var essaAnchor = computeMajorRoadGeometryAnchor(geometry);
+      if (essaAnchor && Number.isFinite(essaAnchor.lat) && Number.isFinite(essaAnchor.lng)) {
+        var relocated = offsetLatLngByBearing(essaAnchor.lat, essaAnchor.lng, 1000, 225);
+        if (relocated) {
+          return [{ lat: relocated.lat, lng: relocated.lng, bearing: essaAnchor.bearing }];
+        }
+      }
+    }
+    if (roadKey === 'YONGE STREET' && totalLength > 0) {
+      var customDistance = totalLength > 4000 ? 4000 : totalLength * 0.95;
+      if (customDistance <= 0) {
+        customDistance = totalLength * 0.5;
+      }
+      var customPoint = locatePointAlongLines(lineLatLngs, customDistance);
+      if (customPoint) {
+        anchors.push({ lat: customPoint.lat, lng: customPoint.lng, bearing: customPoint.bearing });
+      }
+    }
     var desiredCount = computeMajorRoadLabelCount(totalLength, roadName);
     if (desiredCount <= 0) {
       return [];
@@ -460,7 +737,17 @@
         anchors.push({ lat: center.lat, lng: center.lng });
       }
     }
-    return filterMajorRoadAnchors(anchors);
+    var combinedAnchors = manualAnchors.length ? manualAnchors.concat(anchors) : anchors;
+    var offsetConfig = MAJOR_ROAD_LABEL_MANUAL_OFFSETS[roadKey];
+    if (offsetConfig && Number.isFinite(offsetConfig.distanceMeters) && Number.isFinite(offsetConfig.bearingDegrees)) {
+      combinedAnchors = combinedAnchors.map(function (anchor) {
+        if (!anchor) return anchor;
+        var moved = offsetLatLngByBearing(anchor.lat, anchor.lng, offsetConfig.distanceMeters, offsetConfig.bearingDegrees);
+        if (!moved) return anchor;
+        return { lat: moved.lat, lng: moved.lng, bearing: anchor.bearing };
+      });
+    }
+    return filterMajorRoadAnchors(combinedAnchors.length ? combinedAnchors : anchors);
   }
 
   function computeMajorRoadLabelCount(totalLength, roadName) {
@@ -643,79 +930,6 @@
     }
   }
 
-  function setupLegend() {
-    if (!legendEl) return;
-    legendEl.innerHTML = '';
-
-    var routesSection = document.createElement('div');
-    routesSection.className = 'legend-section';
-    legendEl.appendChild(routesSection);
-
-    var routesTitle = document.createElement('div');
-    routesTitle.className = 'legend-section-title';
-    routesTitle.textContent = 'Routes';
-    routesSection.appendChild(routesTitle);
-
-    var actions = document.createElement('div');
-    actions.className = 'legend-actions';
-    routesSection.appendChild(actions);
-
-    var showAllBtn = document.createElement('button');
-    showAllBtn.type = 'button';
-    showAllBtn.id = 'btnShowAllRoutes';
-    showAllBtn.textContent = 'Show All';
-    actions.appendChild(showAllBtn);
-
-    var hideAllBtn = document.createElement('button');
-    hideAllBtn.type = 'button';
-    hideAllBtn.id = 'btnHideAllRoutes';
-    hideAllBtn.textContent = 'Hide All';
-    actions.appendChild(hideAllBtn);
-
-    var routeList = document.createElement('div');
-    routeList.className = 'route-list';
-    routeList.id = 'routeList';
-    routesSection.appendChild(routeList);
-
-    routeList.addEventListener('change', function (e) {
-      if (e.target && e.target.matches('input[type="checkbox"][data-route]')) {
-        var routeId = e.target.getAttribute('data-route');
-        setRouteVisibility(routeId, e.target.checked);
-        updateRouteLegendState();
-      }
-    });
-
-    showAllBtn.addEventListener('click', function () {
-      Object.keys(routeLayers).forEach(function (id) { setRouteVisibility(id, true); });
-      updateRouteLegendState();
-    });
-
-    hideAllBtn.addEventListener('click', function () {
-      Object.keys(routeLayers).forEach(function (id) { setRouteVisibility(id, false); });
-      updateRouteLegendState();
-    });
-
-    var vehiclesLabel = document.createElement('label');
-    vehiclesLabel.className = 'legend-check';
-    var vehiclesCheckbox = document.createElement('input');
-    vehiclesCheckbox.type = 'checkbox';
-    vehiclesCheckbox.id = 'chkVehicles';
-    vehiclesCheckbox.checked = true;
-    vehiclesLabel.appendChild(vehiclesCheckbox);
-    var vehiclesText = document.createElement('span');
-    vehiclesText.textContent = 'Vehicles';
-    vehiclesLabel.appendChild(vehiclesText);
-    legendEl.appendChild(vehiclesLabel);
-
-    vehiclesCheckbox.addEventListener('change', function (e) {
-      if (e.target.checked) {
-        vehicleLayer.addTo(map);
-      } else {
-        map.removeLayer(vehicleLayer);
-      }
-    });
-  }
-
   function normalizeStopKey(value) {
     if (value === null || value === undefined) return '';
     var str = String(value).trim();
@@ -762,6 +976,58 @@
       .replace(/>/g, '&gt;');
   }
 
+  function sanitizeStopAttribute(text) {
+    var safe = sanitizeStopLabel(text);
+    return safe.replace(/"/g, '&quot;');
+  }
+
+  function deriveShortLabelFromName(name) {
+    if (!name) return '';
+    var trimmed = String(name).trim();
+    if (!trimmed) return '';
+    var words = trimmed.split(/\s+/);
+    if (words.length === 1) {
+      return words[0].slice(0, 3).toUpperCase();
+    }
+    var letters = [];
+    for (var i = 0; i < words.length && letters.length < 4; i++) {
+      if (words[i]) {
+        letters.push(words[i][0].toUpperCase());
+      }
+    }
+    if (!letters.length) return trimmed.slice(0, 3).toUpperCase();
+    return letters.join('');
+  }
+
+  function getStopLegendEntries() {
+    var seen = Object.create(null);
+    var entries = [];
+    for (var i = 0; i < highlightedStopKeys.length; i++) {
+      var key = highlightedStopKeys[i];
+      var override = stopHighlightOverrides[key] || {};
+      var fullName = override.label || '';
+      if (!fullName) {
+        fullName = 'Stop ' + key;
+      }
+      var shortLabel = override.shortLabel || deriveShortLabelFromName(fullName);
+      if (!shortLabel) continue;
+      var normalizedShort = String(shortLabel).trim();
+      if (!normalizedShort) continue;
+      var dedupeKey = normalizedShort.toUpperCase();
+      if (seen[dedupeKey]) continue;
+      seen[dedupeKey] = true;
+      entries.push({
+        id: key,
+        shortLabel: normalizedShort,
+        fullLabel: fullName
+      });
+    }
+    entries.sort(function (a, b) {
+      return a.shortLabel.localeCompare(b.shortLabel);
+    });
+    return entries;
+  }
+
   function createStopHighlightMarker(feature, identifier) {
     if (!feature || !feature.geometry || !Array.isArray(feature.geometry.coordinates)) return null;
     var coords = feature.geometry.coordinates;
@@ -773,28 +1039,46 @@
     var props = feature.properties || {};
     var override = stopHighlightOverrides[identifier] || null;
     var rawName = props.stop_name || ('Stop ' + identifier);
-    var name = rawName;
+    var normalizedRawName = rawName;
     if (identifier === '9005') {
-      name = rawName.replace(/\s*Platform\s*\d+$/i, '').trim();
+      normalizedRawName = rawName.replace(/\s*Platform\s*\d+$/i, '').trim();
     }
+    var fullName = normalizedRawName;
     if (override && override.label) {
-      name = override.label;
+      fullName = override.label;
     }
-    var safeName = sanitizeStopLabel(name);
+    var displayName = fullName;
+    if (override && override.shortLabel) {
+      displayName = override.shortLabel;
+    }
+    var safeDisplayName = sanitizeStopLabel(displayName);
+    var safeFullName = sanitizeStopLabel(fullName);
     var safeId = sanitizeStopLabel(identifier);
-    var labelHtml = safeName;
-    var safeNote = null;
+    var labelHtml = safeDisplayName;
+    var noteText = null;
     if (override && override.note) {
-      safeNote = sanitizeStopLabel(override.note);
+      noteText = override.note;
     } else if (identifier === '9005') {
-      safeNote = 'You Are Here';
+      noteText = 'You Are Here';
     }
+    var safeNote = noteText ? sanitizeStopLabel(noteText) : null;
     if (safeNote) {
       labelHtml += '<span class="stop-highlight-note">' + safeNote + '</span>';
     }
 
     var includeCallout = false;
     var wrapperAttrs = ' data-stop="' + safeId + '"';
+    var titleText = fullName;
+    if (displayName && displayName !== fullName) {
+      titleText = fullName + ' (' + displayName + ')';
+    }
+    if (noteText) {
+      titleText += ' - ' + noteText;
+    }
+    if (titleText) {
+      var safeTitle = sanitizeStopAttribute(titleText);
+      wrapperAttrs += ' title="' + safeTitle + '" aria-label="' + safeTitle + '"';
+    }
     if (override && override.cssOffsets) {
       var cssParts = [];
       if (override.cssOffsets.x) cssParts.push('--stop-offset-x:' + override.cssOffsets.x);
@@ -826,10 +1110,18 @@
 
     var labelLat = lat;
     var labelLng = lon;
+    if (override && override.labelCoords) {
+      var customLat = Number(override.labelCoords.lat);
+      var customLng = Number(override.labelCoords.lng);
+      if (Number.isFinite(customLat) && Number.isFinite(customLng)) {
+        labelLat = customLat;
+        labelLng = customLng;
+      }
+    }
 
     if (map && map.latLngToLayerPoint && map.layerPointToLatLng && (pixelOffset.x || pixelOffset.y)) {
       try {
-        var baseLatLng = L.latLng(lat, lon);
+        var baseLatLng = L.latLng(labelLat, labelLng);
         var layerPoint = map.latLngToLayerPoint(baseLatLng);
         var offsetPoint = L.point(
           layerPoint.x + Number(pixelOffset.x || 0),
@@ -860,9 +1152,9 @@
   }
 
   function loadStopHighlights() {
-    if (!highlightLayer) return;
+    if (!highlightLayer) return Promise.resolve();
     highlightLayer.clearLayers();
-    fetchJson('/api/stops.geojson')
+    return dataClient.fetchStops()
       .then(function (gj) {
         if (!isFeatureCollection(gj)) throw new Error('Invalid stops response');
         var features = Array.isArray(gj.features) ? gj.features : [];
@@ -899,129 +1191,6 @@
       .catch(function (err) {
         console.error('Failed to load highlighted stops:', err);
       });
-  }
-
-  function updateRouteLegendState() {
-    var routeList = document.getElementById('routeList');
-    if (!routeList) return;
-    Array.prototype.forEach.call(routeList.querySelectorAll('label.route-item'), function (label) {
-      var input = label.querySelector('input[data-route]');
-      if (!input) return;
-      var routeId = input.getAttribute('data-route');
-      var visible = isRouteVisible(routeId);
-      if (visible) {
-        label.classList.remove('route-hidden');
-        input.checked = true;
-      } else {
-        label.classList.add('route-hidden');
-        input.checked = false;
-      }
-    });
-  }
-
-  function renderRouteLegend() {
-    var routeList = document.getElementById('routeList');
-    if (!routeList) return;
-    routeList.innerHTML = '';
-
-    var routeIds = Object.keys(routeLayers).sort(function (a, b) {
-      var aMeta = getRouteMeta(a);
-      var bMeta = getRouteMeta(b);
-      var aOrder = extractRouteSortValue(aMeta);
-      var bOrder = extractRouteSortValue(bMeta);
-      if (aOrder.number !== null && bOrder.number !== null) {
-        if (aOrder.number !== bOrder.number) return aOrder.number - bOrder.number;
-        return aOrder.label.localeCompare(bOrder.label);
-      }
-      if (aOrder.number !== null) return -1;
-      if (bOrder.number !== null) return 1;
-      return aOrder.label.localeCompare(bOrder.label);
-    });
-
-    routeIds.forEach(function (routeId) {
-      var entry = routeLayers[routeId];
-      var meta = getRouteMeta(routeId);
-      var label = document.createElement('label');
-      label.className = 'route-item';
-      label.title = meta.longName ? meta.displayName + ' - ' + meta.longName : meta.displayName;
-
-      var input = document.createElement('input');
-      input.type = 'checkbox';
-      input.checked = entry.visible !== false;
-      input.setAttribute('data-route', routeId);
-      label.appendChild(input);
-
-      var swatch = document.createElement('span');
-      swatch.className = 'swatch';
-      swatch.style.background = meta.color;
-      label.appendChild(swatch);
-
-      var nameSpan = document.createElement('span');
-      nameSpan.className = 'route-name';
-      nameSpan.textContent = meta.displayName;
-      label.appendChild(nameSpan);
-
-      routeList.appendChild(label);
-    });
-
-    updateRouteLegendState();
-  }
-
-  function updateBanner(source, message) {
-    if (!bannerEl) return;
-    if (message) {
-      bannerMessages[source] = message;
-    } else {
-      delete bannerMessages[source];
-    }
-
-    var nextMessage = null;
-    for (var i = 0; i < bannerPriority.length; i++) {
-      var key = bannerPriority[i];
-      if (bannerMessages[key]) {
-        nextMessage = bannerMessages[key];
-        break;
-      }
-    }
-    if (!nextMessage) {
-      var keys = Object.keys(bannerMessages);
-      if (keys.length > 0) {
-        nextMessage = bannerMessages[keys[0]];
-      }
-    }
-
-    if (!nextMessage) {
-      bannerEl.textContent = bannerDefaultText;
-      bannerEl.hidden = true;
-    } else {
-      bannerEl.textContent = nextMessage;
-      bannerEl.hidden = false;
-    }
-  }
-
-  function fetchJson(url) {
-    return fetch(url).then(function (res) {
-      if (res.ok) return res.json();
-      return res.text().then(function (txt) {
-        var message = 'Request failed: ' + res.status;
-        if (txt) {
-          try {
-            var parsed = JSON.parse(txt);
-            if (parsed && parsed.error) {
-              message = parsed.error;
-            } else {
-              message = txt;
-            }
-          } catch (err) {
-            message = txt;
-          }
-        }
-        var error = new Error(message);
-        error.status = res.status;
-        error.url = url;
-        throw error;
-      });
-    });
   }
 
   function isFeatureCollection(obj) {
@@ -1688,6 +1857,22 @@
     return meta;
   }
 
+  function getSortedRouteIds() {
+    return Object.keys(routeLayers).sort(function (a, b) {
+      var aMeta = getRouteMeta(a);
+      var bMeta = getRouteMeta(b);
+      var aOrder = extractRouteSortValue(aMeta);
+      var bOrder = extractRouteSortValue(bMeta);
+      if (aOrder.number !== null && bOrder.number !== null) {
+        if (aOrder.number !== bOrder.number) return aOrder.number - bOrder.number;
+        return aOrder.label.localeCompare(bOrder.label);
+      }
+      if (aOrder.number !== null) return -1;
+      if (bOrder.number !== null) return 1;
+      return aOrder.label.localeCompare(bOrder.label);
+    });
+  }
+
   function extractRouteSortValue(meta) {
     if (!meta) {
       return { number: null, label: '' };
@@ -1701,24 +1886,180 @@
     };
   }
 
+  function sanitizeVehicleText(value, fallback) {
+    var source = value === undefined || value === null ? (fallback || '') : value;
+    return String(source)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function sanitizeColorValue(value, fallback) {
+    var color = value === undefined || value === null || value === '' ? (fallback || '#444444') : value;
+    return String(color).replace(/[^#0-9a-zA-Z(),.% -]/g, '');
+  }
+
+  function shouldForceWhiteArrow(meta) {
+    if (!meta) return false;
+    var candidates = [meta.displayName, meta.id];
+    for (var i = 0; i < candidates.length; i++) {
+      var key = normalizeRouteKey(candidates[i]);
+      if (key === '8' || key === '8A' || key === '8B') {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function assignVehicleKey(vehicle) {
+    if (vehicle && vehicle.id !== undefined && vehicle.id !== null && vehicle.id !== '') {
+      return String(vehicle.id);
+    }
+    anonymousVehicleCounter += 1;
+    return 'anon-' + anonymousVehicleCounter;
+  }
+
+  function buildVehiclePopupContent(groupMembers) {
+    if (!Array.isArray(groupMembers) || !groupMembers.length) return 'Vehicle info unavailable';
+    var lines = [];
+    for (var i = 0; i < groupMembers.length; i++) {
+      var member = groupMembers[i];
+      var vehicle = member.vehicle;
+      var meta = member.meta;
+      var label = sanitizeVehicleText(meta.displayName || meta.longName || meta.id || 'Route');
+      var busId = vehicle && vehicle.id ? sanitizeVehicleText(vehicle.id) : 'Unknown bus';
+      var parts = ['Bus ' + busId, 'Route ' + label];
+      if (meta.longName) {
+        parts.push(sanitizeVehicleText(meta.longName));
+      }
+      lines.push(parts.join(' — '));
+    }
+    return lines.join('<br/>');
+  }
+
+  function createCombinedBusIcon(members) {
+    var MAX_COLUMNS = 2;
+    var MAX_ROWS = 2;
+    var MAX_VISIBLE = MAX_COLUMNS * MAX_ROWS;
+    var bucketIndex = Object.create(null);
+    var routeBuckets = [];
+
+    for (var i = 0; i < members.length; i++) {
+      var member = members[i];
+      var key = member.routeId || (member.meta && member.meta.id) || member.key || ('route-' + i);
+      if (!bucketIndex[key]) {
+        bucketIndex[key] = {
+          routeId: member.routeId,
+          meta: member.meta,
+          count: 0
+        };
+        routeBuckets.push(bucketIndex[key]);
+      }
+      bucketIndex[key].count += 1;
+    }
+
+    var totalRoutes = routeBuckets.length;
+    var visibleBuckets = routeBuckets;
+    var extraCount = 0;
+    if (totalRoutes > MAX_VISIBLE) {
+      extraCount = totalRoutes - (MAX_VISIBLE - 1);
+      visibleBuckets = routeBuckets.slice(0, MAX_VISIBLE - 1);
+    }
+
+    var chips = [];
+    for (var j = 0; j < visibleBuckets.length; j++) {
+      var bucket = visibleBuckets[j];
+      var meta = bucket.meta || {};
+      var label = sanitizeVehicleText(meta.displayName || meta.id || '?');
+      var chipBg = sanitizeColorValue(meta.color, '#444444');
+      var chipFg = sanitizeColorValue(meta.textColor, '#ffffff');
+      var badge = bucket.count > 1 ? '<span class="vehicle-mini__badge">' + sanitizeVehicleText(bucket.count) + '</span>' : '';
+      chips.push('<span class="vehicle-mini" style="--chip-bg:' + chipBg + ';--chip-fg:' + chipFg + ';">' + label + badge + '</span>');
+    }
+    if (extraCount > 0) {
+      var safeExtra = sanitizeVehicleText('+' + extraCount);
+      chips.push('<span class="vehicle-mini vehicle-mini--count">' + safeExtra + '</span>');
+    }
+
+    var renderedCells = visibleBuckets.length + (extraCount > 0 ? 1 : 0);
+    var columnCount = Math.min(MAX_COLUMNS, renderedCells);
+    var rowCount = Math.min(MAX_ROWS, Math.ceil(renderedCells / MAX_COLUMNS));
+    if (columnCount <= 0) columnCount = 1;
+    if (rowCount <= 0) rowCount = 1;
+
+    var CELL_SIZE = 28;
+    var GAP_SIZE = 4;
+    var paddingX = 0;
+    var paddingY = 0;
+    var width = columnCount * CELL_SIZE + Math.max(0, columnCount - 1) * GAP_SIZE + paddingX;
+    var height = rowCount * CELL_SIZE + Math.max(0, rowCount - 1) * GAP_SIZE + paddingY;
+    var anchorX = Math.round(width / 2);
+    var anchorY = Math.round(height / 2);
+    var popupY = -Math.round(height / 2);
+
+    var groupStyle = 'style="--stack-columns:' + columnCount + ';--stack-rows:' + rowCount + '"';
+    var html = '' +
+      '<div class="vehicle-bubble vehicle-bubble--combined" data-no-bearing="true">' +
+      '  <div class="vehicle-label-group vehicle-label-group--stack" ' + groupStyle + '>' + chips.join('') + '</div>' +
+      '</div>';
+
+    return L.divIcon({
+      className: 'vehicle-icon vehicle-icon--combined',
+      html: html,
+      iconSize: [Math.round(width), Math.round(height)],
+      iconAnchor: [anchorX, anchorY],
+      popupAnchor: [0, popupY]
+    });
+  }
+
+  function updateMarkerVisibility(markerData) {
+    if (!markerData || !markerData.marker || !Array.isArray(markerData.routeIds) || !markerData.routeIds.length) {
+      return;
+    }
+    var anyVisible = false;
+    for (var i = 0; i < markerData.routeIds.length; i++) {
+      if (isRouteVisible(markerData.routeIds[i])) {
+        anyVisible = true;
+        break;
+      }
+    }
+    markerData.marker.setOpacity(anyVisible ? 1 : 0);
+  }
+
+  function removeMarkerEntry(key) {
+    if (!key || !markers[key]) return;
+    var entry = markers[key];
+    if (entry && entry.marker) {
+      vehicleLayer.removeLayer(entry.marker);
+    }
+    delete markers[key];
+  }
+
   function createBusIcon(meta, bearing) {
     var label = meta.displayName || '';
     var background = meta.color || '#444444';
     var textColor = meta.textColor || '#FFFFFF';
-    var safeLabel = String(label || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-    var safeBg = String(background || '#444444').replace(/[^#0-9a-zA-Z(),.% -]/g, '');
-    var safeText = String(textColor || '#FFFFFF').replace(/[^#0-9a-zA-Z(),.% -]/g, '');
+    var safeLabel = sanitizeVehicleText(label);
+    var safeBg = sanitizeColorValue(background, '#444444');
+    var safeText = sanitizeColorValue(textColor, '#FFFFFF');
     var hasBearing = Number.isFinite(bearing);
     var normalizedBearing = hasBearing ? normalizeBearing(bearing) : null;
     var bearingValue = normalizedBearing === null ? '0deg' : normalizedBearing.toFixed(1) + 'deg';
     var labelLength = String(label || '').replace(/\s+/g, '').length;
     var labelSize = labelLength >= 3 ? 15 : 19;
-    var arrowColor = (meta.textColor && meta.textColor.toUpperCase() === '#FFFFFF') ? 'rgba(20, 20, 20, 0.88)' : (meta.textColor || '#222222');
-    var safeArrow = String(arrowColor || '#222222').replace(/[^#0-9a-zA-Z(),.% -]/g, '');
-    var attrs = 'class="vehicle-bubble" style="--route-color:' + safeBg + ';--text-color:' + safeText + ';--label-size:' + labelSize + 'px;--bearing:' + bearingValue + ';--arrow-color:' + safeArrow + ';"';
+    var arrowColor;
+    var arrowStroke = 'rgba(255, 255, 255, 0.8)';
+    if (shouldForceWhiteArrow(meta)) {
+      arrowColor = '#FFFFFF'; // Route 8 uses a black base; keep its direction marker visible.
+      arrowStroke = '#000000';
+    } else if (meta.textColor && meta.textColor.toUpperCase() === '#FFFFFF') {
+      arrowColor = 'rgba(20, 20, 20, 0.88)';
+    } else {
+      arrowColor = meta.textColor || '#222222';
+    }
+    var safeArrow = sanitizeColorValue(arrowColor, '#222222');
+    var safeArrowStroke = sanitizeColorValue(arrowStroke, 'rgba(255, 255, 255, 0.8)');
+    var attrs = 'class="vehicle-bubble" style="--route-color:' + safeBg + ';--text-color:' + safeText + ';--label-size:' + labelSize + 'px;--bearing:' + bearingValue + ';--arrow-color:' + safeArrow + ';--arrow-stroke:' + safeArrowStroke + ';"';
     if (!hasBearing) {
       attrs += ' data-no-bearing="true"';
     }
@@ -1747,6 +2088,37 @@
     var y = Math.sin(deltaLambda) * Math.cos(phi2);
     var x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
     return normalizeBearing(Math.atan2(y, x) * 180 / Math.PI);
+  }
+
+  function offsetLatLngByBearing(lat, lon, distanceMeters, bearingDegrees) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    if (!Number.isFinite(distanceMeters) || distanceMeters === 0) {
+      return { lat: lat, lng: lon };
+    }
+    if (!Number.isFinite(bearingDegrees)) {
+      return { lat: lat, lng: lon };
+    }
+    var angularDistance = distanceMeters / EARTH_RADIUS_METERS;
+    if (!Number.isFinite(angularDistance) || angularDistance === 0) {
+      return { lat: lat, lng: lon };
+    }
+    var bearingRad = bearingDegrees * Math.PI / 180;
+    var latRad = lat * Math.PI / 180;
+    var lonRad = lon * Math.PI / 180;
+    var sinLat = Math.sin(latRad);
+    var cosLat = Math.cos(latRad);
+    var sinAngular = Math.sin(angularDistance);
+    var cosAngular = Math.cos(angularDistance);
+    var newLatRad = Math.asin(sinLat * cosAngular + cosLat * sinAngular * Math.cos(bearingRad));
+    var newLonRad = lonRad + Math.atan2(Math.sin(bearingRad) * sinAngular * cosLat, cosAngular - sinLat * Math.sin(newLatRad));
+    var newLat = newLatRad * 180 / Math.PI;
+    var newLon = newLonRad * 180 / Math.PI;
+    if (!Number.isFinite(newLon)) {
+      newLon = lon;
+    } else {
+      newLon = ((newLon + 540) % 360) - 180;
+    }
+    return { lat: newLat, lng: newLon };
   }
 
   function resolveVehicleBearing(vehicle, markerData) {
@@ -1809,10 +2181,14 @@
   function applyRouteVisibilityToVehicles(routeId) {
     var resolved = resolveRouteEntry(routeId);
     if (!resolved) return;
-    var visible = isRouteVisible(resolved.id);
     Object.keys(markers).forEach(function (id) {
-      if (markers[id].routeId === resolved.id) {
-        markers[id].marker.setOpacity(visible ? 1 : 0);
+      var markerData = markers[id];
+      if (!markerData || !Array.isArray(markerData.routeIds)) return;
+      for (var i = 0; i < markerData.routeIds.length; i++) {
+        if (markerData.routeIds[i] === resolved.id) {
+          updateMarkerVisibility(markerData);
+          break;
+        }
       }
     });
   }
@@ -1833,6 +2209,7 @@
       entry.visible = false;
     }
     applyRouteVisibilityToVehicles(resolved.id);
+    ui.updateRouteLegendState(createLegendContext());
   }
 
   function buildRouteLabels() {
@@ -1994,14 +2371,14 @@
   }
 
   function loadRoutes() {
-    fetchJson('/api/routes.geojson')
+    return dataClient.fetchRoutes()
       .then(function (gj) {
         if (!isFeatureCollection(gj)) throw new Error('Invalid routes response');
 
         clearRoutes();
         var features = gj.features || [];
         if (!features.length) {
-          updateBanner('routes', 'No routes available. Run npm run build:data.');
+          ui.showBanner('routes', 'No routes available. Run npm run build:data.');
           return;
         }
 
@@ -2114,8 +2491,12 @@
         renderRouteOverlaps(overlapCandidates);
 
         buildRouteLabels();
-        renderRouteLegend();
-        updateBanner('routes', null);
+        var legendContext = createLegendContext();
+        ui.renderRouteLegend(legendContext);
+        if (typeof ui.renderStopLegend === 'function') {
+          ui.renderStopLegend(legendContext);
+        }
+        ui.clearBanner('routes');
         if (combinedBounds && combinedBounds.isValid()) {
           map.fitBounds(combinedBounds, { padding: [12, 12] });
         }
@@ -2127,77 +2508,187 @@
       .catch(function (err) {
         console.error('Failed to load routes:', err);
         var msg = err && err.message ? err.message : 'Routes data unavailable. Run npm run build:data.';
-        updateBanner('routes', 'Routes unavailable: ' + msg);
+        ui.showBanner('routes', 'Routes unavailable: ' + msg);
       });
   }
 
   function updateVehicles(list) {
     var now = Date.now();
     var unresolvedRoutes = Object.create(null);
+    var clusters = clusterVehicles(Array.isArray(list) ? list : [], vehicleClusterThreshold);
+    var seenMarkerKeys = Object.create(null);
+    var miniSnapshots = [];
 
-    for (var i = 0; i < list.length; i++) {
-      var v = list[i];
-      if (!Number.isFinite(v.lat) || !Number.isFinite(v.lon)) continue;
+    for (var c = 0; c < clusters.length; c++) {
+      var cluster = clusters[c];
+      if (!cluster || !Array.isArray(cluster.vehicles) || !cluster.vehicles.length) continue;
 
-      var rawRouteId = v.route_id;
-      var resolved = rawRouteId ? resolveRouteEntry(rawRouteId) : null;
-      if (!resolved) {
-        var warnKey = rawRouteId || '(missing)';
-        if (!unresolvedRoutes[warnKey]) {
-          unresolvedRoutes[warnKey] = true;
-          console.warn('Skipping vehicle update for unresolved route:', warnKey);
+      var members = [];
+      var clusterLat = Number(cluster.lat);
+      var clusterLon = Number(cluster.lon);
+      var visibleLatSum = 0;
+      var visibleLonSum = 0;
+      var visibleCount = 0;
+
+      for (var vIndex = 0; vIndex < cluster.vehicles.length; vIndex++) {
+        var vehicle = cluster.vehicles[vIndex];
+        if (!vehicle || !Number.isFinite(vehicle.lat) || !Number.isFinite(vehicle.lon)) continue;
+
+        var vehicleKey = assignVehicleKey(vehicle);
+        var rawRouteId = vehicle.route_id;
+        var resolved = rawRouteId ? resolveRouteEntry(rawRouteId) : null;
+        if (!resolved) {
+          var warnKey = rawRouteId || '(missing)';
+          if (!unresolvedRoutes[warnKey]) {
+            unresolvedRoutes[warnKey] = true;
+            console.warn('Skipping vehicle update for unresolved route:', warnKey);
+          }
+          continue;
         }
-        continue;
+
+        var routeMeta = getRouteMeta(resolved.id);
+        if (!routeMeta) continue;
+        if (!isRouteVisible(resolved.id)) continue;
+
+        visibleLatSum += vehicle.lat;
+        visibleLonSum += vehicle.lon;
+        visibleCount += 1;
+        members.push({
+          key: vehicleKey,
+          vehicle: vehicle,
+          routeId: resolved.id,
+          meta: routeMeta
+        });
+        miniSnapshots.push({
+          key: vehicleKey,
+          vehicle: vehicle,
+          meta: routeMeta
+        });
       }
 
-      var routeId = resolved.id;
-      var meta = getRouteMeta(routeId);
-      var markerData = markers[v.id];
-      var bearing = resolveVehicleBearing(v, markerData);
-      var bearingToken = bearing === null ? 'na' : bearing.toFixed(1);
-      var signature = meta.displayName + '|' + meta.color + '|' + meta.textColor + '|' + bearingToken;
+      if (!members.length) continue;
+      if (visibleCount > 0) {
+        clusterLat = visibleLatSum / visibleCount;
+        clusterLon = visibleLonSum / visibleCount;
+      }
+
+      var isCombined = members.length > 1;
+      var markerKey;
+      if (isCombined) {
+        var aggregatedKeys = members.map(function (m) { return m.key; }).sort();
+        markerKey = aggregatedKeys.join('|');
+      } else {
+        markerKey = members[0].key;
+      }
+
+      seenMarkerKeys[markerKey] = true;
+
+      var markerData = markers[markerKey];
+      var bearing = null;
+      if (!isCombined) {
+        bearing = resolveVehicleBearing(members[0].vehicle, markerData);
+      }
+
+      var routeIds = [];
+      var routeDescriptors = [];
+      var vehicleIdsForSignature = [];
+      for (var mIndex = 0; mIndex < members.length; mIndex++) {
+        var member = members[mIndex];
+        routeIds.push(member.routeId);
+        routeDescriptors.push(member.routeId + ':' + (member.meta.displayName || ''));
+        vehicleIdsForSignature.push(member.key);
+      }
+
+      var uniqueRouteIds = Array.from(new Set(routeIds));
+
+      var signature;
+      var icon;
+      if (isCombined) {
+        for (var rm = 0; rm < members.length; rm++) {
+          var memberKey = members[rm].key;
+          if (memberKey && memberKey !== markerKey) {
+            removeMarkerEntry(memberKey);
+          }
+        }
+        signature = 'combined|' + routeDescriptors.sort().join(',') + '|' + vehicleIdsForSignature.sort().join(',');
+        icon = createCombinedBusIcon(members);
+      } else {
+        signature = 'single|' + routeIds[0] + '|' + (members[0].meta.displayName || '') + '|' + (members[0].meta.color || '') + '|' + (members[0].meta.textColor || '') + '|' + (bearing === null ? 'na' : bearing.toFixed(1)) + '|' + vehicleIdsForSignature[0];
+        icon = createBusIcon(members[0].meta, bearing);
+      }
+
+      var popupContent = buildVehiclePopupContent(members);
+      var title;
+      if (isCombined) {
+        title = 'Routes ' + members.map(function (member) { return member.meta.displayName || member.routeId; }).join(', ');
+      } else {
+        var singleMeta = members[0].meta;
+        title = singleMeta.longName ? (singleMeta.displayName + ' - ' + singleMeta.longName) : ('Route ' + singleMeta.displayName);
+      }
 
       if (!markerData) {
-        var icon = createBusIcon(meta, bearing);
-        var mk = L.marker([v.lat, v.lon], {
+        var zIndexOffset = isCombined ? COMBINED_MARKER_Z_OFFSET : SINGLE_MARKER_Z_OFFSET;
+        var mk = L.marker([clusterLat, clusterLon], {
           icon: icon,
-          title: meta.longName ? meta.displayName + ' - ' + meta.longName : 'Route ' + meta.displayName,
+          title: title,
           pane: 'vehiclePane',
-          riseOnHover: true
+          riseOnHover: true,
+          zIndexOffset: zIndexOffset
         }).addTo(vehicleLayer);
-        mk.bindPopup('Bus ' + (v.id || 'Unknown') + '<br/>Route ' + meta.displayName + (meta.longName ? ' - ' + meta.longName : ''));
-        markerData = markers[v.id] = {
+        mk.bindPopup(popupContent);
+        markerData = markers[markerKey] = {
           marker: mk,
-          routeId: routeId,
           iconSignature: signature,
-          lastLat: v.lat,
-          lastLon: v.lon,
+          lastLat: clusterLat,
+          lastLon: clusterLon,
           lastSeen: now,
-          bearing: bearing
+          bearing: bearing,
+          routeIds: uniqueRouteIds,
+          vehicleIds: vehicleIdsForSignature.slice(),
+          isCombined: isCombined
         };
       } else {
-        animateMove(markerData.marker, [markerData.lastLat, markerData.lastLon], [v.lat, v.lon], pollMs * 0.95);
-        markerData.lastLat = v.lat;
-        markerData.lastLon = v.lon;
-        markerData.lastSeen = now;
-        markerData.bearing = bearing;
+        var updatedZIndexOffset = isCombined ? COMBINED_MARKER_Z_OFFSET : SINGLE_MARKER_Z_OFFSET;
+        if (Number.isFinite(markerData.lastLat) && Number.isFinite(markerData.lastLon)) {
+          animateMove(markerData.marker, [markerData.lastLat, markerData.lastLon], [clusterLat, clusterLon], pollMs * 0.95);
+        } else {
+          markerData.marker.setLatLng([clusterLat, clusterLon]);
+        }
         if (markerData.iconSignature !== signature) {
-          markerData.marker.setIcon(createBusIcon(meta, bearing));
-          markerData.marker.setPopupContent('Bus ' + (v.id || 'Unknown') + '<br/>Route ' + meta.displayName + (meta.longName ? ' - ' + meta.longName : ''));
+          markerData.marker.setIcon(icon);
           markerData.iconSignature = signature;
         }
+        markerData.marker.setPopupContent(popupContent);
+        markerData.marker.options.title = title;
+        markerData.lastLat = clusterLat;
+        markerData.lastLon = clusterLon;
+        markerData.lastSeen = now;
+        markerData.bearing = bearing;
+        markerData.routeIds = uniqueRouteIds;
+        markerData.vehicleIds = vehicleIdsForSignature.slice();
+        markerData.isCombined = isCombined;
+        markerData.marker.setZIndexOffset(updatedZIndexOffset);
       }
 
-      markerData.routeId = routeId;
-      markerData.marker.setOpacity(isRouteVisible(routeId) ? 1 : 0);
+      updateMarkerVisibility(markerData);
     }
 
     Object.keys(markers).forEach(function (id) {
-      if (now - markers[id].lastSeen > 60000) {
-        vehicleLayer.removeLayer(markers[id].marker);
+      var markerData = markers[id];
+      if (!markerData) return;
+      var age = now - markerData.lastSeen;
+      if (!seenMarkerKeys[id]) {
+        vehicleLayer.removeLayer(markerData.marker);
+        delete markers[id];
+        return;
+      }
+      if (age > 60000) {
+        vehicleLayer.removeLayer(markerData.marker);
         delete markers[id];
       }
     });
+
+    syncMiniMapMarkers(miniSnapshots);
   }
 
   function animateMove(marker, from, to, duration) {
@@ -2215,15 +2706,15 @@
 
   function startVehiclesPoll() {
     function tick() {
-      fetchJson('/api/vehicles.json')
+      dataClient.fetchVehicles()
         .then(function (data) {
           if (data.error) throw new Error(data.error);
-          updateBanner('vehicles', null);
+          ui.clearBanner('vehicles');
           updateVehicles(data.vehicles || []);
         })
         .catch(function (err) {
           console.error('Failed to load vehicles:', err);
-          updateBanner('vehicles', bannerDefaultText || 'Live data unavailable, retrying');
+          ui.showBanner('vehicles', 'Vehicles unavailable: ' + (err && err.message ? err.message : 'live data retrying'));
         })
         .finally(function () {
           setTimeout(tick, pollMs);
@@ -2232,20 +2723,7 @@
     tick();
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-})();
-
-
-
-
-
-
-
-
-
-
-
+  return {
+    initialize: initialize
+  };
+}
