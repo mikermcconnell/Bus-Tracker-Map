@@ -39,34 +39,6 @@ body {
   font: inherit;
 }
 
-.banner {
-  position: absolute;
-  z-index: 1000;
-  top: 18px;
-  left: 18px;
-  padding: 12px 16px;
-  border-radius: var(--radius-md);
-  background: rgba(251, 227, 192, 0.94);
-  border-left: 4px solid var(--accent-amber-500);
-  color: var(--brand-blue-900);
-  font-size: 15px;
-  box-shadow: var(--shadow-soft);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.banner::before {
-  content: "";
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  background: currentColor;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath d='M12 2c5.52 0 10 4.48 10 10s-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2Zm0 4.75a1 1 0 0 0-1 1v5.5a1 1 0 1 0 2 0v-5.5a1 1 0 0 0-1-1Zm0 9.5a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Z'/%3E%3C/svg%3E") no-repeat center / contain;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath d='M12 2c5.52 0 10 4.48 10 10s-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2Zm0 4.75a1 1 0 0 0-1 1v5.5a1 1 0 1 0 2 0v-5.5a1 1 0 0 0-1-1Zm0 9.5a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5Z'/%3E%3C/svg%3E") no-repeat center / contain;
-}
-
 .stop-legend {
   position: absolute;
   z-index: 1000;
@@ -511,26 +483,6 @@ body {
   display: none;
 }
 
-.vehicle-mini__badge {
-  position: absolute;
-  top: -7px;
-  right: -7px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: var(--accent-amber-500);
-  color: #ffffff;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid rgba(0, 56, 94, 0.8);
-  box-shadow: var(--shadow-soft);
-  pointer-events: none;
-}
 .leaflet-control-zoom {
   border: none;
   border-radius: var(--radius-lg);

@@ -113,7 +113,7 @@ export function createMapController({ dataClient, ui }) {
     'HURONIA ROAD': 2,
     'DUNLOP STREET EAST': 1,
     'DUNLOP STREET WEST': 1,
-    'ESSA ROAD': 2,
+    'ESSA ROAD': 0,
     'CUNDLES ROAD EAST': 1,
     'DUCKWORTH STREET': 0,
     'YONGE STREET': 2,
@@ -123,9 +123,6 @@ export function createMapController({ dataClient, ui }) {
   var MAJOR_ROAD_LABEL_MANUAL_ANCHORS = {
     'YONGE STREET': [
       { lat: 44.3699307, lng: -79.668287 }
-    ],
-    'ESSA ROAD': [
-      { lat: 44.3600686, lng: -79.6975765 }
     ]
   };
   var MAJOR_ROAD_LABEL_MANUAL_OFFSETS = {
@@ -612,6 +609,20 @@ export function createMapController({ dataClient, ui }) {
             [-79.7067694, 44.3843443]
           ]
         }
+      },
+      {
+        type: 'Feature',
+        properties: {
+          name: 'Essa',
+          manual: true
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-79.6914831810679, 44.3650170437343],
+            [-79.6884831810679, 44.3650170437343]
+          ]
+        }
       }
     ];
 
@@ -715,12 +726,12 @@ export function createMapController({ dataClient, ui }) {
       }
     }
     var anchors = [];
-    if (roadKey === 'ESSA ROAD') {
+    if (roadKey === 'ESSA ROAD' && !manualAnchors.length) {
       var essaAnchor = computeMajorRoadGeometryAnchor(geometry);
       if (essaAnchor && Number.isFinite(essaAnchor.lat) && Number.isFinite(essaAnchor.lng)) {
         var relocated = offsetLatLngByBearing(essaAnchor.lat, essaAnchor.lng, 1000, 225);
         if (relocated) {
-          return [{ lat: relocated.lat, lng: relocated.lng, bearing: essaAnchor.bearing }];
+          manualAnchors.push({ lat: relocated.lat, lng: relocated.lng, bearing: essaAnchor.bearing });
         }
       }
     }
@@ -1998,8 +2009,7 @@ export function createMapController({ dataClient, ui }) {
       var label = sanitizeVehicleText(meta.displayName || meta.id || '?');
       var chipBg = sanitizeColorValue(meta.color, '#444444');
       var chipFg = sanitizeColorValue(meta.textColor, '#ffffff');
-      var badge = bucket.count > 1 ? '<span class="vehicle-mini__badge">' + sanitizeVehicleText(bucket.count) + '</span>' : '';
-      chips.push('<span class="vehicle-mini" style="--chip-bg:' + chipBg + ';--chip-fg:' + chipFg + ';">' + label + badge + '</span>');
+      chips.push('<span class="vehicle-mini" style="--chip-bg:' + chipBg + ';--chip-fg:' + chipFg + ';">' + label + '</span>');
     }
     if (extraCount > 0) {
       var safeExtra = sanitizeVehicleText('+' + extraCount);
