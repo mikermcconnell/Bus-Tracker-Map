@@ -1,6 +1,6 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "frontend",
+  "outputDirectory": "frontend/dist",
   "framework": null,
   "functions": {
     "api/index.js": {
