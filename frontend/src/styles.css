@@ -668,7 +668,7 @@ body {
   width: max-content;
   gap: var(--service-notice-gap);
   align-items: center;
-  animation: service-notice-scroll 40s linear infinite;
+  animation: service-notice-scroll 20s linear infinite;
   will-change: transform;
   flex: 1;
 }
