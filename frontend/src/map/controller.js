@@ -2,7 +2,7 @@ import { clusterVehicles, DEFAULT_CLUSTER_THRESHOLD_METERS, distanceBetweenMeter
 
 export function createMapController({ dataClient, ui }) {
   var map, routesGroup, vehicleLayer, highlightLayer, majorRoadLineLayer, majorRoadLabelLayer;
-  var pollMs = 10000;
+  var pollMs = 5000;
   var tileUrl;
   var basePath = '/';
   var routeLayers = {};
@@ -175,6 +175,9 @@ export function createMapController({ dataClient, ui }) {
   var miniMarkers = Object.create(null);
   var terminalOutline = null;
   var lastMiniSnapshots = [];
+  var deadReckonLoopId = null;
+  var DEAD_RECKON_MIN_SAMPLE_MS = 400;
+  var DEAD_RECKON_MAX_DURATION_FACTOR = 1.6;
 
   function initialize() {
     var DEFAULT_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -2067,6 +2070,13 @@ export function createMapController({ dataClient, ui }) {
     if (entry && entry.marker) {
       vehicleLayer.removeLayer(entry.marker);
     }
+    if (entry && entry.marker && entry.marker.__codexAnimFrame) {
+      cancelFrame(entry.marker.__codexAnimFrame);
+      entry.marker.__codexAnimFrame = null;
+    }
+    if (entry) {
+      entry.prediction = null;
+    }
     delete markers[key];
   }
 
@@ -2197,6 +2207,92 @@ export function createMapController({ dataClient, ui }) {
       if (Number.isFinite(markerData.bearing)) return markerData.bearing;
     }
     return null;
+  }
+
+  function buildDeadReckonPrediction(prevLat, prevLon, prevSeen, currLat, currLon, currSeen) {
+    if (!Number.isFinite(currLat) || !Number.isFinite(currLon) || !Number.isFinite(currSeen)) return null;
+    if (!Number.isFinite(prevLat) || !Number.isFinite(prevLon) || !Number.isFinite(prevSeen)) return null;
+    var deltaTime = currSeen - prevSeen;
+    if (!Number.isFinite(deltaTime) || deltaTime < DEAD_RECKON_MIN_SAMPLE_MS) return null;
+    var distanceMeters = distanceBetweenMeters(prevLat, prevLon, currLat, currLon);
+    if (!Number.isFinite(distanceMeters) || distanceMeters <= 0.5) return null;
+    var bearing = computeBearingBetween(prevLat, prevLon, currLat, currLon);
+    if (bearing === null) return null;
+    var speedPerMs = distanceMeters / deltaTime;
+    if (!Number.isFinite(speedPerMs) || speedPerMs <= 0) return null;
+    var maxDuration = Math.max(pollMs * DEAD_RECKON_MAX_DURATION_FACTOR, pollMs + 1000);
+    return {
+      anchorLat: currLat,
+      anchorLon: currLon,
+      anchorTime: currSeen,
+      speedPerMs: speedPerMs,
+      bearing: bearing,
+      maxDuration: maxDuration
+    };
+  }
+
+  function refreshPredictionAnchor(markerData, timestamp) {
+    if (!markerData || !markerData.prediction || !markerData.marker) return;
+    var latLng = typeof markerData.marker.getLatLng === 'function' ? markerData.marker.getLatLng() : null;
+    if (!latLng) return;
+    markerData.prediction.anchorLat = latLng.lat;
+    markerData.prediction.anchorLon = latLng.lng;
+    var timeValue = Number.isFinite(timestamp) ? timestamp : Date.now();
+    markerData.prediction.anchorTime = timeValue;
+  }
+
+  function applyDeadReckon(markerData, nowTs) {
+    if (!markerData || !markerData.prediction || !markerData.marker) return false;
+    var prediction = markerData.prediction;
+    if (markerData.marker.__codexAnimFrame) {
+      refreshPredictionAnchor(markerData, nowTs);
+      return true;
+    }
+    var elapsed = nowTs - prediction.anchorTime;
+    if (!Number.isFinite(elapsed) || elapsed <= 0) return true;
+    var maxDuration = Number.isFinite(prediction.maxDuration)
+      ? prediction.maxDuration
+      : Math.max(pollMs * DEAD_RECKON_MAX_DURATION_FACTOR, pollMs + 1000);
+    if (elapsed > maxDuration) {
+      markerData.prediction = null;
+      return false;
+    }
+    if (!Number.isFinite(prediction.speedPerMs) || prediction.speedPerMs <= 0 || !Number.isFinite(prediction.bearing)) {
+      markerData.prediction = null;
+      return false;
+    }
+    var distance = prediction.speedPerMs * elapsed;
+    if (!Number.isFinite(distance) || distance <= 0) {
+      return true;
+    }
+    var projected = offsetLatLngByBearing(prediction.anchorLat, prediction.anchorLon, distance, prediction.bearing);
+    if (!projected) {
+      markerData.prediction = null;
+      return false;
+    }
+    markerData.marker.setLatLng([projected.lat, projected.lng]);
+    return true;
+  }
+
+  function scheduleDeadReckonLoop() {
+    if (deadReckonLoopId !== null) return;
+    deadReckonLoopId = requestFrame(deadReckonStep);
+  }
+
+  function deadReckonStep() {
+    deadReckonLoopId = null;
+    var nowTs = Date.now();
+    var needsMore = false;
+    Object.keys(markers).forEach(function (id) {
+      var markerData = markers[id];
+      if (!markerData || !markerData.prediction) return;
+      if (applyDeadReckon(markerData, nowTs)) {
+        needsMore = true;
+      }
+    });
+    if (needsMore) {
+      scheduleDeadReckonLoop();
+    }
   }
 
   function hashString(str) {
@@ -2651,6 +2747,9 @@ export function createMapController({ dataClient, ui }) {
       seenMarkerKeys[markerKey] = true;
 
       var markerData = markers[markerKey];
+      var prevLat = markerData ? markerData.lastLat : null;
+      var prevLon = markerData ? markerData.lastLon : null;
+      var prevSeen = markerData ? markerData.lastSeen : null;
       var bearing = null;
       if (!isCombined) {
         bearing = resolveVehicleBearing(members[0].vehicle, markerData);
@@ -2712,12 +2811,21 @@ export function createMapController({ dataClient, ui }) {
           bearing: bearing,
           routeIds: uniqueRouteIds,
           vehicleIds: vehicleIdsForSignature.slice(),
-          isCombined: isCombined
+          isCombined: isCombined,
+          prediction: null
         };
       } else {
         var updatedZIndexOffset = isCombined ? COMBINED_MARKER_Z_OFFSET : SINGLE_MARKER_Z_OFFSET;
         if (Number.isFinite(markerData.lastLat) && Number.isFinite(markerData.lastLon)) {
-          animateMove(markerData.marker, [markerData.lastLat, markerData.lastLon], [clusterLat, clusterLon], pollMs * 0.95);
+          animateMove(
+            markerData.marker,
+            [markerData.lastLat, markerData.lastLon],
+            [clusterLat, clusterLon],
+            pollMs,
+            function () {
+              refreshPredictionAnchor(markerData);
+            }
+          );
         } else {
           markerData.marker.setLatLng([clusterLat, clusterLon]);
         }
@@ -2737,6 +2845,15 @@ export function createMapController({ dataClient, ui }) {
         markerData.marker.setZIndexOffset(updatedZIndexOffset);
       }
 
+      if (!markerData) continue;
+      var prediction = (!markerData.isCombined && Number.isFinite(prevSeen))
+        ? buildDeadReckonPrediction(prevLat, prevLon, prevSeen, clusterLat, clusterLon, now)
+        : null;
+      markerData.prediction = prediction;
+      if (prediction) {
+        scheduleDeadReckonLoop();
+      }
+
       updateMarkerVisibility(markerData);
     }
 
@@ -2745,20 +2862,18 @@ export function createMapController({ dataClient, ui }) {
       if (!markerData) return;
       var age = now - markerData.lastSeen;
       if (!seenMarkerKeys[id]) {
-        vehicleLayer.removeLayer(markerData.marker);
-        delete markers[id];
+        removeMarkerEntry(id);
         return;
       }
       if (age > 60000) {
-        vehicleLayer.removeLayer(markerData.marker);
-        delete markers[id];
+        removeMarkerEntry(id);
       }
     });
 
     syncMiniMapMarkers(miniSnapshots);
   }
 
-  function animateMove(marker, from, to, duration) {
+  function animateMove(marker, from, to, duration, onComplete) {
     if (!marker || typeof marker.setLatLng !== 'function') return;
     var targetLat = Array.isArray(to) ? to[0] : (to && Number.isFinite(to.lat) ? to.lat : null);
     var targetLon = Array.isArray(to) ? to[1] : (to && Number.isFinite(to.lng) ? to.lng : (to && Number.isFinite(to.lon) ? to.lon : null));
@@ -2783,11 +2898,17 @@ export function createMapController({ dataClient, ui }) {
 
     if (!Number.isFinite(startLat) || !Number.isFinite(startLon)) {
       marker.setLatLng([targetLat, targetLon]);
+      if (typeof onComplete === 'function') {
+        onComplete();
+      }
       return;
     }
 
     if (!Number.isFinite(duration) || duration <= 0) {
       marker.setLatLng([targetLat, targetLon]);
+      if (typeof onComplete === 'function') {
+        onComplete();
+      }
       return;
     }
 
@@ -2820,6 +2941,9 @@ export function createMapController({ dataClient, ui }) {
       } else {
         marker.__codexAnimFrame = null;
         marker.setLatLng([targetLat, targetLon]);
+        if (typeof onComplete === 'function') {
+          onComplete();
+        }
       }
     }
     marker.__codexAnimFrame = requestFrame(step);
