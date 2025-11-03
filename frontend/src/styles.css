@@ -292,9 +292,9 @@ body {
 
 
 .route-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
   max-height: none;
   overflow-y: visible;
   padding-right: 6px;
@@ -307,6 +307,8 @@ body {
   padding: 6px 12px;
   border-radius: var(--radius-md);
   transition: background 0.15s ease, opacity 0.15s ease;
+  width: 100%;
+  min-width: 0;
 }
 
 .route-item:hover {
@@ -636,7 +638,7 @@ body {
   background: linear-gradient(90deg, var(--brand-blue-900), var(--brand-blue-700));
   border-top: 4px solid var(--brand-blue-100);
   color: #ffffff;
-  font-size: 16px;
+  font-size: 32px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: none;
@@ -662,13 +664,11 @@ body {
 
 .service-notice__track {
   --service-notice-gap: 64px;
-  --service-notice-tail-gap: 48px;
   display: inline-flex;
   width: max-content;
   gap: var(--service-notice-gap);
   align-items: center;
-  transform: translateX(100%);
-  animation: service-notice-scroll 28s linear infinite;
+  animation: service-notice-scroll 40s linear infinite;
   will-change: transform;
   flex: 1;
 }
@@ -680,9 +680,9 @@ body {
 
 @keyframes service-notice-scroll {
   0% {
-    transform: translateX(100%);
+    transform: translateX(0);
   }
   100% {
-    transform: translateX(calc(-100% - var(--service-notice-tail-gap)));
+    transform: translateX(calc(-50% - var(--service-notice-gap) / 2));
   }
 }
