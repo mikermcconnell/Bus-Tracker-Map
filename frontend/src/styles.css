@@ -39,12 +39,41 @@ body {
   font: inherit;
 }
 
+.map-overlay-frame {
+  position: fixed;
+  inset: 0;
+  padding: clamp(16px, 2vw, 36px);
+  padding-bottom: clamp(110px, 11vh, 150px);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: clamp(12px, 3vw, 40px);
+  pointer-events: none;
+  z-index: 450;
+}
+
+.map-overlay-column {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 2vh, 24px);
+  width: min(26vw, 320px);
+  min-width: 220px;
+  pointer-events: none;
+}
+
+.map-overlay-column--right {
+  align-items: flex-end;
+}
+
+.map-overlay-column > * {
+  pointer-events: auto;
+}
+
 .stop-legend {
-  position: absolute;
+  position: relative;
   z-index: 1000;
-  top: 110px;
-  left: 18px;
-  width: 220px;
+  width: 100%;
+  max-width: 320px;
   background: var(--overlay-surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--overlay-border);
@@ -54,10 +83,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  pointer-events: auto;
 }
 
 .stop-legend-title {
-  font-size: 14px;
+  font-size: clamp(13px, 1.4vw, 15px);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -78,25 +108,22 @@ body {
 }
 
 .stop-legend-list dt {
-  font-size: 16px;
+  font-size: clamp(14px, 1.6vw, 17px);
   font-weight: 700;
   color: var(--brand-blue-700);
   letter-spacing: 0.08em;
 }
 
 .stop-legend-list dd {
-  font-size: 14px;
+  font-size: clamp(12px, 1.3vw, 15px);
   color: var(--text-secondary);
 }
 
 .legend {
-  position: absolute;
+  position: relative;
   z-index: 1000;
-  top: 12px;
-  right: 18px;
-  min-width: 240px;
-  max-width: 320px;
-  max-height: none;
+  width: 100%;
+  max-width: 340px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -108,20 +135,20 @@ body {
   line-height: 1.4;
   backdrop-filter: blur(6px);
   overflow: visible;
+  pointer-events: auto;
 }
 
 /* Mini-map overlay highlighting live activity at the terminal. */
 .mini-map {
-  position: absolute;
-  left: 24px;
-  bottom: calc(10% + 24px);
-  width: min(24vw, 408px);
-  height: min(24vh, 384px);
-  min-width: 264px;
-  min-height: 240px;
+  position: relative;
+  width: 100%;
+  max-width: min(28vw, 340px);
+  min-width: 220px;
+  height: clamp(220px, 28vh, 360px);
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1 0 auto;
   padding: 16px;
   border-radius: var(--radius-lg);
   border: 2px solid rgba(0, 78, 128, 0.5);
@@ -133,7 +160,7 @@ body {
 }
 
 .mini-map__title {
-  font-size: 14px;
+  font-size: clamp(12px, 1.2vw, 14px);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
