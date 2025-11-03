@@ -155,7 +155,7 @@ body {
   background: transparent;
 }
 
-@media (max-width: 1024px), (max-height: 720px) {
+@media (max-width: 900px), (max-height: 640px) {
   .mini-map {
     display: none;
   }

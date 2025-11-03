@@ -158,7 +158,7 @@ export function createMapController({ dataClient, ui }) {
   // Terminal focus constants keep the inset map centered on Barrie Allandale Transit Terminal.
   var TERMINAL_COORDS = { lat: 44.3740170437343, lng: -79.6899831810679 };
   var TERMINAL_RADIUS_METERS = 150;
-  var MINI_MAP_MEDIA_QUERY = '(min-width: 1025px) and (min-height: 721px)';
+  var MINI_MAP_MEDIA_QUERY = '(min-width: 901px) and (min-height: 641px)';
   var MINI_MAP_ZOOM = 16.5;
   var MINI_MAP_ICON_SCALE = 0.8;
   var MINI_MAP_ANIMATION_RATIO = 0.85;
