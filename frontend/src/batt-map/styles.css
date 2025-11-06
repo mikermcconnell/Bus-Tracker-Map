@@ -1,0 +1,155 @@
+:root {
+  --batt-bg: #08131f;
+  --status-bg: rgba(8, 19, 31, 0.85);
+  --status-text: #f5f7fa;
+  --status-border: rgba(255, 255, 255, 0.25);
+  --shadow-soft: 0 6px 18px rgba(13, 43, 69, 0.16);
+  --shadow-medium: 0 10px 24px rgba(13, 43, 69, 0.18);
+  --frame-gap: clamp(12px, 3vh, 36px);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: var(--batt-bg);
+  font-family: "Inter", "Segoe UI", Arial, sans-serif;
+  color: #fff;
+}
+
+.batt-app {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  padding: var(--frame-gap);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  background: var(--batt-bg);
+}
+
+.map-frame {
+  position: relative;
+  width: min(
+    calc(100vw - (var(--frame-gap) * 2)),
+    calc((100vh - (var(--frame-gap) * 2)) * (11659 / 9009))
+  );
+  max-height: calc(100vh - (var(--frame-gap) * 2));
+  aspect-ratio: 11659 / 9009;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: var(--shadow-medium);
+}
+
+.map {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.leaflet-container {
+  background: transparent;
+  font: inherit;
+}
+
+.status-banner {
+  position: absolute;
+  top: var(--frame-gap);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 24px;
+  border-radius: 999px;
+  background: var(--status-bg);
+  border: 1px solid var(--status-border);
+  color: var(--status-text);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  z-index: 1000;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.status-banner[hidden] {
+  display: none;
+}
+
+.vehicle-icon {
+  border: none !important;
+  background: transparent !important;
+}
+
+.vehicle-bubble {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--route-color, #004e80);
+  color: var(--text-color, #ffffff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--label-size, 18px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  border: var(--bubble-border-width, 3px) solid rgba(255, 255, 255, 0.96);
+  box-shadow: var(--bubble-shadow, var(--shadow-medium));
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+  backdrop-filter: blur(2px);
+}
+
+.vehicle-bubble::after {
+  content: "";
+  position: absolute;
+  inset: var(--bubble-inner-inset, 7px);
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  opacity: 0.85;
+  z-index: 1;
+}
+
+.vehicle-label {
+  position: relative;
+  z-index: 2;
+}
+
+.vehicle-arrow {
+  position: absolute;
+  top: calc(-14px * var(--bubble-scale, 1));
+  left: 50%;
+  width: calc(24px * var(--bubble-scale, 1));
+  height: calc(14px * var(--bubble-scale, 1));
+  margin-left: calc(-12px * var(--bubble-scale, 1));
+  transform: rotate(var(--bearing, 0deg));
+  transform-origin: 50% calc(100% + (22px * var(--bubble-scale, 1)));
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.32));
+  pointer-events: none;
+  z-index: 1;
+}
+
+.vehicle-arrow path {
+  fill: var(--arrow-color, rgba(0, 0, 0, 0.85));
+  stroke: var(--arrow-stroke, rgba(255, 255, 255, 0.8));
+  stroke-width: 0.8;
+  stroke-linejoin: round;
+}
+
+.vehicle-bubble[data-no-bearing="true"] .vehicle-arrow {
+  display: none;
+}
