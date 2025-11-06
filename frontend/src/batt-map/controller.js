@@ -469,8 +469,8 @@ function normalizeBearing(value) {
 }
 
 function createBusIcon(meta = {}, bearing) {
-  const scale = 0.82; // 25% larger than the last bus icon scale
-  const busScale = Math.max(0.6, Math.min(1.2, scale));
+  const scale = 0.58; // ~30% smaller overall icon scale
+  const busScale = Math.max(0.45, Math.min(1.2, scale));
   const label = meta.displayName || meta.id || '?';
   const background = '#050607';
   const textColor = meta.color || '#FFFFFF';
