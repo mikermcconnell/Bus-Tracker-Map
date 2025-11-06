@@ -11,7 +11,7 @@ const DEFAULT_POLL_MS = 10000;
 const MAX_MARKER_AGE_MS = 60000;
 const MARKER_ANIMATION_DURATION_MS = 4050;
 const MIN_ANIMATION_DISTANCE_METERS = 0.75;
-const BUS_SHAPE_SCALE = 1.25;
+const BUS_SHAPE_SCALE = 1.625;
 
 export function createBattMapController({ dataClient }) {
   let map = null;
