@@ -1,7 +1,7 @@
 const PLATFORM_IMAGE_URL = './assets/batt-platform-map.jpg';
 const PLATFORM_BOUNDS = [
-  [44.372905996, -79.692075326], // Tuned overlay (≈25m east / 5m north overall)
-  [44.375211996, -79.686492326]
+  [44.372950993, -79.692075326], // Tuned overlay (≈25m east / ≈0m net north)
+  [44.375256993, -79.686492326]
 ];
 const PLATFORM_LAT_MIN = Math.min(PLATFORM_BOUNDS[0][0], PLATFORM_BOUNDS[1][0]);
 const PLATFORM_LAT_MAX = Math.max(PLATFORM_BOUNDS[0][0], PLATFORM_BOUNDS[1][0]);

@@ -4,7 +4,8 @@
  * through the legend context so this module remains unaware of Leaflet internals.
  */
 
-const SERVICE_NOTICE_TEXT = 'For passenger pick up and drop off, please use the passenger vehicle loop beside the GO Train.';
+const SERVICE_NOTICE_TEXT = '';
+const HAS_SERVICE_NOTICE_COPY = typeof SERVICE_NOTICE_TEXT === 'string' && SERVICE_NOTICE_TEXT.trim().length > 0;
 // Hide notice after Nov 3, 2024 (month is zero-indexed).
 const SERVICE_NOTICE_END = (() => {
   const now = new Date();
@@ -41,6 +42,10 @@ export function createUiController() {
 
   function setupServiceNotice() {
     if (!serviceNoticeEl) return;
+    if (!HAS_SERVICE_NOTICE_COPY) {
+      serviceNoticeEl.hidden = true;
+      return;
+    }
     const track = serviceNoticeEl.querySelector('.service-notice__track');
     if (track) {
       const segments = track.querySelectorAll('.service-notice__text');
@@ -53,6 +58,7 @@ export function createUiController() {
   }
 
   function shouldShowServiceNotice(now) {
+    if (!HAS_SERVICE_NOTICE_COPY) return false;
     const current = now instanceof Date ? now : new Date(now);
     if (!Number.isFinite(current.getTime())) return false;
     if (!(SERVICE_NOTICE_END instanceof Date) || !Number.isFinite(SERVICE_NOTICE_END.getTime())) {
@@ -67,7 +73,7 @@ export function createUiController() {
   }
 
   function scheduleServiceNoticeCheck() {
-    if (!serviceNoticeEl) return;
+    if (!serviceNoticeEl || !HAS_SERVICE_NOTICE_COPY) return;
     if (serviceNoticeTimer) {
       clearTimeout(serviceNoticeTimer);
       serviceNoticeTimer = null;

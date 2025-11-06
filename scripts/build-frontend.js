@@ -19,6 +19,23 @@ const dataDir = path.join(projectRoot, 'frontend', 'data');
 const distDir = path.join(projectRoot, 'frontend', 'dist');
 const assetsDir = path.join(distDir, 'assets');
 
+const entryPoints = [
+  {
+    key: 'main',
+    entryPath: path.join(srcDir, 'main.js'),
+    cssPath: path.join(srcDir, 'styles.css'),
+    templatePath: path.join(srcDir, 'index.html'),
+    outputHtml: 'index.html'
+  },
+  {
+    key: 'battMap',
+    entryPath: path.join(srcDir, 'batt-map', 'main.js'),
+    cssPath: path.join(srcDir, 'batt-map', 'styles.css'),
+    templatePath: path.join(srcDir, 'batt-map', 'index.html'),
+    outputHtml: 'batt.map.html'
+  }
+];
+
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
@@ -48,14 +65,21 @@ function copyDataDirectory() {
   }
 }
 
-async function buildJs() {
+function copyBattMapAssets() {
+  const source = path.join(srcDir, 'batt-map', 'platform-map.jpg');
+  if (!fs.existsSync(source)) return;
+  const dest = path.join(assetsDir, 'batt-platform-map.jpg');
+  fs.copyFileSync(source, dest);
+}
+
+async function buildJs(entry) {
   const result = await esbuild.build({
-    entryPoints: [path.join(srcDir, 'main.js')],
+    entryPoints: [entry.entryPath],
     bundle: true,
     sourcemap: false,
     minify: true,
     write: false,
-    outfile: 'app.js',
+    outfile: `${entry.key}.js`,
     format: 'iife',
     target: ['es2017'],
     legalComments: 'none',
@@ -63,41 +87,39 @@ async function buildJs() {
 
   const output = result.outputFiles.find((file) => file.path.endsWith('.js'));
   if (!output) {
-    throw new Error('esbuild produced no JavaScript output');
+    throw new Error(`esbuild produced no JavaScript output for ${entry.key}`);
   }
 
   const hash = contentHash(output.contents);
-  const fileName = `app.${hash}.js`;
+  const fileName = `${entry.key}.${hash}.js`;
   const filePath = path.join(assetsDir, fileName);
   fs.writeFileSync(filePath, output.contents);
   return fileName;
 }
 
-function buildCss() {
-  const cssPath = path.join(srcDir, 'styles.css');
-  const buffer = fs.readFileSync(cssPath);
+function buildCss(entry) {
+  const buffer = fs.readFileSync(entry.cssPath);
   const hash = contentHash(buffer);
-  const fileName = `styles.${hash}.css`;
+  const fileName = `${entry.key}.${hash}.css`;
   const filePath = path.join(assetsDir, fileName);
   fs.writeFileSync(filePath, buffer);
   return fileName;
 }
 
-function writeIndexHtml(assetMap) {
-  const templatePath = path.join(srcDir, 'index.html');
-  const template = fs.readFileSync(templatePath, 'utf8');
+function writeHtml(entry, assetMap) {
+  const template = fs.readFileSync(entry.templatePath, 'utf8');
   const html = template
     .replace(/%APP_JS%/g, `./assets/${assetMap.js}`)
     .replace(/%APP_CSS%/g, `./assets/${assetMap.css}`)
     .replace(/%BUILD_ID%/g, new Date().toISOString());
-  fs.writeFileSync(path.join(distDir, 'index.html'), html);
+  fs.writeFileSync(path.join(distDir, entry.outputHtml), html);
 }
 
-function writeManifest(assetMap) {
+function writeManifest(entryAssets) {
   const manifestPath = path.join(distDir, 'manifest.json');
   fs.writeFileSync(manifestPath, JSON.stringify({
     generatedAt: new Date().toISOString(),
-    assets: assetMap,
+    entries: entryAssets,
   }, null, 2));
 }
 
@@ -107,14 +129,25 @@ async function main() {
   ensureDir(distDir);
   ensureDir(assetsDir);
 
-  const jsFile = await buildJs();
-  const cssFile = buildCss();
-  copyDataDirectory();
+  const entryAssets = {};
 
-  const assetMap = { js: jsFile, css: cssFile };
-  writeIndexHtml(assetMap);
-  writeManifest(assetMap);
-  console.log('Frontend build complete:', assetMap);
+  for (const entry of entryPoints) {
+    if (!fs.existsSync(entry.entryPath)) continue;
+    const jsFile = await buildJs(entry);
+    const cssFile = buildCss(entry);
+    writeHtml(entry, { js: jsFile, css: cssFile });
+    entryAssets[entry.key] = {
+      html: entry.outputHtml,
+      js: jsFile,
+      css: cssFile
+    };
+  }
+
+  copyDataDirectory();
+  copyBattMapAssets();
+
+  writeManifest(entryAssets);
+  console.log('Frontend build complete:', entryAssets);
 }
 
 main().catch((err) => {

@@ -195,6 +195,12 @@ apiRouter.get('/vehicles.json', async (req, res) => {
 router.options('/api/*', corsMiddleware);
 router.use('/api', corsMiddleware, apiRouter);
 
+router.get('/batt.map', (req, res, next) => {
+  const battPath = path.join(FRONTEND_DIR, 'batt.map.html');
+  if (!fs.existsSync(battPath)) return next();
+  res.sendFile(battPath);
+});
+
 router.get('*', (req, res, next) => {
   const indexPath = path.join(FRONTEND_DIR, 'index.html');
   if (!fs.existsSync(indexPath)) return next();

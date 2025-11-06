@@ -16,6 +16,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/batt.map", "destination": "/batt.map.html" },
     { "source": "/api/(.*)", "destination": "/api/index.js" }
   ],
   "env": {
