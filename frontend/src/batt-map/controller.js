@@ -464,11 +464,8 @@ function normalizeBearing(value) {
 }
 
 function createBusIcon(meta = {}, bearing) {
-  const scale = 0.75; // 25% smaller than the primary map markers
-  const bubbleScale = Math.max(0.5, Math.min(2, scale));
-  const bubbleBorderWidth = Math.max(1.5, 3 * bubbleScale);
-  const bubbleInnerInset = Math.max(3, 7 * bubbleScale);
-  const bubbleShadow = bubbleScale < 1 ? 'var(--shadow-soft)' : 'var(--shadow-medium)';
+  const scale = 0.525; // 30% smaller than previous bus icon scale
+  const busScale = Math.max(0.6, Math.min(1.2, scale));
   const label = meta.displayName || meta.id || '?';
   const background = meta.color || '#444444';
   const textColor = meta.textColor || computeTextColor(meta.color || '#444444');
@@ -480,7 +477,7 @@ function createBusIcon(meta = {}, bearing) {
   const bearingValue = normalizedBearing === null ? '0deg' : `${normalizedBearing.toFixed(1)}deg`;
   const labelLength = String(label || '').replace(/\s+/g, '').length;
   const baseLabelSize = labelLength >= 3 ? 15 : 19;
-  const labelScale = Math.max(0.75, Math.min(1, bubbleScale));
+  const labelScale = Math.max(0.75, Math.min(1, busScale));
   const labelSize = Math.round(baseLabelSize * labelScale);
   let arrowColor;
   let arrowStroke = 'rgba(255, 255, 255, 0.8)';
@@ -495,43 +492,45 @@ function createBusIcon(meta = {}, bearing) {
   const safeArrow = sanitizeColorValue(arrowColor || '#222222', '#222222');
   const safeArrowStroke = sanitizeColorValue(arrowStroke, 'rgba(255, 255, 255, 0.8)');
 
-  const bubbleStyle = [
+  const busStyle = [
     `--route-color:${safeBg}`,
     `--text-color:${safeText}`,
     `--label-size:${labelSize}px`,
     `--bearing:${bearingValue}`,
     `--arrow-color:${safeArrow}`,
     `--arrow-stroke:${safeArrowStroke}`,
-    `--bubble-scale:${bubbleScale}`,
-    `--bubble-border-width:${bubbleBorderWidth.toFixed(2)}px`,
-    `--bubble-inner-inset:${bubbleInnerInset.toFixed(2)}px`,
-    `--bubble-shadow:${bubbleShadow}`
+    `--bus-scale:${busScale}`
   ].join(';');
 
-  let attrs = `class="vehicle-bubble" style="${bubbleStyle};"`;
+  let attrs = `class="vehicle-bus" style="${busStyle};"`;
   if (!hasBearing) {
     attrs += ' data-no-bearing="true"';
   }
 
-  const baseSize = 44;
-  const iconSize = Math.round(baseSize * scale);
-  const anchor = Math.round((baseSize / 2) * scale);
-  const popupAnchor = Math.round(-anchor);
+  const baseWidth = 52;
+  const baseHeight = 52;
+  const iconWidth = Math.round(baseWidth * scale);
+  const iconHeight = Math.round(baseHeight * scale);
+  const anchorX = Math.round(iconWidth / 2);
+  const anchorY = Math.round(iconHeight / 2);
+  const popupAnchorY = -Math.round(iconHeight / 2);
 
   const html = `
     <div ${attrs}>
+      <div class="vehicle-bus-shape"></div>
+      <div class="vehicle-bus-highlight"></div>
+      <span class="vehicle-label">${safeLabel}</span>
       <svg class="vehicle-arrow" viewBox="0 0 24 16" role="presentation" focusable="false">
         <path d="M12 0L24 16H0Z"></path>
       </svg>
-      <span class="vehicle-label">${safeLabel}</span>
     </div>
   `;
 
   return L.divIcon({
     className: 'vehicle-icon',
     html,
-    iconSize: [iconSize, iconSize],
-    iconAnchor: [anchor, anchor],
-    popupAnchor: [0, popupAnchor]
+    iconSize: [iconWidth, iconHeight],
+    iconAnchor: [anchorX, anchorY],
+    popupAnchor: [0, popupAnchorY]
   });
 }

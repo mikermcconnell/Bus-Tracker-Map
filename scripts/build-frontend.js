@@ -70,6 +70,11 @@ function copyBattMapAssets() {
   if (!fs.existsSync(source)) return;
   const dest = path.join(assetsDir, 'batt-platform-map.jpg');
   fs.copyFileSync(source, dest);
+  const busSource = path.join(srcDir, 'batt-map', 'bus.png');
+  if (fs.existsSync(busSource)) {
+    const busDest = path.join(assetsDir, 'batt-bus.png');
+    fs.copyFileSync(busSource, busDest);
+  }
 }
 
 async function buildJs(entry) {
