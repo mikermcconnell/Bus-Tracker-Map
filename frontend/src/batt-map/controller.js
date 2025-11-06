@@ -11,6 +11,7 @@ const DEFAULT_POLL_MS = 10000;
 const MAX_MARKER_AGE_MS = 60000;
 const MARKER_ANIMATION_DURATION_MS = 4050;
 const MIN_ANIMATION_DISTANCE_METERS = 0.75;
+const BUS_SHAPE_SCALE = 1.25;
 
 export function createBattMapController({ dataClient }) {
   let map = null;
@@ -448,6 +449,18 @@ function shouldForceWhiteArrow(meta) {
   return false;
 }
 
+function shouldForceWhiteOutline(meta) {
+  if (!meta) return false;
+  const candidates = [meta.displayName, meta.id];
+  for (let i = 0; i < candidates.length; i += 1) {
+    const key = normalizeRouteKey(candidates[i]);
+    if (key === '8' || key === '8A' || key === '8B') {
+      return true;
+    }
+  }
+  return false;
+}
+
 function normalizeBearing(value) {
   if (!Number.isFinite(value)) return null;
   let deg = value % 360;
@@ -459,10 +472,11 @@ function createBusIcon(meta = {}, bearing) {
   const scale = 0.82; // 25% larger than the last bus icon scale
   const busScale = Math.max(0.6, Math.min(1.2, scale));
   const label = meta.displayName || meta.id || '?';
-  const background = meta.color || '#444444';
-  const textColor = meta.textColor || computeTextColor(meta.color || '#444444');
+  const background = '#050607';
+  const textColor = meta.color || '#FFFFFF';
+  const outlineColor = shouldForceWhiteOutline(meta) ? '#FFFFFF' : '#000000';
   const safeLabel = sanitizeVehicleText(label, '?');
-  const safeBg = sanitizeColorValue(background, '#444444');
+  const safeBg = sanitizeColorValue(background, '#050607');
   const safeText = sanitizeColorValue(textColor || '#FFFFFF', '#FFFFFF');
   const hasBearing = Number.isFinite(bearing);
   const normalizedBearing = hasBearing ? normalizeBearing(bearing) : null;
@@ -475,16 +489,8 @@ function createBusIcon(meta = {}, bearing) {
   const baseLabelSize = labelLength >= 3 ? 15 : 19;
   const labelScale = Math.max(0.75, Math.min(1, busScale));
   const labelSize = Math.round(baseLabelSize * labelScale);
-  let arrowColor;
-  let arrowStroke = 'rgba(255, 255, 255, 0.8)';
-  if (shouldForceWhiteArrow(meta)) {
-    arrowColor = '#FFFFFF';
-    arrowStroke = '#000000';
-  } else if (textColor && String(textColor).toUpperCase() === '#FFFFFF') {
-    arrowColor = 'rgba(20,20,20,0.88)';
-  } else {
-    arrowColor = textColor || '#222222';
-  }
+  let arrowColor = '#111111';
+  let arrowStroke = 'rgba(255, 255, 255, 0.95)';
   const safeArrow = sanitizeColorValue(arrowColor || '#222222', '#222222');
   const safeArrowStroke = sanitizeColorValue(arrowStroke, 'rgba(255, 255, 255, 0.8)');
 
@@ -496,7 +502,9 @@ function createBusIcon(meta = {}, bearing) {
     `--arrow-color:${safeArrow}`,
     `--arrow-stroke:${safeArrowStroke}`,
     `--bus-scale:${busScale}`,
-    `--bus-rotation:${busRotationValue}`
+    `--bus-rotation:${busRotationValue}`,
+    `--label-outline:${outlineColor}`,
+    `--bus-shape-scale:${BUS_SHAPE_SCALE}`
   ].join(';');
 
   let attrs = `class="vehicle-bus" style="${busStyle};"`;
