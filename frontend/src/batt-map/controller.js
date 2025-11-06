@@ -445,14 +445,6 @@ function sanitizeColorValue(value, fallback) {
 }
 
 function shouldForceWhiteArrow(meta) {
-  if (!meta) return false;
-  const candidates = [meta.displayName, meta.id];
-  for (let i = 0; i < candidates.length; i += 1) {
-    const key = normalizeRouteKey(candidates[i]);
-    if (key === '8' || key === '8A' || key === '8B') {
-      return true;
-    }
-  }
   return false;
 }
 
@@ -464,7 +456,7 @@ function normalizeBearing(value) {
 }
 
 function createBusIcon(meta = {}, bearing) {
-  const scale = 0.525; // 30% smaller than previous bus icon scale
+  const scale = 0.82; // 25% larger than the last bus icon scale
   const busScale = Math.max(0.6, Math.min(1.2, scale));
   const label = meta.displayName || meta.id || '?';
   const background = meta.color || '#444444';
@@ -475,6 +467,10 @@ function createBusIcon(meta = {}, bearing) {
   const hasBearing = Number.isFinite(bearing);
   const normalizedBearing = hasBearing ? normalizeBearing(bearing) : null;
   const bearingValue = normalizedBearing === null ? '0deg' : `${normalizedBearing.toFixed(1)}deg`;
+  const busFacing = normalizedBearing === null
+    ? 180
+    : (normalizedBearing + 180) % 360;
+  const busRotationValue = `${busFacing.toFixed(1)}deg`;
   const labelLength = String(label || '').replace(/\s+/g, '').length;
   const baseLabelSize = labelLength >= 3 ? 15 : 19;
   const labelScale = Math.max(0.75, Math.min(1, busScale));
@@ -499,7 +495,8 @@ function createBusIcon(meta = {}, bearing) {
     `--bearing:${bearingValue}`,
     `--arrow-color:${safeArrow}`,
     `--arrow-stroke:${safeArrowStroke}`,
-    `--bus-scale:${busScale}`
+    `--bus-scale:${busScale}`,
+    `--bus-rotation:${busRotationValue}`
   ].join(';');
 
   let attrs = `class="vehicle-bus" style="${busStyle};"`;

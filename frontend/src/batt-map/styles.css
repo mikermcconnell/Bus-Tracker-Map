@@ -125,6 +125,8 @@ body {
   -webkit-mask-position: center;
   mask-position: center;
   transition: background 160ms ease;
+  transform: rotate(var(--bus-rotation, 180deg));
+  transform-origin: 50% 50%;
 }
 
 .vehicle-bus-highlight {
@@ -142,6 +144,8 @@ body {
   -webkit-mask-position: center top;
   mask-position: center top;
   pointer-events: none;
+  transform: rotate(var(--bus-rotation, 180deg));
+  transform-origin: 50% 50%;
 }
 
 .vehicle-label {
