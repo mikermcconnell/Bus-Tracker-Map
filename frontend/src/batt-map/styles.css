@@ -164,13 +164,13 @@ body {
 
 .vehicle-arrow {
   position: absolute;
-  top: calc(-30px * var(--bus-scale, 1));
+  top: calc(-36px * var(--bus-scale, 1));
   left: 50%;
   width: calc(26px * var(--bus-scale, 1));
   height: calc(16px * var(--bus-scale, 1));
   margin-left: calc(-13px * var(--bus-scale, 1));
   transform: rotate(var(--bearing, 0deg));
-  transform-origin: 50% calc(100% + (34px * var(--bus-scale, 1)));
+  transform-origin: 50% calc(100% + (40px * var(--bus-scale, 1)));
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.32));
   pointer-events: none;
   z-index: 1;

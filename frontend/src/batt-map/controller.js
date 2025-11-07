@@ -11,7 +11,8 @@ const DEFAULT_POLL_MS = 10000;
 const MAX_MARKER_AGE_MS = 60000;
 const MARKER_ANIMATION_DURATION_MS = 4050;
 const MIN_ANIMATION_DISTANCE_METERS = 0.75;
-const BUS_SHAPE_SCALE = 1.625;
+// Scale the masked bus artwork relative to the surrounding label container
+const BUS_SHAPE_SCALE = 1.625 * 1.2; // 20% larger bus icon without touching text sizing
 
 export function createBattMapController({ dataClient }) {
   let map = null;
