@@ -166,7 +166,7 @@ export function createMapController({ dataClient, ui }) {
   var TERMINAL_RADIUS_METERS = 150;
   // TV zoom ends up shrinking the effective viewport well below the panel's native size,
   // so loosen the breakpoint so the mini-map still renders on smaller CSS viewports.
-  var MINI_MAP_MEDIA_QUERY = '(min-width: 700px) and (min-height: 450px)';
+  var MINI_MAP_MEDIA_QUERY = '(min-width: 500px) and (min-height: 360px)';
   var MINI_MAP_ZOOM = 16.5;
   var MINI_MAP_ICON_SCALE = 0.8;
   var MINI_MAP_ANIMATION_RATIO = 0.85;
@@ -2011,6 +2011,18 @@ export function createMapController({ dataClient, ui }) {
     return '';
   }
 
+  function deriveRouteEightDirectionFromTripId(directionId) {
+    var normalized = Number(directionId);
+    if (!Number.isFinite(normalized)) return '';
+    if (normalized === 0) {
+      return 'NORTHBOUND';
+    }
+    if (normalized === 1) {
+      return 'SOUTHBOUND';
+    }
+    return '';
+  }
+
   function deriveRouteEightDirection(meta, bearing, options) {
     if (!isRouteEight(meta)) return '';
     var directionHint = options && options.directionHint;
@@ -2782,7 +2794,7 @@ export function createMapController({ dataClient, ui }) {
 
         var vehicleKey = assignVehicleKey(vehicle);
         var rawRouteId = vehicle.route_id;
-        var directionHint = rawRouteId || (vehicle.trip && vehicle.trip.routeId) || '';
+        var directionHint = rawRouteId || '';
         var resolved = rawRouteId ? resolveRouteEntry(rawRouteId) : null;
         if (!resolved) {
           var warnKey = rawRouteId || '(missing)';
@@ -2800,6 +2812,12 @@ export function createMapController({ dataClient, ui }) {
         visibleLatSum += vehicle.lat;
         visibleLonSum += vehicle.lon;
         visibleCount += 1;
+        if (matchesRouteEightKey(resolved.id)) {
+          var tripDirectionHint = deriveRouteEightDirectionFromTripId(vehicle.direction_id);
+          if (tripDirectionHint) {
+            directionHint = tripDirectionHint;
+          }
+        }
         members.push({
           key: vehicleKey,
           vehicle: vehicle,

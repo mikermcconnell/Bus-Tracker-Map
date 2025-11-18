@@ -208,12 +208,20 @@ export function createBattMapController({ dataClient }) {
       seen[key] = true;
 
       const routeMeta = resolveRouteMeta(vehicle.route_id);
+      let directionHint = vehicle.route_id || '';
+      const routeKey = normalizeRouteKey(vehicle.route_id);
+      if (routeKey && ROUTE_EIGHT_KEYS.has(routeKey)) {
+        const tripHint = deriveRouteEightDirectionFromTripId(vehicle.direction_id);
+        if (tripHint) {
+          directionHint = tripHint;
+        }
+      }
       const bearing = normalizeBearing(vehicle.bearing);
       const markerData = markerIndex[key];
 
       if (!markerData) {
         const marker = L.marker(nextLatLng, {
-          icon: createBusIcon(routeMeta, bearing),
+          icon: createBusIcon(routeMeta, bearing, { directionHint }),
           interactive: false
         });
         marker.addTo(vehicleLayer);
@@ -227,7 +235,7 @@ export function createBattMapController({ dataClient }) {
         const marker = markerData.marker;
         if (!marker) continue;
         const currentLatLng = marker.getLatLng ? marker.getLatLng() : null;
-        marker.setIcon(createBusIcon(routeMeta, bearing));
+        marker.setIcon(createBusIcon(routeMeta, bearing, { directionHint }));
         markerData.routeMeta = routeMeta;
         markerData.lastUpdated = now;
         if (shouldAnimateMarker(currentLatLng, nextLatLng)) {
@@ -520,6 +528,18 @@ function deriveRouteEightDirectionFromBearing(bearing) {
   return '';
 }
 
+function deriveRouteEightDirectionFromTripId(directionId) {
+  const normalized = Number(directionId);
+  if (!Number.isFinite(normalized)) return '';
+  if (normalized === 0) {
+    return 'NORTHBOUND';
+  }
+  if (normalized === 1) {
+    return 'SOUTHBOUND';
+  }
+  return '';
+}
+
 function deriveRouteEightDirection(meta, bearing, options) {
   if (!isRouteEight(meta)) return '';
   const directionHint = options && options.directionHint;
@@ -543,7 +563,8 @@ function normalizeBearing(value) {
   return deg;
 }
 
-function createBusIcon(meta = {}, bearing) {
+function createBusIcon(meta = {}, bearing, options) {
+  const opts = options && typeof options === 'object' ? options : null;
   const scale = 0.58; // ~30% smaller overall icon scale
   const busScale = Math.max(0.45, Math.min(1.2, scale));
   const label = meta.displayName || meta.id || '?';
@@ -569,7 +590,7 @@ function createBusIcon(meta = {}, bearing) {
   const safeArrow = sanitizeColorValue(arrowColor || '#222222', '#222222');
   const safeArrowStroke = sanitizeColorValue(arrowStroke, 'rgba(255, 255, 255, 0.8)');
 
-  const directionBadge = deriveRouteEightDirection(meta, normalizedBearing);
+  const directionBadge = deriveRouteEightDirection(meta, normalizedBearing, opts);
   const safeDirection = directionBadge ? sanitizeVehicleText(directionBadge) : '';
   const labelHtml = safeDirection
     ? `<span class="vehicle-label-line">${safeLabel}</span><span class="vehicle-label-line vehicle-label-line--direction">${safeDirection}</span>`

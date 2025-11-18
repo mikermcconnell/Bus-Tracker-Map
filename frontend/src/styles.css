@@ -183,7 +183,7 @@ body {
 }
 
 /* Keep the inset map visible on the TV's zoomed viewport while still hiding it on cramped layouts. */
-@media (max-width: 699px), (max-height: 449px) {
+@media (max-width: 499px), (max-height: 359px) {
   .mini-map {
     display: none;
   }

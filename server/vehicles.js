@@ -29,6 +29,7 @@ async function fetchVehicles(rtUrl) {
       vehicles.push({
         id: (v.vehicle && (v.vehicle.id || v.vehicle.label)) || ent.id,
         route_id: (v.trip && v.trip.routeId) || null,
+        direction_id: (v.trip && Number.isFinite(Number(v.trip.directionId)) ? Number(v.trip.directionId) : null),
         lat: v.position.latitude,
         lon: v.position.longitude,
         bearing: v.position.bearing || null,
