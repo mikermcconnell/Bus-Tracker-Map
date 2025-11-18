@@ -57,8 +57,9 @@ export function createDataClient(initialBasePath = DEFAULT_BASE_PATH) {
     },
 
     fetchVehicles() {
-      const url = resolveWithBase(basePath, '/api/vehicles.json');
-      return fetchJson(url);
+      const cacheBust = Date.now().toString(36);
+      const url = resolveWithBase(basePath, `/api/vehicles.json?cb=${cacheBust}`);
+      return fetchJson(url, { cache: 'no-store' });
     },
 
     fetchMajorRoads() {
