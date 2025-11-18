@@ -14,17 +14,19 @@
     <span class="map-title__main">Barrie Allandale Transit Terminal Routes</span>
     <span class="map-title__sub">Barrie Transit routes only</span>
   </header>
-  <div id="map"></div>
-  <div class="map-overlay-frame" aria-hidden="false">
-    <div class="map-overlay-column map-overlay-column--left">
-      <div id="stop-legend" class="stop-legend" hidden></div>
-      <div id="mini-map" class="mini-map" aria-hidden="true">
-        <div class="mini-map__title">Barrie Allandale Transit Terminal (BATT)</div>
-        <div id="mini-map-canvas" class="mini-map__canvas"></div>
+  <div class="map-stage">
+    <div id="map"></div>
+    <div class="map-overlay-frame" aria-hidden="false">
+      <div class="map-overlay-column map-overlay-column--left">
+        <div id="stop-legend" class="stop-legend" hidden></div>
+        <div id="mini-map" class="mini-map" aria-hidden="true">
+          <div class="mini-map__title">Barrie Allandale Transit Terminal (BATT)</div>
+          <div id="mini-map-canvas" class="mini-map__canvas"></div>
+        </div>
       </div>
-    </div>
-    <div class="map-overlay-column map-overlay-column--right">
-      <div id="legend" class="legend"></div>
+      <div class="map-overlay-column map-overlay-column--right">
+        <div id="legend" class="legend"></div>
+      </div>
     </div>
   </div>
   <div id="service-notice" class="service-notice" role="status" aria-live="polite" hidden>
