@@ -69,6 +69,43 @@ body {
   pointer-events: auto;
 }
 
+.debug-panel {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  width: min(360px, 42vw);
+  max-height: 45vh;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(8, 19, 31, 0.94);
+  color: #f5f7fa;
+  font: 12px/1.4 "Roboto Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  z-index: 9999;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.debug-panel[hidden] {
+  display: none;
+}
+
+.debug-panel__section {
+  margin-bottom: 8px;
+}
+
+.debug-panel__section:last-child {
+  margin-bottom: 0;
+}
+
+.debug-panel__logs {
+  font-size: 11px;
+  opacity: 0.85;
+  max-height: 18vh;
+  overflow-y: auto;
+}
+
 .stop-legend {
   position: relative;
   z-index: 1000;

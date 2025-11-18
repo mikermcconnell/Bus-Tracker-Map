@@ -187,6 +187,28 @@ export function createMapController({ dataClient, ui }) {
   var DEAD_RECKON_MIN_SAMPLE_MS = 400;
   var DEAD_RECKON_MAX_DURATION_FACTOR = 1.6;
 
+  function updateDebugState(key, value) {
+    if (typeof window === 'undefined') return;
+    var api = window.__APP_DEBUG__;
+    if (!api || typeof api.setState !== 'function') return;
+    try {
+      api.setState(key, value);
+    } catch (err) {
+      // no-op; debug panel is optional
+    }
+  }
+
+  function debugLog(message) {
+    if (typeof window === 'undefined') return;
+    var api = window.__APP_DEBUG__;
+    if (!api || typeof api.log !== 'function') return;
+    try {
+      api.log(message);
+    } catch (err) {
+      // ignore logging failures
+    }
+  }
+
   function initialize() {
     var DEFAULT_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
     tileUrl = DEFAULT_TILE_URL;
@@ -217,7 +239,9 @@ export function createMapController({ dataClient, ui }) {
       })
       .then(function () {
         setupMap();
+        updateDebugState('legend', 'initializing');
         ui.setupLegend(createLegendContext());
+        updateDebugState('legend', 'rendered');
         return Promise.all([
           loadMajorRoads(),
           loadRoutes(),
@@ -226,6 +250,8 @@ export function createMapController({ dataClient, ui }) {
       })
       .catch(function (err) {
         console.error('Failed to load initial map overlays:', err && err.message ? err.message : err);
+        debugLog('Overlay init error: ' + (err && err.message ? err.message : err));
+        updateDebugState('legend', 'error: init failed');
       })
       .then(function () {
         startVehiclesPoll();
@@ -302,11 +328,13 @@ export function createMapController({ dataClient, ui }) {
       handleMiniMapMediaChange();
     } else {
       setMiniMapActive(true);
+      updateDebugState('miniMapMedia', 'no matchMedia');
     }
   }
 
   function handleMiniMapMediaChange() {
     var shouldEnable = miniMapMediaQueryList ? miniMapMediaQueryList.matches : true;
+    updateDebugState('miniMapMedia', shouldEnable ? 'matches' : 'no match');
     setMiniMapActive(shouldEnable);
   }
 
@@ -322,6 +350,7 @@ export function createMapController({ dataClient, ui }) {
       clearMiniMapMarkers();
       destroyMiniMapInstance();
     }
+    updateDebugState('miniMap', miniMapActive ? 'enabled' : 'disabled');
     updateTerminalOutlineVisibility();
   }
 
@@ -352,6 +381,7 @@ export function createMapController({ dataClient, ui }) {
 
     miniVehicleLayer = L.layerGroup().addTo(miniMap);
     miniBorderLayer = L.layerGroup().addTo(miniMap);
+    updateDebugState('miniMapInstance', 'ready');
     // Keep the layout crisp even if the container animates into view.
     requestAnimationFrame(function () {
       if (miniMap) miniMap.invalidateSize();
@@ -2755,8 +2785,12 @@ export function createMapController({ dataClient, ui }) {
         buildRouteLabels();
         var legendContext = createLegendContext();
         ui.renderRouteLegend(legendContext);
+        updateDebugState('legend', 'rendered');
         if (typeof ui.renderStopLegend === 'function') {
           ui.renderStopLegend(legendContext);
+          updateDebugState('stopLegend', 'rendered');
+        } else {
+          updateDebugState('stopLegend', 'missing renderer');
         }
         ui.clearBanner('routes');
         if (combinedBounds && combinedBounds.isValid()) {
@@ -2771,6 +2805,8 @@ export function createMapController({ dataClient, ui }) {
         console.error('Failed to load routes:', err);
         var msg = err && err.message ? err.message : 'Routes data unavailable. Run npm run build:data.';
         ui.showBanner('routes', 'Routes unavailable: ' + msg);
+        debugLog('Routes error: ' + msg);
+        updateDebugState('legend', 'error: ' + msg);
       });
   }
 
