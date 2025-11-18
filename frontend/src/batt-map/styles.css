@@ -40,18 +40,34 @@ body {
 
 .map-frame {
   position: relative;
-  width: min(
-    calc(100vw - (var(--frame-gap) * 2)),
-    calc((100vh - (var(--frame-gap) * 2)) * (11659 / 9009))
-  );
+  width: 100%;
+  max-width: calc(100vw - (var(--frame-gap) * 2));
+  height: calc(100vh - (var(--frame-gap) * 2));
   max-height: calc(100vh - (var(--frame-gap) * 2));
-  aspect-ratio: 11659 / 9009;
   display: flex;
   align-items: stretch;
   justify-content: stretch;
   border-radius: 20px;
   overflow: hidden;
   box-shadow: var(--shadow-medium);
+}
+
+@media (min-aspect-ratio: 11659/9009) {
+  .map-frame {
+    height: calc((100vw - (var(--frame-gap) * 2)) * (9009 / 11659));
+  }
+}
+
+@supports (aspect-ratio: 1) {
+  .map-frame {
+    width: min(
+      calc(100vw - (var(--frame-gap) * 2)),
+      calc((100vh - (var(--frame-gap) * 2)) * (11659 / 9009))
+    );
+    height: auto;
+    max-height: calc(100vh - (var(--frame-gap) * 2));
+    aspect-ratio: 11659 / 9009;
+  }
 }
 
 .map {
@@ -153,6 +169,11 @@ body {
   z-index: 2;
   line-height: 1;
   font-weight: 800;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  white-space: normal;
   text-shadow:
     -1px -1px 0 var(--label-outline, rgba(0, 0, 0, 0.95)),
     1px -1px 0 var(--label-outline, rgba(0, 0, 0, 0.95)),
@@ -160,6 +181,16 @@ body {
     1px 1px 0 var(--label-outline, rgba(0, 0, 0, 0.95)),
     0 3px 8px rgba(0, 0, 0, 0.35);
   color: var(--text-color, #FFFFFF);
+}
+
+.vehicle-label-line {
+  display: block;
+  line-height: 1;
+}
+
+.vehicle-label-line--direction {
+  font-size: 0.78em;
+  letter-spacing: 0.12em;
 }
 
 .vehicle-arrow {

@@ -114,7 +114,7 @@ function maybeSetupLiveReload(app) {
 const app = express();
 
 maybeSetupLiveReload(app);
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3007;
 const POLL_MS = Number(process.env.POLL_MS || 10000);
 const MAPTILER_KEY = process.env.MAPTILER_KEY || '';
 const RT_URL = process.env.GTFS_RT_VEHICLES_URL || '';

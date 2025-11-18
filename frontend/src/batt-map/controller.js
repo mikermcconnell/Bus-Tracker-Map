@@ -13,6 +13,7 @@ const MARKER_ANIMATION_DURATION_MS = 4050;
 const MIN_ANIMATION_DISTANCE_METERS = 0.75;
 // Scale the masked bus artwork relative to the surrounding label container
 const BUS_SHAPE_SCALE = 1.625 * 1.2; // 20% larger bus icon without touching text sizing
+const ROUTE_EIGHT_KEYS = new Set(['8', '8A', '8B']);
 
 export function createBattMapController({ dataClient }) {
   let map = null;
@@ -455,11 +456,84 @@ function shouldForceWhiteOutline(meta) {
   const candidates = [meta.displayName, meta.id];
   for (let i = 0; i < candidates.length; i += 1) {
     const key = normalizeRouteKey(candidates[i]);
-    if (key === '8' || key === '8A' || key === '8B') {
+    if (ROUTE_EIGHT_KEYS.has(key)) {
       return true;
     }
   }
   return false;
+}
+
+function isRouteEight(meta) {
+  if (!meta) return false;
+  const candidates = [meta.displayName, meta.id];
+  for (let i = 0; i < candidates.length; i += 1) {
+    const candidate = candidates[i];
+    if (!candidate) continue;
+    const normalized = normalizeRouteKey(candidate);
+    if (!normalized) continue;
+    if (ROUTE_EIGHT_KEYS.has(normalized)) {
+      return true;
+    }
+    const numeric = extractNumericAlias(normalized);
+    if (numeric && numeric === '8') {
+      return true;
+    }
+  }
+  return false;
+}
+
+function parseNorthSouthDirection(value) {
+  if (value === undefined || value === null) return '';
+  const normalized = normalizeRouteKey(value);
+  if (!normalized) return '';
+  if (/\bNORTH(?:\s|-)?BOUND\b|\bNORTH\b|\bNB\b/.test(normalized)) {
+    return 'N';
+  }
+  if (/\bSOUTH(?:\s|-)?BOUND\b|\bSOUTH\b|\bSB\b/.test(normalized)) {
+    return 'S';
+  }
+  return '';
+}
+
+function deriveRouteEightDirectionFromName(meta) {
+  if (!meta) return '';
+  const candidates = [meta.longName, meta.id, meta.displayName];
+  for (let i = 0; i < candidates.length; i += 1) {
+    const dir = parseNorthSouthDirection(candidates[i]);
+    if (dir) {
+      return dir;
+    }
+  }
+  return '';
+}
+
+function deriveRouteEightDirectionFromBearing(bearing) {
+  if (!Number.isFinite(bearing)) return '';
+  const normalized = normalizeBearing(bearing);
+  if (normalized === null) return '';
+  if (normalized >= 135 && normalized <= 225) {
+    return 'S';
+  }
+  if (normalized >= 315 || normalized <= 45) {
+    return 'N';
+  }
+  return '';
+}
+
+function deriveRouteEightDirection(meta, bearing, options) {
+  if (!isRouteEight(meta)) return '';
+  const directionHint = options && options.directionHint;
+  if (directionHint) {
+    const parsedHint = parseNorthSouthDirection(directionHint);
+    if (parsedHint) {
+      return parsedHint;
+    }
+  }
+  const fromName = deriveRouteEightDirectionFromName(meta);
+  if (fromName) {
+    return fromName;
+  }
+  return deriveRouteEightDirectionFromBearing(bearing);
 }
 
 function normalizeBearing(value) {
@@ -495,6 +569,12 @@ function createBusIcon(meta = {}, bearing) {
   const safeArrow = sanitizeColorValue(arrowColor || '#222222', '#222222');
   const safeArrowStroke = sanitizeColorValue(arrowStroke, 'rgba(255, 255, 255, 0.8)');
 
+  const directionBadge = deriveRouteEightDirection(meta, normalizedBearing);
+  const safeDirection = directionBadge ? sanitizeVehicleText(directionBadge) : '';
+  const labelHtml = safeDirection
+    ? `<span class="vehicle-label-line">${safeLabel}</span><span class="vehicle-label-line vehicle-label-line--direction">${safeDirection}</span>`
+    : safeLabel;
+
   const busStyle = [
     `--route-color:${safeBg}`,
     `--text-color:${safeText}`,
@@ -525,7 +605,7 @@ function createBusIcon(meta = {}, bearing) {
     <div ${attrs}>
       <div class="vehicle-bus-shape"></div>
       <div class="vehicle-bus-highlight"></div>
-      <span class="vehicle-label">${safeLabel}</span>
+      <span class="vehicle-label">${labelHtml}</span>
       <svg class="vehicle-arrow" viewBox="0 0 24 16" role="presentation" focusable="false">
         <path d="M12 0L24 16H0Z"></path>
       </svg>

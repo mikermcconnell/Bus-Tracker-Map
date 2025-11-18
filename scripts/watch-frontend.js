@@ -10,12 +10,19 @@ const fs = require('fs');
 const path = require('path');
 const esbuild = require('esbuild');
 const chokidar = require('chokidar');
+const { downlevelJavaScript } = require('./js-transform');
 
 const projectRoot = path.join(__dirname, '..');
 const srcDir = path.join(projectRoot, 'frontend', 'src');
 const dataDir = path.join(projectRoot, 'frontend', 'data');
 const distDir = path.join(projectRoot, 'frontend', 'dist');
 const assetsDir = path.join(distDir, 'assets');
+
+// Match the production bundle default so dev builds surface compatibility issues early.
+const DEFAULT_ESBUILD_TARGET = (process.env.ESBUILD_TARGET || 'es2017')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 const entryPoints = [
   {
@@ -72,17 +79,28 @@ function copyBattMapAssets() {
 }
 
 async function buildJs(entry) {
-  await esbuild.build({
+  const result = await esbuild.build({
     entryPoints: [entry.entryPath],
     bundle: true,
     sourcemap: true,
     minify: false,
-    write: true,
+    write: false,
     outfile: path.join(assetsDir, `${entry.key}.js`),
     format: 'iife',
-    target: ['es2017'],
+    target: DEFAULT_ESBUILD_TARGET.length ? DEFAULT_ESBUILD_TARGET : ['es5'],
     legalComments: 'none'
   });
+
+  const output = result.outputFiles.find((file) => file.path.endsWith('.js'));
+  if (!output) {
+    throw new Error(`esbuild produced no JavaScript output for ${entry.key}`);
+  }
+
+  const rawCode = Buffer.from(output.contents).toString('utf8');
+  const transformed = await downlevelJavaScript(rawCode, { filename: path.basename(entry.entryPath) });
+  const outPath = path.join(assetsDir, `${entry.key}.js`);
+  fs.writeFileSync(outPath, transformed);
+
   return `${entry.key}.js`;
 }
 

@@ -182,7 +182,8 @@ body {
   background: transparent;
 }
 
-@media (max-width: 900px), (max-height: 640px) {
+/* Keep the inset map visible on the TV's zoomed viewport while still hiding it on cramped layouts. */
+@media (max-width: 699px), (max-height: 449px) {
   .mini-map {
     display: none;
   }
@@ -385,6 +386,22 @@ body {
 .vehicle-label {
   position: relative;
   z-index: 2;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  white-space: normal;
+  line-height: 1;
+}
+
+.vehicle-label-line {
+  display: block;
+  line-height: 1;
+}
+
+.vehicle-label-line--direction {
+  font-size: 0.78em;
+  letter-spacing: 0.12em;
 }
 
 .vehicle-arrow {
@@ -568,7 +585,7 @@ body {
   transform: translateX(-50%);
   background: var(--brand-blue-700);
   color: #ffffff;
-  padding: 12px 28px;
+  padding: 16px 36px;
   border-radius: var(--radius-pill);
   font: 700 18px/1.2 "Inter", "Segoe UI", sans-serif;
   letter-spacing: 0.02em;
@@ -576,6 +593,24 @@ body {
   z-index: 460;
   box-shadow: var(--shadow-medium);
   pointer-events: none;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.map-title__main {
+  font-size: 36px;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.map-title__sub {
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
 }
 
 

@@ -26,10 +26,11 @@ function resolveWithBase(basePath, targetPath) {
   return `${url.pathname}${url.search}`;
 }
 
-async function fetchJson(url, options) {
-  const response = await fetch(url, options);
-  if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-  return response.json();
+function fetchJson(url, options) {
+  return fetch(url, options).then((response) => {
+    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+    return response.json();
+  });
 }
 
 export function createDataClient(initialBasePath = DEFAULT_BASE_PATH) {
@@ -40,27 +41,27 @@ export function createDataClient(initialBasePath = DEFAULT_BASE_PATH) {
       basePath = normalizeBasePath(value);
     },
 
-    async fetchConfig() {
+    fetchConfig() {
       const url = resolveWithBase(basePath, '/api/config');
       return fetchJson(url);
     },
 
-    async fetchRoutes() {
+    fetchRoutes() {
       const url = resolveWithBase(basePath, '/api/routes.geojson');
       return fetchJson(url);
     },
 
-    async fetchStops() {
+    fetchStops() {
       const url = resolveWithBase(basePath, '/api/stops.geojson');
       return fetchJson(url);
     },
 
-    async fetchVehicles() {
+    fetchVehicles() {
       const url = resolveWithBase(basePath, '/api/vehicles.json');
       return fetchJson(url);
     },
 
-    async fetchMajorRoads() {
+    fetchMajorRoads() {
       const url = resolveWithBase(basePath, '/data/major-roads.geojson');
       return fetchJson(url);
     },

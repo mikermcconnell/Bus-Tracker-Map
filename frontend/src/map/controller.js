@@ -99,6 +99,12 @@ export function createMapController({ dataClient, ui }) {
     '400': 1
   };
 
+  var ROUTE_EIGHT_KEYS = {
+    '8': true,
+    '8A': true,
+    '8B': true
+  };
+
 
   var MAJOR_ROAD_LABEL_MIN_ZOOM = 12;
   var MAJOR_ROAD_LABEL_REPEAT_DISTANCE_METERS = 1400;
@@ -158,7 +164,9 @@ export function createMapController({ dataClient, ui }) {
   // Terminal focus constants keep the inset map centered on Barrie Allandale Transit Terminal.
   var TERMINAL_COORDS = { lat: 44.3740170437343, lng: -79.6899831810679 };
   var TERMINAL_RADIUS_METERS = 150;
-  var MINI_MAP_MEDIA_QUERY = '(min-width: 901px) and (min-height: 641px)';
+  // TV zoom ends up shrinking the effective viewport well below the panel's native size,
+  // so loosen the breakpoint so the mini-map still renders on smaller CSS viewports.
+  var MINI_MAP_MEDIA_QUERY = '(min-width: 700px) and (min-height: 450px)';
   var MINI_MAP_ZOOM = 16.5;
   var MINI_MAP_ICON_SCALE = 0.8;
   var MINI_MAP_ANIMATION_RATIO = 0.85;
@@ -447,7 +455,8 @@ export function createMapController({ dataClient, ui }) {
       var icon = createBusIcon(meta, bearing, {
         scale: MINI_MAP_ICON_SCALE,
         iconClassName: 'vehicle-icon--mini',
-        bubbleClassName: 'vehicle-bubble--mini'
+        bubbleClassName: 'vehicle-bubble--mini',
+        directionHint: entry.directionHint
       });
       var signature = icon && icon.options ? icon.options.html : '';
 
@@ -1939,15 +1948,83 @@ export function createMapController({ dataClient, ui }) {
   }
 
   function shouldForceWhiteArrow(meta) {
+    return isRouteEight(meta);
+  }
+
+  function matchesRouteEightKey(value) {
+    if (!value && value !== 0) return false;
+    var normalized = normalizeRouteKey(value);
+    if (!normalized) return false;
+    if (Object.prototype.hasOwnProperty.call(ROUTE_EIGHT_KEYS, normalized) && ROUTE_EIGHT_KEYS[normalized]) {
+      return true;
+    }
+    var numeric = normalized.match(/^([0-9]+)/);
+    return Boolean(numeric && numeric[1] === '8');
+  }
+
+  function isRouteEight(meta) {
     if (!meta) return false;
-    var candidates = [meta.displayName, meta.id];
+    var candidates = [meta.displayName, meta.id, meta.longName];
     for (var i = 0; i < candidates.length; i++) {
-      var key = normalizeRouteKey(candidates[i]);
-      if (key === '8' || key === '8A' || key === '8B') {
+      if (matchesRouteEightKey(candidates[i])) {
         return true;
       }
     }
     return false;
+  }
+
+  function parseNorthSouthDirection(value) {
+    if (!value && value !== 0) return '';
+    var normalized = normalizeRouteKey(value);
+    if (!normalized) return '';
+    if (/\bNORTH(?:\s|-)?BOUND\b|\bNORTH\b|\bNB\b/.test(normalized)) {
+      return 'N';
+    }
+    if (/\bSOUTH(?:\s|-)?BOUND\b|\bSOUTH\b|\bSB\b/.test(normalized)) {
+      return 'S';
+    }
+    return '';
+  }
+
+  function deriveRouteEightDirectionFromName(meta) {
+    if (!meta) return '';
+    var candidates = [meta.longName, meta.id, meta.displayName];
+    for (var i = 0; i < candidates.length; i++) {
+      var direction = parseNorthSouthDirection(candidates[i]);
+      if (direction) {
+        return direction;
+      }
+    }
+    return '';
+  }
+
+  function deriveRouteEightDirectionFromBearing(bearing) {
+    if (!Number.isFinite(bearing)) return '';
+    var normalized = normalizeBearing(bearing);
+    if (normalized === null) return '';
+    if (normalized >= 135 && normalized <= 225) {
+      return 'S';
+    }
+    if (normalized >= 315 || normalized <= 45) {
+      return 'N';
+    }
+    return '';
+  }
+
+  function deriveRouteEightDirection(meta, bearing, options) {
+    if (!isRouteEight(meta)) return '';
+    var directionHint = options && options.directionHint;
+    if (directionHint) {
+      var parsedHint = parseNorthSouthDirection(directionHint);
+      if (parsedHint) {
+        return parsedHint;
+      }
+    }
+    var fromName = deriveRouteEightDirectionFromName(meta);
+    if (fromName) {
+      return fromName;
+    }
+    return deriveRouteEightDirectionFromBearing(bearing);
   }
 
   function assignVehicleKey(vehicle) {
@@ -2120,6 +2197,12 @@ export function createMapController({ dataClient, ui }) {
     }
     var safeArrow = sanitizeColorValue(arrowColor, '#222222');
     var safeArrowStroke = sanitizeColorValue(arrowStroke, 'rgba(255, 255, 255, 0.8)');
+    var directionBadge = deriveRouteEightDirection(meta, normalizedBearing, opts);
+    var safeDirection = directionBadge ? sanitizeVehicleText(directionBadge) : '';
+    var labelHtml = safeDirection
+      ? '<span class="vehicle-label-line">' + safeLabel + '</span><span class="vehicle-label-line vehicle-label-line--direction">' + safeDirection + '</span>'
+      : safeLabel;
+
     var bubbleStyle = [
       '--route-color:' + safeBg,
       '--text-color:' + safeText,
@@ -2142,7 +2225,7 @@ export function createMapController({ dataClient, ui }) {
     var popupAnchor = Math.round(-anchor);
     return L.divIcon({
       className: 'vehicle-icon' + iconExtraClass,
-      html: '\n        <div ' + attrs + '>\n          <svg class="vehicle-arrow" viewBox="0 0 24 16" role="presentation" focusable="false">\n            <path d="M12 0L24 16H0Z"/>\n          </svg>\n          <span class="vehicle-label">' + safeLabel + '</span>\n        </div>\n      ',
+      html: '\n        <div ' + attrs + '>\n          <svg class="vehicle-arrow" viewBox="0 0 24 16" role="presentation" focusable="false">\n            <path d="M12 0L24 16H0Z"/>\n          </svg>\n          <span class="vehicle-label">' + labelHtml + '</span>\n        </div>\n      ',
       iconSize: [iconSize, iconSize],
       iconAnchor: [anchor, anchor],
       popupAnchor: [0, popupAnchor]
@@ -2699,6 +2782,7 @@ export function createMapController({ dataClient, ui }) {
 
         var vehicleKey = assignVehicleKey(vehicle);
         var rawRouteId = vehicle.route_id;
+        var directionHint = rawRouteId || (vehicle.trip && vehicle.trip.routeId) || '';
         var resolved = rawRouteId ? resolveRouteEntry(rawRouteId) : null;
         if (!resolved) {
           var warnKey = rawRouteId || '(missing)';
@@ -2720,12 +2804,14 @@ export function createMapController({ dataClient, ui }) {
           key: vehicleKey,
           vehicle: vehicle,
           routeId: resolved.id,
-          meta: routeMeta
+          meta: routeMeta,
+          directionHint: directionHint
         });
         miniSnapshots.push({
           key: vehicleKey,
           vehicle: vehicle,
-          meta: routeMeta
+          meta: routeMeta,
+          directionHint: directionHint
         });
       }
 
@@ -2780,7 +2866,7 @@ export function createMapController({ dataClient, ui }) {
         icon = createCombinedBusIcon(members);
       } else {
         signature = 'single|' + routeIds[0] + '|' + (members[0].meta.displayName || '') + '|' + (members[0].meta.color || '') + '|' + (members[0].meta.textColor || '') + '|' + (bearing === null ? 'na' : bearing.toFixed(1)) + '|' + vehicleIdsForSignature[0];
-        icon = createBusIcon(members[0].meta, bearing);
+        icon = createBusIcon(members[0].meta, bearing, { directionHint: members[0].directionHint });
       }
 
       var popupContent = buildVehiclePopupContent(members);

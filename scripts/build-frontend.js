@@ -12,12 +12,19 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const esbuild = require('esbuild');
+const { downlevelJavaScript, DEFAULT_BABEL_TARGETS } = require('./js-transform');
 
 const projectRoot = path.join(__dirname, '..');
 const srcDir = path.join(projectRoot, 'frontend', 'src');
 const dataDir = path.join(projectRoot, 'frontend', 'data');
 const distDir = path.join(projectRoot, 'frontend', 'dist');
 const assetsDir = path.join(distDir, 'assets');
+
+// Bundle at a modern target for speed, then downlevel with Babel for legacy screens.
+const DEFAULT_ESBUILD_TARGET = (process.env.ESBUILD_TARGET || 'es2017')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 const entryPoints = [
   {
@@ -86,7 +93,7 @@ async function buildJs(entry) {
     write: false,
     outfile: `${entry.key}.js`,
     format: 'iife',
-    target: ['es2017'],
+    target: DEFAULT_ESBUILD_TARGET.length ? DEFAULT_ESBUILD_TARGET : ['es5'],
     legalComments: 'none',
   });
 
@@ -95,10 +102,13 @@ async function buildJs(entry) {
     throw new Error(`esbuild produced no JavaScript output for ${entry.key}`);
   }
 
-  const hash = contentHash(output.contents);
+  const rawCode = Buffer.from(output.contents).toString('utf8');
+  const transformed = await downlevelJavaScript(rawCode, { filename: path.basename(entry.entryPath) });
+  const buffer = Buffer.from(transformed, 'utf8');
+  const hash = contentHash(buffer);
   const fileName = `${entry.key}.${hash}.js`;
   const filePath = path.join(assetsDir, fileName);
-  fs.writeFileSync(filePath, output.contents);
+  fs.writeFileSync(filePath, buffer);
   return fileName;
 }
 
