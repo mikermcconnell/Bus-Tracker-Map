@@ -222,9 +222,13 @@ export function createMapController({ dataClient, ui }) {
           loadMajorRoads(),
           loadRoutes(),
           loadStopHighlights()
-        ]).finally(function () {
-          startVehiclesPoll();
-        });
+        ]);
+      })
+      .catch(function (err) {
+        console.error('Failed to load initial map overlays:', err && err.message ? err.message : err);
+      })
+      .then(function () {
+        startVehiclesPoll();
       });
   }
 
@@ -3065,7 +3069,7 @@ export function createMapController({ dataClient, ui }) {
           console.error('Failed to load vehicles:', err);
           ui.showBanner('vehicles', 'Vehicles unavailable: ' + (err && err.message ? err.message : 'live data retrying'));
         })
-        .finally(function () {
+        .then(function () {
           setTimeout(tick, pollMs);
         });
     }

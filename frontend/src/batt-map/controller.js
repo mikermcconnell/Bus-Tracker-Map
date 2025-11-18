@@ -94,7 +94,10 @@ export function createBattMapController({ dataClient }) {
       .then(() => Promise.all([
         loadRouteStyles()
       ]))
-      .finally(() => {
+      .catch((err) => {
+        console.warn('BATT map dependencies failed to load:', err);
+      })
+      .then(() => {
         setupMap();
         showStatus('Loading live vehicles…');
         startVehiclePolling();
@@ -157,7 +160,7 @@ export function createBattMapController({ dataClient }) {
           console.error('Failed to fetch vehicles for BATT map:', err);
           showStatus('Live vehicles unavailable — retrying…');
         })
-        .finally(() => {
+        .then(() => {
           pollTimer = setTimeout(tick, pollMs);
         });
     };
