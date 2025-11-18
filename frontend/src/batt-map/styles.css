@@ -26,11 +26,12 @@ body {
 }
 
 .batt-app {
+  --frame-gap-effective: var(--frame-gap);
   position: relative;
   width: 100%;
   height: 100%;
   min-height: 100vh;
-  padding: var(--frame-gap);
+  padding: var(--frame-gap-effective);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -41,9 +42,9 @@ body {
 .map-frame {
   position: relative;
   width: 100%;
-  max-width: calc(100vw - (var(--frame-gap) * 2));
-  height: calc(100vh - (var(--frame-gap) * 2));
-  max-height: calc(100vh - (var(--frame-gap) * 2));
+  max-width: calc(100vw - (var(--frame-gap-effective) * 2));
+  height: calc(100vh - (var(--frame-gap-effective) * 2));
+  max-height: calc(100vh - (var(--frame-gap-effective) * 2));
   display: flex;
   align-items: stretch;
   justify-content: stretch;
@@ -54,19 +55,31 @@ body {
 
 @media (min-aspect-ratio: 11659/9009) {
   .map-frame {
-    height: calc((100vw - (var(--frame-gap) * 2)) * (9009 / 11659));
+    height: calc((100vw - (var(--frame-gap-effective) * 2)) * (9009 / 11659));
   }
 }
 
 @supports (aspect-ratio: 1) {
   .map-frame {
     width: min(
-      calc(100vw - (var(--frame-gap) * 2)),
-      calc((100vh - (var(--frame-gap) * 2)) * (11659 / 9009))
+      calc(100vw - (var(--frame-gap-effective) * 2)),
+      calc((100vh - (var(--frame-gap-effective) * 2)) * (11659 / 9009))
     );
     height: auto;
-    max-height: calc(100vh - (var(--frame-gap) * 2));
+    max-height: calc(100vh - (var(--frame-gap-effective) * 2));
     aspect-ratio: 11659 / 9009;
+  }
+}
+
+@media (min-width: 1600px) and (min-height: 900px) {
+  .batt-app {
+    --frame-gap-effective: calc(var(--frame-gap) * 0.6);
+  }
+}
+
+@media (min-width: 2000px) and (min-height: 1100px) {
+  .batt-app {
+    --frame-gap-effective: calc(var(--frame-gap) * 0.5);
   }
 }
 
