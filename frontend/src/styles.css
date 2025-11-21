@@ -1,24 +1,47 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap");
 
 :root {
-  --brand-blue-900: #00385e;
-  --brand-blue-700: #004e80;
-  --brand-blue-500: #006199;
-  --brand-blue-100: #c4d8e7;
-  --brand-blue-050: #e7f1f8;
-  --accent-amber-100: #fbe3c0;
-  --accent-amber-500: #d17f1f;
-  --text-primary: #202124;
-  --text-secondary: #3c4043;
-  --overlay-surface: rgba(255, 255, 255, 0.95);
-  --overlay-border: rgba(255, 255, 255, 0.8);
-  --shadow-soft: 0 6px 18px rgba(13, 43, 69, 0.16);
-  --shadow-medium: 0 10px 24px rgba(13, 43, 69, 0.18);
-  --shadow-strong: 0 14px 30px rgba(13, 43, 69, 0.22);
-  --radius-lg: 16px;
-  --radius-md: 12px;
-  --radius-pill: 999px;
-  --canvas-bg: #e8f1f7;
+  /* Enterprise Slate & Navy Theme */
+  --brand-primary: #0f172a;
+  /* Slate 900 */
+  --brand-secondary: #334155;
+  /* Slate 700 */
+  --brand-accent: #2563eb;
+  /* Blue 600 */
+  --brand-surface: #ffffff;
+
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  /* Slate 500 */
+  --text-tertiary: #94a3b8;
+
+  --overlay-bg: rgba(255, 255, 255, 0.85);
+  --overlay-border: rgba(255, 255, 255, 0.5);
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+
+  --canvas-bg: #f1f5f9;
+
+  /* Legacy mappings for compatibility */
+  --brand-blue-900: var(--brand-primary);
+  --brand-blue-700: var(--brand-accent);
+  --brand-blue-500: #3b82f6;
+  --brand-blue-100: #cbd5e1;
+  --brand-blue-050: #f8fafc;
+  --accent-amber-100: #fef3c7;
+  --accent-amber-500: #d97706;
+  --overlay-surface: var(--overlay-bg);
+  --shadow-soft: var(--shadow-md);
+  --shadow-medium: var(--shadow-lg);
+  --shadow-strong: var(--shadow-xl);
 }
 
 html,
@@ -123,13 +146,13 @@ body {
   z-index: 1000;
   width: 100%;
   max-width: 320px;
-  background: var(--overlay-surface);
+  background: var(--overlay-bg);
   border-radius: var(--radius-lg);
   border: 1px solid var(--overlay-border);
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-lg);
   padding: 16px 20px;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -137,11 +160,11 @@ body {
 }
 
 .stop-legend-title {
-  font-size: clamp(13px, 1.4vw, 15px);
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+  color: #000000;
 }
 
 .stop-legend-list {
@@ -158,10 +181,10 @@ body {
 }
 
 .stop-legend-list dt {
-  font-size: clamp(14px, 1.6vw, 17px);
+  font-size: clamp(14px, 1.6vw, 16px);
   font-weight: 700;
-  color: var(--brand-blue-700);
-  letter-spacing: 0.08em;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
 }
 
 .stop-legend-list dd {
@@ -177,14 +200,14 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: var(--overlay-surface);
+  background: var(--overlay-bg);
   padding: 16px 20px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--overlay-border);
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-lg);
   line-height: 1.4;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   overflow: visible;
   pointer-events: auto;
 }
@@ -200,24 +223,25 @@ body {
   flex-direction: column;
   gap: 8px;
   flex: 1 0 auto;
-  padding: 16px;
+  padding: 12px;
   border-radius: var(--radius-lg);
-  border: 2px solid rgba(0, 78, 128, 0.5);
-  background: var(--overlay-surface);
-  box-shadow: var(--shadow-medium);
+  border: 1px solid var(--overlay-border);
+  background: var(--overlay-bg);
+  box-shadow: var(--shadow-lg);
   z-index: 1010;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   pointer-events: none;
 }
 
 .mini-map__title {
-  font-size: clamp(12px, 1.2vw, 14px);
+  font-size: 22px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--brand-blue-700);
+  color: #000000;
   text-align: center;
+  line-height: 1.2;
 }
 
 .mini-map__canvas {
@@ -258,12 +282,17 @@ body {
 }
 
 .legend input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  border-radius: 6px;
-  border: 1px solid var(--brand-blue-100);
-  accent-color: var(--brand-blue-700);
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--text-tertiary);
+  accent-color: var(--brand-accent);
   cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.legend input[type="checkbox"]:hover {
+  border-color: var(--brand-accent);
 }
 
 .legend-section {
@@ -273,11 +302,11 @@ body {
 }
 
 .legend-section-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+  color: #000000;
 }
 
 .legend-actions {
@@ -287,20 +316,23 @@ body {
 }
 
 .legend-actions button {
-  border: 1px solid var(--brand-blue-100);
-  border-radius: var(--radius-pill);
-  padding: 4px 12px;
-  background: var(--brand-blue-050);
-  color: var(--brand-blue-700);
-  font-size: 12px;
+  border: 1px solid var(--text-tertiary);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, box-shadow 0.15s ease;
+  transition: all 0.15s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .legend-actions button:hover {
-  background: var(--brand-blue-100);
-  box-shadow: inset 0 0 0 1px rgba(0, 78, 128, 0.18);
+  background: var(--brand-secondary);
+  color: #fff;
+  border-color: var(--brand-secondary);
 }
 
 .legend-actions button:focus-visible {
@@ -597,16 +629,39 @@ body {
   height: 44px;
   line-height: 44px;
   font-size: 20px;
+  transition: background 0.2s ease;
+}
+
+.leaflet-control-zoom a:first-child {
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.leaflet-control-zoom a:last-child {
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
 }
 
 .leaflet-control-zoom a:hover {
   background: var(--brand-blue-050);
+  color: var(--brand-blue-900);
 }
 
 .leaflet-popup-content-wrapper,
 .leaflet-popup-tip {
+  background: var(--overlay-surface);
+  color: var(--text-primary);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.leaflet-popup-content {
+  margin: 12px 16px;
+  line-height: 1.4;
+  font-size: 13px;
 }
 
 .major-road-label {
@@ -636,20 +691,21 @@ body {
   top: 16px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--brand-blue-700);
+  background: var(--brand-primary);
   color: #ffffff;
-  padding: 16px 36px;
-  border-radius: var(--radius-pill);
-  font: 700 18px/1.2 "Inter", "Segoe UI", sans-serif;
+  padding: 12px 24px;
+  border-radius: var(--radius-full);
+  font: 600 16px/1.2 "Inter", "Segoe UI", sans-serif;
   letter-spacing: 0.02em;
   text-transform: none;
   z-index: 460;
-  box-shadow: var(--shadow-medium);
+  box-shadow: var(--shadow-xl);
   pointer-events: none;
   display: inline-flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .map-title__main {
@@ -929,23 +985,24 @@ body {
 }
 
 .weather-header {
-  font-size: 16px;
+  font-size: 22px;
   font-weight: 700;
-  color: var(--brand-blue-700);
-  letter-spacing: 0.08em;
+  color: #000000;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  margin-bottom: 4px;
-  border-bottom: 1px solid rgba(0, 56, 94, 0.1);
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--overlay-border);
   padding-bottom: 8px;
+  text-align: left;
 }
 
 .weather-section-label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  opacity: 0.85;
+  letter-spacing: 0.1em;
+  opacity: 1;
   margin-top: 4px;
 }
 
@@ -963,17 +1020,18 @@ body {
 }
 
 .weather-temp {
-  font-size: 36px;
+  font-size: 32px;
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 
 .weather-forecast {
   display: flex;
   justify-content: space-between;
-  padding-top: 8px;
-  border-top: 1px solid rgba(0, 56, 94, 0.1);
+  padding-top: 12px;
+  border-top: 1px solid var(--overlay-border);
 }
 
 .weather-forecast-item {
@@ -984,18 +1042,20 @@ body {
 }
 
 .forecast-time {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-tertiary);
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .forecast-icon {
   font-size: 18px;
+  opacity: 0.9;
 }
 
 .forecast-temp {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
-  color: var(--brand-blue-700);
+  color: var(--text-primary);
 }

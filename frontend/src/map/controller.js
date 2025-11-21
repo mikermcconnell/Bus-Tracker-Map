@@ -3071,7 +3071,7 @@ export function createMapController({ dataClient, ui }) {
 
     var startTime = null;
     function ease(t) {
-      return t * t * (3 - 2 * t);
+      return t;
     }
     function step(ts) {
       if (startTime === null) startTime = ts;
