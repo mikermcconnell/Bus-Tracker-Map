@@ -230,6 +230,7 @@ export function createMapController({ dataClient, ui }) {
           }
           if (cfg.base_path) {
             basePath = cfg.base_path;
+            basePath = cfg.base_path;
             dataClient.setBasePath(basePath);
           }
         }
@@ -3094,25 +3095,44 @@ export function createMapController({ dataClient, ui }) {
   }
 
   function startVehiclesPoll() {
-    function tick() {
+    var lastFetchTime = 0;
+
+    // Status check loop
+    setInterval(function () {
+      var now = Date.now();
+      var elapsed = now - lastFetchTime;
+      if (lastFetchTime === 0) {
+        // Initial state, do nothing or show connecting
+      } else if (elapsed > 60000) {
+        ui.setConnectionStatus('stale');
+      } else if (elapsed > 30000) {
+        ui.setConnectionStatus('warning');
+      } else {
+        ui.setConnectionStatus('ok');
+      }
+    }, 5000);
+
+    var tick = function () {
       dataClient.fetchVehicles()
         .then(function (data) {
-          if (data.error) throw new Error(data.error);
-          ui.clearBanner('vehicles');
-          updateVehicles(data.vehicles || []);
+          if (data && Array.isArray(data.vehicles)) {
+            lastFetchTime = Date.now();
+            ui.setConnectionStatus('ok');
+            updateVehicles(data.vehicles);
+          }
         })
         .catch(function (err) {
-          console.error('Failed to load vehicles:', err);
-          ui.showBanner('vehicles', 'Vehicles unavailable: ' + (err && err.message ? err.message : 'live data retrying'));
+          console.warn('Vehicle poll failed', err);
         })
         .then(function () {
           setTimeout(tick, pollMs);
         });
-    }
+    };
     tick();
   }
 
   return {
-    initialize: initialize
+    initialize: initialize,
+    init: initialize
   };
 }

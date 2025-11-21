@@ -1,7 +1,7 @@
 const PLATFORM_IMAGE_URL = './assets/batt-platform-map.jpg';
 const PLATFORM_BOUNDS = [
-  [44.372950993, -79.692075326], // Tuned overlay (≈25m east / ≈0m net north)
-  [44.375256993, -79.686492326]
+  [44.375284, -79.692070], // Top Left (North West) - Shifted West ~10m
+  [44.372868, -79.686515]  // Bottom Right (South East) - Shifted West ~10m
 ];
 const PLATFORM_LAT_MIN = Math.min(PLATFORM_BOUNDS[0][0], PLATFORM_BOUNDS[1][0]);
 const PLATFORM_LAT_MAX = Math.max(PLATFORM_BOUNDS[0][0], PLATFORM_BOUNDS[1][0]);
@@ -22,6 +22,10 @@ export function createBattMapController({ dataClient }) {
   let pollMs = DEFAULT_POLL_MS;
   let pollTimer = null;
   let animationFrameHandle = null;
+  let clockTimer = null;
+  let lastFetchTime = 0;
+  let clockEl = null;
+  let lastUpdatedEl = null;
   const markerIndex = Object.create(null);
   const routeStyles = Object.create(null);
   const requestFrame = (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function')
@@ -72,6 +76,9 @@ export function createBattMapController({ dataClient }) {
     }
 
     statusEl = document.getElementById('batt-status');
+    clockEl = document.getElementById('batt-clock');
+    lastUpdatedEl = document.getElementById('last-updated');
+    startClock();
     showStatus('Loading platform map…');
 
     return dataClient.fetchConfig()
@@ -154,6 +161,7 @@ export function createBattMapController({ dataClient }) {
           }
           hideStatus();
           const list = data && Array.isArray(data.vehicles) ? data.vehicles : [];
+          lastFetchTime = Date.now();
           updateVehicles(list);
         })
         .catch((err) => {
@@ -385,6 +393,29 @@ export function createBattMapController({ dataClient }) {
     statusEl.hidden = true;
   }
 
+  function startClock() {
+    const update = () => {
+      const now = new Date();
+      if (clockEl) {
+        clockEl.textContent = now.toLocaleTimeString('en-US', {
+          hour12: true,
+          hour: 'numeric',
+          minute: '2-digit'
+        });
+      }
+      if (lastUpdatedEl) {
+        if (lastFetchTime > 0) {
+          const diff = Math.floor((now.getTime() - lastFetchTime) / 1000);
+          lastUpdatedEl.textContent = `Updated ${diff}s ago`;
+        } else {
+          lastUpdatedEl.textContent = 'Connecting…';
+        }
+      }
+    };
+    update();
+    clockTimer = setInterval(update, 1000);
+  }
+
   return {
     initialize
   };
@@ -594,7 +625,7 @@ function createBusIcon(meta = {}, bearing, options) {
   const safeArrowStroke = sanitizeColorValue(arrowStroke, 'rgba(255, 255, 255, 0.8)');
 
   const directionBadge = deriveRouteEightDirection(meta, normalizedBearing, opts);
-  const safeDirection = directionBadge ? sanitizeVehicleText(directionBadge) : '';
+  const safeDirection = directionBadge ? sanitizeVehicleText(directionBadge).toUpperCase() : '';
   const labelHtml = safeDirection
     ? `<span class="vehicle-label-line">${safeLabel}</span><span class="vehicle-label-line vehicle-label-line--direction">${safeDirection}</span>`
     : safeLabel;

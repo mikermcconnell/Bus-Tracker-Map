@@ -13,6 +13,14 @@
     <div id="batt-status" class="status-banner" role="status" aria-live="polite" hidden></div>
     <div class="map-frame">
       <div id="batt-map" class="map"></div>
+      <div class="batt-ui-layer">
+        <div class="live-status-pill">
+          <div class="live-dot"></div>
+          <span class="live-text">LIVE</span>
+        </div>
+        <div id="batt-clock" class="batt-clock">--:--</div>
+        <div id="last-updated" class="last-updated">Connecting…</div>
+      </div>
     </div>
   </div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

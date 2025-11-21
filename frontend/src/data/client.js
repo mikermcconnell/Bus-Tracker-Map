@@ -33,42 +33,43 @@ function fetchJson(url, options) {
   });
 }
 
-export function createDataClient(initialBasePath = DEFAULT_BASE_PATH) {
-  let basePath = normalizeBasePath(initialBasePath);
+export function createDataClient(options = {}) {
+  let baseUrl = options.baseUrl || '';
+
+  function resolveUrl(path) {
+    if (baseUrl.endsWith('/') && path.startsWith('/')) {
+      return baseUrl + path.slice(1);
+    }
+    if (!baseUrl.endsWith('/') && !path.startsWith('/')) {
+      return baseUrl + '/' + path;
+    }
+    return baseUrl + path;
+  }
 
   return {
-    setBasePath(value) {
-      basePath = normalizeBasePath(value);
-    },
-
     fetchConfig() {
-      const url = resolveWithBase(basePath, '/api/config');
-      return fetchJson(url);
+      return fetchJson(resolveUrl('/api/config'));
     },
 
     fetchRoutes() {
-      const url = resolveWithBase(basePath, '/api/routes.geojson');
-      return fetchJson(url);
+      return fetchJson(resolveUrl('/api/routes.geojson'));
     },
 
     fetchStops() {
-      const url = resolveWithBase(basePath, '/api/stops.geojson');
-      return fetchJson(url);
+      return fetchJson(resolveUrl('/api/stops.geojson'));
     },
 
     fetchVehicles() {
       const cacheBust = Date.now().toString(36);
-      const url = resolveWithBase(basePath, `/api/vehicles.json?cb=${cacheBust}`);
-      return fetchJson(url, { cache: 'no-store' });
+      return fetchJson(resolveUrl(`/api/vehicles.json?cb=${cacheBust}`), { cache: 'no-store' });
     },
 
     fetchMajorRoads() {
-      const url = resolveWithBase(basePath, '/data/major-roads.geojson');
-      return fetchJson(url);
+      return fetchJson(resolveUrl('/data/major-roads.geojson'));
     },
 
-    getBasePath() {
-      return basePath;
+    setBasePath(path) {
+      baseUrl = path;
     }
   };
 }

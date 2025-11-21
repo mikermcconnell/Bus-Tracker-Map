@@ -1,30 +1,38 @@
 import { createDataClient } from './data/client.js';
-import { createUiController } from './ui/controller.js';
 import { createMapController } from './map/controller.js';
+import { createUiController } from './ui/controller.js';
+import { createWeatherService } from './utils/weather.js';
 
-function bootstrap() {
-  const debug = setupDebugPanel();
-  const dataClient = createDataClient();
-  const ui = createUiController();
-  const map = createMapController({ dataClient, ui });
+document.addEventListener('DOMContentLoaded', function () {
+  var dataClient = createDataClient({
+    // baseUrl: 'http://localhost:3000' // Removed to allow relative path (works on any port)
+  });
 
+  var ui = createUiController();
   ui.init();
+  var weatherService = createWeatherService();
 
-  map.initialize()
-    .catch((err) => {
-      ui.showBanner('routes', 'Failed to initialize map: ' + (err && err.message ? err.message : err));
-      console.error('Failed to bootstrap map', err);
-      if (debug && typeof debug.log === 'function') {
-        debug.log('Bootstrap error: ' + (err && err.message ? err.message : err));
-      }
-    });
-}
+  var mapController = createMapController({
+    containerId: 'map',
+    dataClient: dataClient,
+    ui: ui
+  });
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', bootstrap, { once: true });
-} else {
-  bootstrap();
-}
+  // Start everything
+  mapController.initialize();
+
+  // Weather polling
+  function updateWeather() {
+    weatherService.fetchWeather()
+      .then(data => {
+        ui.updateWeather(data, weatherService.getWeatherIcon);
+      })
+      .catch(err => console.warn('Weather update failed', err));
+  }
+
+  updateWeather();
+  setInterval(updateWeather, 900000); // 15 minutes
+});
 
 function setupDebugPanel() {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -68,8 +76,8 @@ function setupDebugPanel() {
       const styles = window.getComputedStyle ? window.getComputedStyle(el) : null;
       lines.push(
         `${id}: ${Math.round(rect.width)}x${Math.round(rect.height)} ` +
-        `(${Math.round(rect.left)},${Math.round(rect.top)}) ` +
-        `display=${styles ? styles.display : 'n/a'} hidden=${el.hidden}`
+        `(${Math.round(rect.left)}, ${Math.round(rect.top)}) ` +
+        `display = ${styles ? styles.display : 'n/a'} hidden = ${el.hidden} `
       );
     });
     return lines;
@@ -88,13 +96,13 @@ function setupDebugPanel() {
     const buildId = getBuildId();
     const stateEntries = Object.keys(state)
       .sort()
-      .map((key) => `${key}: ${state[key]}`);
+      .map((key) => `${key}: ${state[key]} `);
     const overlayDetails = getOverlaySnapshot();
     const infoLines = [
-      `build: ${buildId}`,
-      `viewport: ${width}x${height} @${dpr}`,
-      `doc: ${docWidth}x${docHeight}`,
-      `media ${mediaQuery}: ${mediaMatch}`
+      `build: ${buildId} `,
+      `viewport: ${width}x${height} @${dpr} `,
+      `doc: ${docWidth}x${docHeight} `,
+      `media ${mediaQuery}: ${mediaMatch} `
     ]
       .concat(stateEntries.length ? stateEntries : ['legend/mini-map state pending'])
       .concat(overlayDetails);
@@ -118,7 +126,7 @@ function setupDebugPanel() {
   };
 
   const log = (message) => {
-    const entry = `${new Date().toISOString()} ${message}`;
+    const entry = `${new Date().toISOString()} ${message} `;
     logs.push(entry);
     if (logs.length > 12) {
       logs.splice(0, logs.length - 12);

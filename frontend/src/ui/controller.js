@@ -236,7 +236,7 @@ export function createUiController() {
       nameSpan.textContent = meta.displayName;
       label.appendChild(nameSpan);
 
-    routeList.appendChild(label);
+      routeList.appendChild(label);
     });
 
     updateRouteLegendState(context);
@@ -309,5 +309,51 @@ export function createUiController() {
     renderRouteLegend,
     renderStopLegend,
     updateRouteLegendState,
+    setConnectionStatus(status) {
+      const el = document.getElementById('connection-status');
+      if (!el) return;
+      el.classList.remove('status-ok', 'status-warning', 'status-stale');
+      const dot = el.querySelector('.live-dot');
+      const text = el.querySelector('.live-text');
+
+      if (status === 'warning') {
+        el.classList.add('status-warning');
+        if (text) text.textContent = 'DELAYED';
+      } else if (status === 'stale') {
+        el.classList.add('status-stale');
+        if (text) text.textContent = 'OFFLINE';
+      } else {
+        el.classList.add('status-ok');
+        if (text) text.textContent = 'LIVE';
+      }
+    },
+
+    updateWeather(data, iconHelper) {
+      const el = document.getElementById('weather-widget');
+      if (!el || !data) return;
+
+      el.hidden = false;
+
+      // Current
+      const currentIcon = el.querySelector('.weather-icon');
+      const currentTemp = el.querySelector('.weather-temp');
+      if (currentIcon) currentIcon.textContent = iconHelper(data.current.code);
+      if (currentTemp) currentTemp.textContent = data.current.temp + '°';
+
+      // Forecast
+      const forecastContainer = el.querySelector('.weather-forecast');
+      if (forecastContainer && data.forecast) {
+        forecastContainer.innerHTML = data.forecast.map(item => {
+          const timeStr = item.time.toLocaleTimeString([], { hour: 'numeric', hour12: true });
+          return `
+            <div class="weather-forecast-item">
+              <span class="forecast-time">${timeStr}</span>
+              <span class="forecast-icon">${iconHelper(item.code)}</span>
+              <span class="forecast-temp">${item.temp}°</span>
+            </div>
+          `;
+        }).join('');
+      }
+    }
   };
 }
