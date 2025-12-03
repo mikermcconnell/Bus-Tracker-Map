@@ -84,6 +84,13 @@ function copyBattMapAssets() {
   }
 }
 
+function copyWeatherAssets() {
+  const source = path.join(srcDir, 'assets', 'town-winter.png');
+  if (!fs.existsSync(source)) return;
+  const dest = path.join(assetsDir, 'town-winter.png');
+  fs.copyFileSync(source, dest);
+}
+
 async function buildJs(entry) {
   const result = await esbuild.build({
     entryPoints: [entry.entryPath],
@@ -160,6 +167,7 @@ async function main() {
 
   copyDataDirectory();
   copyBattMapAssets();
+  copyWeatherAssets();
 
   writeManifest(entryAssets);
   console.log('Frontend build complete:', entryAssets);
