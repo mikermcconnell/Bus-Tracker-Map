@@ -34,16 +34,17 @@
       </div>
       <div class="map-overlay-column map-overlay-column--right">
         <div id="legend" class="legend"></div>
-        <div id="weather-widget" class="weather-widget" hidden>
-          <div class="weather-header">BARRIE</div>
-          <div class="weather-section-label">CURRENT</div>
-          <div class="weather-current">
-            <span class="weather-icon">--</span>
-            <span class="weather-temp">--°</span>
-          </div>
-          <div class="weather-section-label">FORECAST</div>
-          <div class="weather-forecast">
-            <!-- Forecast items injected here -->
+        <div class="town-image-container">
+          <img src="./assets/town-winter.png" alt="Winter Town" class="town-image">
+          <div class="weather-overlay">
+            <div class="weather-header">
+              <h2 class="weather-title">BARRIE</h2>
+              <div class="weather-date" id="weather-date"></div>
+            </div>
+            <div class="weather-current">
+              <span class="weather-temp" id="weather-temp">--&deg;</span>
+              <span class="weather-condition" id="weather-condition">Loading...</span>
+            </div>
           </div>
         </div>
       </div>

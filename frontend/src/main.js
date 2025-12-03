@@ -1,7 +1,7 @@
 import { createDataClient } from './data/client.js';
 import { createMapController } from './map/controller.js';
 import { createUiController } from './ui/controller.js';
-import { createWeatherService } from './utils/weather.js';
+
 
 document.addEventListener('DOMContentLoaded', function () {
   var dataClient = createDataClient({
@@ -10,7 +10,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
   var ui = createUiController();
   ui.init();
-  var weatherService = createWeatherService();
 
   var mapController = createMapController({
     containerId: 'map',
@@ -21,17 +20,10 @@ document.addEventListener('DOMContentLoaded', function () {
   // Start everything
   mapController.initialize();
 
-  // Weather polling
-  function updateWeather() {
-    weatherService.fetchWeather()
-      .then(data => {
-        ui.updateWeather(data, weatherService.getWeatherIcon);
-      })
-      .catch(err => console.warn('Weather update failed', err));
-  }
-
-  updateWeather();
-  setInterval(updateWeather, 900000); // 15 minutes
+  setTimeout(() => {
+    const col = document.querySelector('.map-overlay-column--right');
+    console.log('DEBUG: map-overlay-column--right innerHTML:', col ? col.innerHTML : 'NOT FOUND');
+  }, 2000);
 });
 
 function setupDebugPanel() {

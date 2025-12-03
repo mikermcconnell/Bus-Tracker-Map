@@ -38,6 +38,83 @@ export function createUiController() {
     }
 
     setupServiceNotice();
+    initWeather();
+  }
+
+  function initWeather() {
+    const dateEl = document.getElementById('weather-date');
+    const tempEl = document.getElementById('weather-temp');
+    const condEl = document.getElementById('weather-condition');
+
+    if (!dateEl || !tempEl || !condEl) return;
+
+    const updateDate = () => {
+      const now = new Date();
+      const options = { weekday: 'long', month: 'short', day: 'numeric' };
+      dateEl.textContent = now.toLocaleDateString('en-US', options);
+    };
+
+    const fetchWeather = async () => {
+      try {
+        // Barrie coordinates: 44.3894,-79.6903
+        const res = await fetch(
+          'https://api.open-meteo.com/v1/forecast?latitude=44.3894&longitude=-79.6903&current=temperature_2m,weather_code&timezone=America%2FNew_York'
+        );
+        if (!res.ok) throw new Error('Weather fetch failed');
+        const data = await res.json();
+        const temp = Math.round(data.current.temperature_2m);
+        const code = data.current.weather_code;
+
+        tempEl.innerHTML = `${temp}&deg;`;
+        condEl.textContent = getWeatherCondition(code);
+      } catch (err) {
+        console.warn('Weather update failed:', err);
+        tempEl.innerHTML = '--&deg;';
+        condEl.textContent = 'Unavailable';
+      }
+    };
+
+    updateDate();
+    fetchWeather();
+
+    // Update date every minute, weather every 15 minutes
+    setInterval(updateDate, 60000);
+    setInterval(fetchWeather, 15 * 60000);
+  }
+
+  function getWeatherCondition(code) {
+    // WMO Weather interpretation codes (WW)
+    const codes = {
+      0: 'Clear sky',
+      1: 'Mainly clear',
+      2: 'Partly cloudy',
+      3: 'Overcast',
+      45: 'Fog',
+      48: 'Depositing rime fog',
+      51: 'Light drizzle',
+      53: 'Moderate drizzle',
+      55: 'Dense drizzle',
+      56: 'Light freezing drizzle',
+      57: 'Dense freezing drizzle',
+      61: 'Slight rain',
+      63: 'Moderate rain',
+      65: 'Heavy rain',
+      66: 'Light freezing rain',
+      67: 'Heavy freezing rain',
+      71: 'Slight snow fall',
+      73: 'Moderate snow fall',
+      75: 'Heavy snow fall',
+      77: 'Snow grains',
+      80: 'Slight rain showers',
+      81: 'Moderate rain showers',
+      82: 'Violent rain showers',
+      85: 'Slight snow showers',
+      86: 'Heavy snow showers',
+      95: 'Thunderstorm',
+      96: 'Thunderstorm with slight hail',
+      99: 'Thunderstorm with heavy hail'
+    };
+    return codes[code] || 'Unknown';
   }
 
   function setupServiceNotice() {
@@ -328,32 +405,6 @@ export function createUiController() {
       }
     },
 
-    updateWeather(data, iconHelper) {
-      const el = document.getElementById('weather-widget');
-      if (!el || !data) return;
 
-      el.hidden = false;
-
-      // Current
-      const currentIcon = el.querySelector('.weather-icon');
-      const currentTemp = el.querySelector('.weather-temp');
-      if (currentIcon) currentIcon.textContent = iconHelper(data.current.code);
-      if (currentTemp) currentTemp.textContent = data.current.temp + '°';
-
-      // Forecast
-      const forecastContainer = el.querySelector('.weather-forecast');
-      if (forecastContainer && data.forecast) {
-        forecastContainer.innerHTML = data.forecast.map(item => {
-          const timeStr = item.time.toLocaleTimeString([], { hour: 'numeric', hour12: true });
-          return `
-            <div class="weather-forecast-item">
-              <span class="forecast-time">${timeStr}</span>
-              <span class="forecast-icon">${iconHelper(item.code)}</span>
-              <span class="forecast-temp">${item.temp}°</span>
-            </div>
-          `;
-        }).join('');
-      }
-    }
   };
 }
