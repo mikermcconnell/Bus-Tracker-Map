@@ -148,6 +148,7 @@ const apiRouter = express.Router();
 router.use(express.static(FRONTEND_DIR, {
   extensions: ['html'],
   setHeaders(res, servedPath) {
+    res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
     if (servedPath.endsWith('.html')) {
       res.setHeader('Cache-Control', 'no-cache');
     } else if (hashedAssetPattern.test(path.basename(servedPath))) {
@@ -198,12 +199,14 @@ router.use('/api', corsMiddleware, apiRouter);
 router.get('/batt.map', (req, res, next) => {
   const battPath = path.join(FRONTEND_DIR, 'batt.map.html');
   if (!fs.existsSync(battPath)) return next();
+  res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
   res.sendFile(battPath);
 });
 
 router.get('*', (req, res, next) => {
   const indexPath = path.join(FRONTEND_DIR, 'index.html');
   if (!fs.existsSync(indexPath)) return next();
+  res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
   res.sendFile(indexPath);
 });
 

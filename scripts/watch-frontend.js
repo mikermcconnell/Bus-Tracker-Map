@@ -78,6 +78,13 @@ function copyBattMapAssets() {
   }
 }
 
+function copyTownAssets() {
+  const source = path.join(srcDir, 'assets', 'town-winter.png');
+  if (!fs.existsSync(source)) return;
+  const dest = path.join(assetsDir, 'town-winter.png');
+  fs.copyFileSync(source, dest);
+}
+
 async function buildJs(entry) {
   const result = await esbuild.build({
     entryPoints: [entry.entryPath],
@@ -113,8 +120,8 @@ function buildCss(entry) {
 function writeHtml(entry, assetMap) {
   const template = fs.readFileSync(entry.templatePath, 'utf8');
   const html = template
-    .replace(/%APP_JS%/g, `./assets/${assetMap.js}`)
-    .replace(/%APP_CSS%/g, `./assets/${assetMap.css}`)
+    .replace(/%APP_JS%/g, `./assets/${assetMap.js}?v=${Date.now()}`)
+    .replace(/%APP_CSS%/g, `./assets/${assetMap.css}?v=${Date.now()}`)
     .replace(/%BUILD_ID%/g, new Date().toISOString());
   fs.writeFileSync(path.join(distDir, entry.outputHtml), html);
 }
@@ -151,6 +158,7 @@ async function buildFrontend({ clean } = { clean: false }) {
 
   copyDataDirectory();
   copyBattMapAssets();
+  copyTownAssets();
 
   writeManifest(entryAssets);
   return entryAssets;
