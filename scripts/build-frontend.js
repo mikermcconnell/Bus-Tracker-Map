@@ -40,6 +40,13 @@ const entryPoints = [
     cssPath: path.join(srcDir, 'batt-map', 'styles.css'),
     templatePath: path.join(srcDir, 'batt-map', 'index.html'),
     outputHtml: 'batt.map.html'
+  },
+  {
+    key: 'platformMap',
+    entryPath: path.join(srcDir, 'platform-map', 'main.js'),
+    cssPath: path.join(srcDir, 'platform-map', 'styles.css'),
+    templatePath: path.join(srcDir, 'platform-map', 'index.html'),
+    outputHtml: 'platform.map.html'
   }
 ];
 
@@ -81,6 +88,17 @@ function copyBattMapAssets() {
   if (fs.existsSync(busSource)) {
     const busDest = path.join(assetsDir, 'batt-bus.png');
     fs.copyFileSync(busSource, busDest);
+  }
+}
+
+function copyPlatformMapAssets() {
+  const mapSource = path.join(srcDir, 'platform-map', 'map.png');
+  if (fs.existsSync(mapSource)) {
+    fs.copyFileSync(mapSource, path.join(assetsDir, 'map.png'));
+  }
+  const busSource = path.join(srcDir, 'platform-map', 'bus_icon.jpg');
+  if (fs.existsSync(busSource)) {
+    fs.copyFileSync(busSource, path.join(assetsDir, 'bus_icon.jpg'));
   }
 }
 
@@ -167,6 +185,7 @@ async function main() {
 
   copyDataDirectory();
   copyBattMapAssets();
+  copyPlatformMapAssets();
   copyWeatherAssets();
 
   writeManifest(entryAssets);

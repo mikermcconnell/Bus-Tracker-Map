@@ -11,13 +11,26 @@
     {
       "source": "/styles.css",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, s-maxage=0, must-revalidate" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, s-maxage=0, must-revalidate"
+        }
       ]
     }
   ],
   "rewrites": [
-    { "source": "/batt.map", "destination": "/batt.map.html" },
-    { "source": "/api/(.*)", "destination": "/api/index.js" }
+    {
+      "source": "/batt.map",
+      "destination": "/batt.map.html"
+    },
+    {
+      "source": "/platform.map",
+      "destination": "/platform.map.html"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.js"
+    }
   ],
   "env": {
     "GTFS_RT_VEHICLES_URL": "https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb",

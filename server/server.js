@@ -203,6 +203,13 @@ router.get('/batt.map', (req, res, next) => {
   res.sendFile(battPath);
 });
 
+router.get('/platform.map', (req, res, next) => {
+  const platformPath = path.join(FRONTEND_DIR, 'platform.map.html');
+  if (!fs.existsSync(platformPath)) return next();
+  res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
+  res.sendFile(platformPath);
+});
+
 router.get('*', (req, res, next) => {
   const indexPath = path.join(FRONTEND_DIR, 'index.html');
   if (!fs.existsSync(indexPath)) return next();
