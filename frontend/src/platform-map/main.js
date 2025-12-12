@@ -157,7 +157,16 @@ function updateMap(vehicles) {
 function startApp() {
     log('App started');
     log(`User Agent: ${navigator.userAgent}`);
-
+    log(`Stylesheets: ${document.styleSheets.length}`);
+    try {
+        const h1 = document.createElement('h1');
+        h1.textContent = 'JS Alive';
+        h1.style.position = 'absolute';
+        h1.style.top = '0';
+        h1.style.right = '0';
+        h1.style.color = 'red';
+        document.body.appendChild(h1);
+    } catch (e) { log('DOM Error: ' + e.message, 'ERROR'); }
     // Initial fetch
     fetchVehicles().then(updateMap);
 
