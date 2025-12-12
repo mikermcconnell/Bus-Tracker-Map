@@ -105,26 +105,29 @@ function log(msg, type = 'LOG') {
 
 // --- Main Logic ---
 
-async function fetchVehicles() {
-    try {
-        const response = await fetch('/api/vehicles.json');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        return data.vehicles || [];
-    } catch (err) {
-        log(err.message, 'ERROR');
-        return [];
-    }
+function fetchVehicles() {
+    return fetch('/api/vehicles.json')
+        .then(function (response) {
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return response.json();
+        })
+        .then(function (data) {
+            return data.vehicles || [];
+        })
+        .catch(function (err) {
+            log(err.message, 'ERROR');
+            return [];
+        });
 }
 
 function updateMap(vehicles) {
     const layer = document.getElementById('bus-layer');
     if (!layer) return;
 
-    // Simple clear and redraw for now (can optimize later if needed)
+    // Simple clear and redraw for now
     layer.innerHTML = '';
 
-    vehicles.forEach(v => {
+    vehicles.forEach(function (v) {
         const pos = getPixelPosition(v.lat, v.lon);
         const routeId = v.route_id || '';
         const routeColor = ROUTE_COLORS[routeId] || DEFAULT_COLOR;
@@ -143,12 +146,11 @@ function updateMap(vehicles) {
         marker.style.left = pos.left;
         marker.style.top = pos.top;
 
-        marker.innerHTML = `
-            <div class="bus-icon-wrapper" style="border-color: ${routeColor}">
-                <img src="/assets/bus_icon.jpg" class="bus-icon-image" alt="Bus">
-            </div>
-            ${routeId ? `<div class="bus-label" style="background-color: ${routeColor}">${displayRouteId}</div>` : ''}
-        `;
+        marker.innerHTML =
+            '<div class="bus-icon-wrapper" style="border-color: ' + routeColor + '">' +
+            '<img src="/assets/bus_icon.jpg" class="bus-icon-image" alt="Bus">' +
+            '</div>' +
+            (routeId ? '<div class="bus-label" style="background-color: ' + routeColor + '">' + displayRouteId + '</div>' : '');
 
         layer.appendChild(marker);
     });
@@ -156,8 +158,8 @@ function updateMap(vehicles) {
 
 function startApp() {
     log('App started');
-    log(`User Agent: ${navigator.userAgent}`);
-    log(`Stylesheets: ${document.styleSheets.length}`);
+    log('User Agent: ' + navigator.userAgent);
+    log('Stylesheets: ' + document.styleSheets.length);
     try {
         const h1 = document.createElement('h1');
         h1.textContent = 'JS Alive';
@@ -167,13 +169,13 @@ function startApp() {
         h1.style.color = 'red';
         document.body.appendChild(h1);
     } catch (e) { log('DOM Error: ' + e.message, 'ERROR'); }
+
     // Initial fetch
     fetchVehicles().then(updateMap);
 
     // Poll
-    setInterval(async () => {
-        const vehicles = await fetchVehicles();
-        updateMap(vehicles);
+    setInterval(function () {
+        fetchVehicles().then(updateMap);
     }, 10000);
 }
 
