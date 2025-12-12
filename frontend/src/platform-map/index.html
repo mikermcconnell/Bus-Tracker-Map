@@ -17,18 +17,9 @@
     <div id="debug-console" class="debug-console"></div>
     <script>
         (function () {
-            var d = document.createElement('div');
-            d.innerHTML = 'Inline JS <b>WORKS</b>';
-            d.style.color = 'white';
-            d.style.fontSize = '24px';
-            d.style.position = 'absolute';
-            d.style.top = '50px';
-            d.style.left = '50px';
-            d.style.zIndex = '9999';
-            document.body.appendChild(d);
-
+            // Inline console hook
             var consoleDiv = document.getElementById('debug-console');
-            if (consoleDiv) consoleDiv.innerHTML += '<div>Inline Script Ran</div>';
+            if (consoleDiv) consoleDiv.innerHTML += '<div>Inline Hook Active</div>';
         })();
     </script>
     <script src="%APP_JS%"></script>
