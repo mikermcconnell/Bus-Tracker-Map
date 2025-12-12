@@ -196,8 +196,13 @@ apiRouter.get('/vehicles.json', async (req, res) => {
 // JSONP Endpoint (Bypasses Client XHR blocks)
 apiRouter.get('/vehicles.js', async (req, res) => {
   try {
-    const data = await fetchVehicles(RT_URL);
-    const json = JSON.stringify(data.vehicles || []);
+    // DEBUG: Hardcoded data to rule out Upstream Fetch issues
+    // const data = await fetchVehicles(RT_URL);
+    const vehicles = [
+      { lat: 44.373837, lon: -79.689279, route_id: '8A', direction_id: 0, id: 'TEST_BUS' }
+    ];
+
+    const json = JSON.stringify(vehicles);
     const js = `
       if (typeof window.updateMapFromJSONP === 'function') {
         window.updateMapFromJSONP(${json});
@@ -207,7 +212,6 @@ apiRouter.get('/vehicles.js', async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache');
     res.send(js);
   } catch (e) {
-    // Return valid JS even on error to prevent console syntax errors
     res.setHeader('Content-Type', 'application/javascript');
     res.send(`console.error("Server Error: ${e.message}");`);
   }
