@@ -193,6 +193,26 @@ apiRouter.get('/vehicles.json', async (req, res) => {
   }
 });
 
+// JSONP Endpoint (Bypasses Client XHR blocks)
+apiRouter.get('/vehicles.js', async (req, res) => {
+  try {
+    const data = await fetchVehicles(RT_URL);
+    const json = JSON.stringify(data.vehicles || []);
+    const js = `
+      if (typeof window.updateMapFromJSONP === 'function') {
+        window.updateMapFromJSONP(${json});
+      }
+    `;
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.send(js);
+  } catch (e) {
+    // Return valid JS even on error to prevent console syntax errors
+    res.setHeader('Content-Type', 'application/javascript');
+    res.send(`console.error("Server Error: ${e.message}");`);
+  }
+});
+
 router.options('/api/*', corsMiddleware);
 router.use('/api', corsMiddleware, apiRouter);
 
