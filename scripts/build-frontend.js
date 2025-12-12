@@ -100,6 +100,10 @@ function copyPlatformMapAssets() {
   if (fs.existsSync(busSource)) {
     fs.copyFileSync(busSource, path.join(assetsDir, 'bus_icon.jpg'));
   }
+  const mockSource = path.join(srcDir, 'platform-map', 'mock_data.js');
+  if (fs.existsSync(mockSource)) {
+    fs.copyFileSync(mockSource, path.join(assetsDir, 'mock_data.js'));
+  }
 }
 
 function copyWeatherAssets() {

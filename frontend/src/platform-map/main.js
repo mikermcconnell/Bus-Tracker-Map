@@ -24,7 +24,7 @@
     statusBox.style.backgroundColor = 'rgba(0,0,0,0.8)';
     statusBox.style.padding = '10px';
     statusBox.style.zIndex = '10000';
-    statusBox.innerHTML = 'Phase 4: JSONP';
+    statusBox.innerHTML = 'Phase 5: Static JSONP';
     document.body.appendChild(statusBox);
 
     try {
@@ -110,29 +110,6 @@
                 layer.appendChild(marker);
             }
         };
-
-        function fetchVehiclesJSONP() {
-            statusBox.innerHTML = 'Phase 4: Requesting...';
-            statusBox.style.color = 'yellow';
-
-            var script = document.createElement('script');
-            script.src = '/api/vehicles.js?t=' + new Date().getTime();
-            script.onerror = function () {
-                statusBox.innerHTML = 'Phase 4: LOAD ERROR';
-                statusBox.style.color = 'red';
-            };
-            document.body.appendChild(script);
-
-            // Clean up old scripts occasionally? 
-            // For now, let's just append. The browser will GC detached scripts eventually if we removed them.
-            // But removing them immediately prevents them from executing in some browsers? No, load event.
-            // Let's remove after load.
-            script.onload = function () {
-                setTimeout(function () {
-                    if (script.parentNode) script.parentNode.removeChild(script);
-                }, 1000);
-            };
-        }
 
         // Start Loop
         fetchVehiclesJSONP();
