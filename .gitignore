@@ -28,3 +28,7 @@ Thumbs.db
 .vscode/
 .idea/
 .vercel
+
+# Monitor
+monitor/cache/
+monitor/logs/

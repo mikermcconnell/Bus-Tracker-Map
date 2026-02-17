@@ -1,0 +1,10 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "deploy": {
+    "startCommand": "npm run monitor",
+    "cronSchedule": "*/10 * * * *",
+    "restartPolicyType": "NEVER",
+    "sleepApplication": true,
+    "requiredMountPath": "/app/monitor/cache"
+  }
+}
