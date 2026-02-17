@@ -5,7 +5,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const { fetchVehicles } = require('../server/vehicles');
 const { getExpectedBuses } = require('./schedule');
-const { sendAlert, sendTestAlert } = require('./notify');
+const { sendAlert, sendTestAlert, sendSystemAlert } = require('./notify');
 const { normalizeRouteId } = require('./routes');
 
 const GTFS_STATIC_URL = process.env.GTFS_STATIC_URL;
@@ -22,6 +22,7 @@ const SILENCE_THRESHOLD_MIN = parseInt(process.env.SILENCE_THRESHOLD_MIN || '5',
 const ALERT_AFTER_MIN = parseInt(process.env.ALERT_AFTER_MIN || '20', 10);
 const GTFS_CACHE_MAX_AGE_HOURS = parseInt(process.env.GTFS_CACHE_MAX_AGE_HOURS || '24', 10);
 const LAYOVER_GRACE_MIN = parseInt(process.env.LAYOVER_GRACE_MIN || '10', 10);
+const WATCHDOG_MAX_AGE_MIN = parseInt(process.env.WATCHDOG_MAX_AGE_MIN || '30', 10);
 const SMTP_FORCE_IPV4 = /^(1|true|yes|on)$/i.test(String(process.env.SMTP_FORCE_IPV4 || 'true').trim());
 const TEST_ALERT_EVERY_RUN = /^(1|true|yes|on)$/i.test(String(process.env.TEST_ALERT_EVERY_RUN || '').trim());
 
@@ -62,8 +63,31 @@ function saveHeartbeat(success) {
   const next = {
     lastRunAt: nowIso,
     lastSuccessAt: prev.lastSuccessAt || null,
+    alertedDown: prev.alertedDown || false,
   };
   if (success) next.lastSuccessAt = nowIso;
+  if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
+  fs.writeFileSync(HEARTBEAT_FILE, JSON.stringify(next, null, 2));
+}
+
+async function saveSuccessHeartbeat(emailConfig) {
+  const prev = loadHeartbeat();
+  if (prev.alertedDown) {
+    console.log('[monitor] Watchdog: previous run was alerting DOWN. Sending RECOVERED email.');
+    try {
+      await sendSystemAlert(emailConfig, {
+        kind: 'recovered',
+        checkedAt: new Date(),
+        lastSuccessAt: prev.lastSuccessAt ? new Date(prev.lastSuccessAt) : null,
+        maxAgeMin: WATCHDOG_MAX_AGE_MIN,
+        details: 'Monitor completed a successful run.',
+      });
+    } catch (err) {
+      console.error('[monitor] Watchdog RECOVERED email failed:', err.message || err);
+    }
+  }
+  const nowIso = new Date().toISOString();
+  const next = { lastRunAt: nowIso, lastSuccessAt: nowIso, alertedDown: false };
   if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
   fs.writeFileSync(HEARTBEAT_FILE, JSON.stringify(next, null, 2));
 }
@@ -77,6 +101,36 @@ function formatDuration(ms) {
   const now = new Date();
   const timeStr = now.toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour12: false });
   console.log(`[monitor] Starting check at ${timeStr}`);
+
+  // Watchdog: check if previous runs have been failing
+  const heartbeat = loadHeartbeat();
+  if (heartbeat.lastSuccessAt) {
+    const lastSuccessAge = now.getTime() - new Date(heartbeat.lastSuccessAt).getTime();
+    const maxAgeMs = WATCHDOG_MAX_AGE_MIN * 60 * 1000;
+    if (lastSuccessAge > maxAgeMs && !heartbeat.alertedDown) {
+      console.warn('[monitor] Watchdog: last success was %d min ago (threshold: %d min). Sending DOWN alert.',
+        Math.round(lastSuccessAge / 60000), WATCHDOG_MAX_AGE_MIN);
+      heartbeat.alertedDown = true;
+      fs.writeFileSync(HEARTBEAT_FILE, JSON.stringify(heartbeat, null, 2));
+      try {
+        const watchdogEmailConfig = {
+          smtpHost: SMTP_HOST, smtpPort: SMTP_PORT, smtpUser: SMTP_USER, smtpPass: SMTP_PASS,
+          recipient: ALERT_RECIPIENT, smtpForceIpv4: SMTP_FORCE_IPV4,
+          resendApiKey: RESEND_API_KEY, resendFromEmail: RESEND_FROM_EMAIL,
+        };
+        await sendSystemAlert(watchdogEmailConfig, {
+          kind: 'down',
+          checkedAt: now,
+          lastSuccessAt: new Date(heartbeat.lastSuccessAt),
+          maxAgeMin: WATCHDOG_MAX_AGE_MIN,
+          details: `No successful monitor run in ${Math.round(lastSuccessAge / 60000)} minutes.`,
+        });
+      } catch (err) {
+        console.error('[monitor] Watchdog DOWN email failed:', err.message || err);
+      }
+    }
+  }
+
   saveHeartbeat(false);
 
   // Validate required env vars
@@ -128,7 +182,7 @@ function formatDuration(ms) {
     if (expected.totalExpected === 0) {
       console.log('[monitor] No buses expected at this time. Exiting.');
       saveState({}); // Clear stale durations so they don't carry into next day
-      saveHeartbeat(true);
+      await saveSuccessHeartbeat(emailConfig);
       process.exit(0);
     }
 
@@ -210,13 +264,13 @@ function formatDuration(ms) {
     // 7. Decide whether to alert
     if (totalMissing === 0) {
       console.log('[monitor] All expected buses are tracking. No alert needed.');
-      saveHeartbeat(true);
+      await saveSuccessHeartbeat(emailConfig);
       process.exit(0);
     }
 
     if (!anyOverThreshold) {
       console.log('[monitor] Missing: %d buses, but none over %d min threshold yet. No alert.', totalMissing, ALERT_AFTER_MIN);
-      saveHeartbeat(true);
+      await saveSuccessHeartbeat(emailConfig);
       process.exit(0);
     }
 
@@ -234,7 +288,7 @@ function formatDuration(ms) {
     await sendAlert(emailConfig, report);
 
     console.log('[monitor] Alert sent. Done.');
-    saveHeartbeat(true);
+    await saveSuccessHeartbeat(emailConfig);
     process.exit(0);
   } catch (err) {
     const errorText = err && err.code ? `${err.code}: ${err.message || err}` : (err && err.message) || err;
