@@ -25,6 +25,7 @@ const LAYOVER_GRACE_MIN = parseInt(process.env.LAYOVER_GRACE_MIN || '10', 10);
 const WATCHDOG_MAX_AGE_MIN = parseInt(process.env.WATCHDOG_MAX_AGE_MIN || '30', 10);
 const SMTP_FORCE_IPV4 = /^(1|true|yes|on)$/i.test(String(process.env.SMTP_FORCE_IPV4 || 'true').trim());
 const TEST_ALERT_EVERY_RUN = /^(1|true|yes|on)$/i.test(String(process.env.TEST_ALERT_EVERY_RUN || '').trim());
+const HEARTBEAT_URL = process.env.HEARTBEAT_URL;
 
 const CACHE_DIR = path.join(__dirname, 'cache');
 const STATE_FILE = path.join(CACHE_DIR, 'state.json');
@@ -70,6 +71,16 @@ function saveHeartbeat(success) {
   fs.writeFileSync(HEARTBEAT_FILE, JSON.stringify(next, null, 2));
 }
 
+async function pingHeartbeat() {
+  if (!HEARTBEAT_URL) return;
+  try {
+    const res = await fetch(HEARTBEAT_URL, { signal: AbortSignal.timeout(10000) });
+    console.log('[monitor] Heartbeat ping: %d', res.status);
+  } catch (err) {
+    console.warn('[monitor] Heartbeat ping failed:', err.message);
+  }
+}
+
 async function saveSuccessHeartbeat(emailConfig) {
   const prev = loadHeartbeat();
   if (prev.alertedDown) {
@@ -90,6 +101,7 @@ async function saveSuccessHeartbeat(emailConfig) {
   const next = { lastRunAt: nowIso, lastSuccessAt: nowIso, alertedDown: false };
   if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
   fs.writeFileSync(HEARTBEAT_FILE, JSON.stringify(next, null, 2));
+  await pingHeartbeat();
 }
 
 function formatDuration(ms) {
