@@ -1,0 +1,47 @@
+name: Bus Monitor
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Restore monitor cache
+        uses: actions/cache/restore@v4
+        with:
+          path: monitor/cache
+          key: monitor-cache-${{ github.run_id }}
+          restore-keys: monitor-cache-
+
+      - run: npm ci
+
+      - name: Run bus monitor
+        env:
+          GTFS_STATIC_URL: https://www.myridebarrie.ca/gtfs/google_transit.zip
+          GTFS_RT_VEHICLES_URL: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+          ALERT_RECIPIENT: ${{ secrets.ALERT_RECIPIENT }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
+          HEARTBEAT_URL: ${{ secrets.HEARTBEAT_URL }}
+        run: node monitor/index.js
+
+      - name: Save monitor cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: monitor/cache
+          key: monitor-cache-${{ github.run_id }}
