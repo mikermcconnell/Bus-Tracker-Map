@@ -2,6 +2,16 @@
 const fetch = require('node-fetch');
 const nodemailer = require('nodemailer');
 
+function escapeHtml(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function createTransport(config) {
   const port = parseInt(config.smtpPort || '587', 10);
   const secure = port === 465;
@@ -80,8 +90,6 @@ async function sendAlert(config, report) {
   const text = buildPlainText(report);
   const subject = buildAlertSubject(report);
   const info = await sendMail(config, { subject, html, text });
-
-  console.log('[notify] Email sent:', info.messageId);
   return info;
 }
 
@@ -149,7 +157,7 @@ async function sendSystemAlert(config, payload) {
       <td style="padding:0 20px 8px">Watchdog max age: ${payload.maxAgeMin} minutes</td>
     </tr>
     <tr>
-      <td style="padding:0 20px 20px">Details: ${payload.details}</td>
+      <td style="padding:0 20px 20px">Details: ${escapeHtml(payload.details)}</td>
     </tr>
   </table>
 </body>
@@ -204,14 +212,14 @@ async function sendTestAlert(config, payload) {
     </tr>
     <tr>
       <td style="padding:20px 20px 8px">
-        This is a scheduled test email from Railway.
+        This is a scheduled test email from the bus monitor.
       </td>
     </tr>
     <tr>
       <td style="padding:0 20px 8px">Checked: ${timestamp}</td>
     </tr>
     <tr>
-      <td style="padding:0 20px 20px">Details: ${details}</td>
+      <td style="padding:0 20px 20px">Details: ${escapeHtml(details)}</td>
     </tr>
   </table>
 </body>
@@ -219,7 +227,7 @@ async function sendTestAlert(config, payload) {
   const text = [
     'BARRIE TRANSIT MONITOR TEST EMAIL',
     '',
-    'This is a scheduled test email from Railway.',
+    'This is a scheduled test email from the bus monitor.',
     `Checked: ${timestamp}`,
     `Details: ${details}`,
   ].join('\n');
@@ -386,4 +394,9 @@ module.exports = {
   sendTestAlert,
   buildAlertSubject,
   buildSystemSubject,
+  // Exported for testing
+  escapeHtml,
+  missingSummary,
+  buildHtml,
+  buildPlainText,
 };

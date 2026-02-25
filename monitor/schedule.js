@@ -287,6 +287,8 @@ function getNowContext(now = new Date(), timeZone = DEFAULT_MONITOR_TIMEZONE) {
     throw new Error('Could not resolve monitor timezone date parts');
   }
 
+  // Local-timezone Date — safe because downstream only uses local getters
+  // (getFullYear, getMonth, getDate, getDay) which return the values we set.
   const today = new Date(parts.year, parts.month - 1, parts.day);
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);

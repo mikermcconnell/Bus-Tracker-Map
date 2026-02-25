@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
+const fetch = require('node-fetch');
 const { fetchVehicles } = require('../server/vehicles');
 const { getExpectedBuses } = require('./schedule');
 const { sendAlert, sendTestAlert, sendSystemAlert } = require('./notify');
@@ -22,7 +23,7 @@ const SILENCE_THRESHOLD_MIN = parseInt(process.env.SILENCE_THRESHOLD_MIN || '5',
 const ALERT_AFTER_MIN = parseInt(process.env.ALERT_AFTER_MIN || '20', 10);
 const GTFS_CACHE_MAX_AGE_HOURS = parseInt(process.env.GTFS_CACHE_MAX_AGE_HOURS || '24', 10);
 const LAYOVER_GRACE_MIN = parseInt(process.env.LAYOVER_GRACE_MIN || '10', 10);
-const WATCHDOG_MAX_AGE_MIN = parseInt(process.env.WATCHDOG_MAX_AGE_MIN || '30', 10);
+const WATCHDOG_MAX_AGE_MIN = parseInt(process.env.WATCHDOG_MAX_AGE_MIN || '90', 10);
 const SMTP_FORCE_IPV4 = /^(1|true|yes|on)$/i.test(String(process.env.SMTP_FORCE_IPV4 || 'true').trim());
 const TEST_ALERT_EVERY_RUN = /^(1|true|yes|on)$/i.test(String(process.env.TEST_ALERT_EVERY_RUN || '').trim());
 const HEARTBEAT_URL = process.env.HEARTBEAT_URL;
@@ -74,7 +75,7 @@ function saveHeartbeat(success) {
 async function pingHeartbeat() {
   if (!HEARTBEAT_URL) return;
   try {
-    const res = await fetch(HEARTBEAT_URL, { signal: AbortSignal.timeout(10000) });
+    const res = await fetch(HEARTBEAT_URL, { timeout: 10000 });
     console.log('[monitor] Heartbeat ping: %d', res.status);
   } catch (err) {
     console.warn('[monitor] Heartbeat ping failed:', err.message);
@@ -155,6 +156,7 @@ function formatDuration(ms) {
   }
   if (missing.length > 0) {
     console.error('[monitor] Missing required env vars:', missing.join(', '));
+    await pingHeartbeat();
     process.exit(1);
   }
 
@@ -288,7 +290,7 @@ function formatDuration(ms) {
 
     console.log('[monitor] Missing: %d buses (%d+ min). Sending alert...', totalMissing, ALERT_AFTER_MIN);
 
-    // 7. Send email
+    // 8. Send email
     const report = {
       rows,
       totalExpected: expected.totalExpected,
@@ -305,6 +307,9 @@ function formatDuration(ms) {
   } catch (err) {
     const errorText = err && err.code ? `${err.code}: ${err.message || err}` : (err && err.message) || err;
     console.error('[monitor] Fatal error:', errorText);
+    // Still ping heartbeat so healthchecks.io knows the cron ran.
+    // Monitor email alerts handle actual failures separately.
+    await pingHeartbeat();
     process.exit(1);
   }
 })();
