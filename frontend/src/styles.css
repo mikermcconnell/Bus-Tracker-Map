@@ -1,37 +1,50 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap");
+/* ============================================================
+   Barrie Transit Live Map — Transit Authority Design System
+   Typefaces: Barlow Condensed (display) + IBM Plex Sans (data)
+   ============================================================ */
+@import url("https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
 
 :root {
-  /* Enterprise Slate & Navy Theme */
+  /* Core brand */
   --brand-primary: #0f172a;
-  /* Slate 900 */
   --brand-secondary: #334155;
-  /* Slate 700 */
-  --brand-accent: #2563eb;
-  /* Blue 600 */
+  --transit-blue: #004E80;       /* Barrie Transit official blue */
+  --transit-blue-dark: #003a60;
+  --brand-accent: #0891b2;       /* Transit teal — signature accent */
+  --brand-accent-glow: rgba(8, 145, 178, 0.35);
   --brand-surface: #ffffff;
 
+  /* Typography */
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", sans-serif;
+
+  /* Text hierarchy */
   --text-primary: #0f172a;
-  --text-secondary: #64748b;
-  /* Slate 500 */
+  --text-secondary: #475569;
   --text-tertiary: #94a3b8;
 
-  /* TV Display: Solid backgrounds for better readability at distance */
-  --overlay-bg: rgba(255, 255, 255, 0.96);
-  --overlay-border: rgba(0, 0, 0, 0.12);
+  /* Frosted glass system — higher opacity for TV legibility */
+  --glass-bg: rgba(255, 255, 255, 0.88);
+  --glass-bg-strong: rgba(255, 255, 255, 0.92);
+  --glass-blur: blur(20px);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.55);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.06);
 
+  /* Elevation */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
   --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
 
+  /* Radii */
   --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
   --radius-pill: 9999px;
 
   --canvas-bg: #f1f5f9;
 
-  /* Legacy mappings for compatibility */
+  /* Legacy mappings */
   --brand-blue-900: var(--brand-primary);
   --brand-blue-700: var(--brand-accent);
   --brand-blue-500: #3b82f6;
@@ -39,11 +52,15 @@
   --brand-blue-050: #f8fafc;
   --accent-amber-100: #fef3c7;
   --accent-amber-500: #d97706;
-  --overlay-surface: var(--overlay-bg);
+  --overlay-bg: var(--glass-bg-strong);
+  --overlay-border: rgba(0, 0, 0, 0.12);
+  --overlay-surface: var(--glass-bg);
   --shadow-soft: var(--shadow-md);
   --shadow-medium: var(--shadow-lg);
   --shadow-strong: var(--shadow-xl);
 }
+
+/* ── Base ───────────────────────────────────────────────────── */
 
 html,
 body,
@@ -52,13 +69,39 @@ body,
   margin: 0;
   padding: 0;
   background: var(--canvas-bg);
-  font-family: "Inter", "Segoe UI", Arial, sans-serif;
+  font-family: var(--font-body);
   color: var(--text-primary);
 }
 
 body {
   overflow: visible;
 }
+
+/* ── Page-load reveal animation ─────────────────────────────── */
+
+@keyframes panel-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes header-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Map stage & overlay frame ──────────────────────────────── */
 
 .map-stage {
   position: relative;
@@ -73,13 +116,10 @@ body {
 
 .map-overlay-frame {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
   inset: 0;
   padding: clamp(16px, 2vw, 36px);
-  padding-bottom: clamp(80px, 9vh, 120px);
+  padding-top: clamp(64px, 8vh, 80px);
+  padding-bottom: clamp(40px, 5vh, 80px);
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -92,8 +132,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: clamp(10px, 1.5vh, 20px);
-  width: min(26vw, 320px);
-  min-width: 220px;
+  width: min(28vw, 360px);
+  min-width: 240px;
   pointer-events: none;
   max-height: 100%;
 }
@@ -108,71 +148,193 @@ body {
   pointer-events: auto;
 }
 
-.debug-panel {
+/* ── Header bar ─────────────────────────────────────────────── */
+
+.map-title {
   position: fixed;
-  bottom: 12px;
-  left: 12px;
-  width: min(360px, 42vw);
-  max-height: 45vh;
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  background: rgba(8, 19, 31, 0.94);
-  color: #f5f7fa;
-  font: 12px/1.4 "Roboto Mono", "SFMono-Regular", Menlo, Consolas, monospace;
-  z-index: 9999;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--transit-blue);
+  color: #ffffff;
+  padding: 12px clamp(16px, 2vw, 36px);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  z-index: 460;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 3px solid var(--brand-accent);
+  animation: header-reveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.debug-panel[hidden] {
-  display: none;
+.map-title__left {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  min-width: 0;
 }
 
-.debug-panel__section {
-  margin-bottom: 8px;
+.map-title__main {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 2.2vw, 28px);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-.debug-panel__section:last-child {
-  margin-bottom: 0;
+.map-title__sub {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  white-space: nowrap;
 }
 
-.debug-panel__logs {
-  font-size: 11px;
-  opacity: 0.85;
-  max-height: 18vh;
-  overflow-y: auto;
+.map-title__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 600;
+  opacity: 1;
+  white-space: nowrap;
 }
+
+.current-time {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+}
+
+.info-separator {
+  opacity: 0.6;
+}
+
+.last-updated {
+  font-size: 15px;
+  opacity: 0.8;
+}
+
+/* ── LIVE status pill ───────────────────────────────────────── */
+
+.live-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 22px;
+  border-radius: 100px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transition: all 0.3s ease;
+}
+
+.live-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.status-ok {
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  color: #ffffff;
+}
+
+.status-ok .live-dot {
+  background: #4ade80;
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.6);
+  animation: status-pulse 2s infinite;
+}
+
+.status-warning {
+  background: rgba(255, 179, 0, 0.2);
+  border: 2px solid rgba(255, 179, 0, 0.6);
+  color: #ffb300;
+}
+
+.status-warning .live-dot {
+  background: #ffb300;
+  box-shadow: 0 0 6px #ffb300;
+  animation: none;
+}
+
+.status-stale {
+  background: rgba(255, 61, 61, 0.2);
+  border: 2px solid rgba(255, 61, 61, 0.6);
+  color: #ff3d3d;
+}
+
+.status-stale .live-dot {
+  background: #ff3d3d;
+  box-shadow: 0 0 6px #ff3d3d;
+  animation: none;
+}
+
+@keyframes status-pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* ── Frosted glass panels (shared) ──────────────────────────── */
+
+.stop-legend,
+.legend,
+.mini-map {
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  border-radius: var(--radius-lg);
+}
+
+/* ── Transit Hubs legend (left, secondary) ──────────────────── */
 
 .stop-legend {
   position: relative;
   z-index: 1000;
   width: 100%;
-  max-width: 280px;
-  background: var(--overlay-bg);
-  border-radius: var(--radius-lg);
-  border: 2px solid var(--overlay-border);
-  box-shadow: var(--shadow-lg);
-  padding: 12px 16px;
+  max-width: min(30vw, 400px);
+  padding: 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   pointer-events: auto;
+  animation: panel-reveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
 }
 
 .stop-legend-title {
-  font-size: 18px;
+  font-family: var(--font-display);
+  font-size: 24px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #000000;
+  letter-spacing: 0.08em;
+  color: var(--transit-blue);
+  text-align: center;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--transit-blue);
 }
 
 .stop-legend-list {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 3px 10px;
+  gap: 6px 14px;
+  align-items: baseline;
   margin: 0;
   padding: 0;
 }
@@ -180,98 +342,50 @@ body {
 .stop-legend-list dt,
 .stop-legend-list dd {
   margin: 0;
-  line-height: 1.3;
+  line-height: 1.4;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(0, 78, 128, 0.12);
 }
 
 .stop-legend-list dt {
-  font-size: 13px;
+  font-family: var(--font-display);
+  font-size: 22px;
   font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: 0.02em;
+  color: var(--transit-blue);
+  letter-spacing: 0.04em;
 }
 
 .stop-legend-list dd {
-  font-size: 12px;
-  color: var(--text-secondary);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* ── BATT Routes legend (right, primary) ────────────────────── */
+
 .legend {
   position: relative;
   z-index: 1000;
   width: 100%;
-  max-width: 380px;
+  max-width: 300px;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  background: var(--overlay-bg);
   padding: 20px 24px;
-  border-radius: var(--radius-lg);
-  border: 2px solid var(--overlay-border);
-  box-shadow: var(--shadow-lg);
   line-height: 1.4;
   overflow: visible;
   pointer-events: auto;
   box-sizing: border-box;
-}
-
-/* Mini-map overlay highlighting live activity at the terminal. */
-.mini-map {
-  position: relative;
-  width: 100%;
-  max-width: min(28vw, 380px);
-  min-width: 240px;
-  height: clamp(240px, 30vh, 400px);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  flex: 1 0 auto;
-  padding: 14px;
-  border-radius: var(--radius-lg);
-  border: 2px solid var(--overlay-border);
-  background: var(--overlay-bg);
-  box-shadow: var(--shadow-lg);
-  z-index: 1010;
-  pointer-events: none;
-}
-
-.mini-map__title {
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #000000;
-  text-align: center;
-  line-height: 1.2;
-}
-
-.mini-map__canvas {
-  flex: 1;
-  border-radius: 16px;
-  overflow: hidden;
-}
-
-.mini-map--hidden {
-  display: none !important;
-}
-
-.mini-map__canvas .leaflet-container {
-  background: transparent;
-}
-
-/* Keep the inset map visible on the TV's zoomed viewport while still hiding it on cramped layouts. */
-@media (max-width: 320px),
-(max-height: 320px) {
-  .mini-map {
-    display: none;
-  }
+  animation: panel-reveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.25s both;
 }
 
 .legend h4 {
   margin: 0;
-  font-size: 17px;
+  font-family: var(--font-display);
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -301,15 +415,19 @@ body {
 .legend-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .legend-section-title {
-  font-size: 26px;
+  font-family: var(--font-display);
+  font-size: 28px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #000000;
+  letter-spacing: 0.06em;
+  color: var(--transit-blue);
+  text-align: center;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--transit-blue);
 }
 
 .legend-actions {
@@ -324,6 +442,7 @@ body {
   padding: 4px 10px;
   background: transparent;
   color: var(--text-secondary);
+  font-family: var(--font-body);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -333,13 +452,13 @@ body {
 }
 
 .legend-actions button:hover {
-  background: var(--brand-secondary);
+  background: var(--brand-accent);
   color: #fff;
-  border-color: var(--brand-secondary);
+  border-color: var(--brand-accent);
 }
 
 .legend-actions button:focus-visible {
-  outline: 2px solid var(--brand-blue-500);
+  outline: 2px solid var(--brand-accent);
   outline-offset: 2px;
 }
 
@@ -347,6 +466,71 @@ body {
   padding-top: 8px;
   border-top: 1px solid rgba(0, 56, 94, 0.14);
 }
+
+/* ── Route list & items ─────────────────────────────────────── */
+
+.route-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  justify-items: center;
+  max-height: none;
+  overflow-y: visible;
+  padding-right: 0;
+}
+
+.route-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  transition: background 0.15s ease, opacity 0.15s ease;
+  width: fit-content;
+  min-width: 0;
+}
+
+.route-item--display {
+  background: rgba(0, 0, 0, 0.04);
+  pointer-events: none;
+}
+
+.route-item:hover {
+  background: rgba(8, 145, 178, 0.1);
+}
+
+.route-item.route-hidden {
+  opacity: 0.35;
+}
+
+.swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+}
+
+.route-name {
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: clamp(20px, 2.2vw, 26px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.route-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.route-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 999px;
+}
+
+/* ── Route labels on map ────────────────────────────────────── */
 
 .route-label-icon {
   pointer-events: none;
@@ -359,6 +543,7 @@ body {
   justify-content: center;
   padding: 6px 24px;
   border-radius: 999px;
+  font-family: var(--font-display);
   font-size: 28px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -378,68 +563,63 @@ body {
   transform: rotate(var(--route-bearing-inverse, 0deg));
 }
 
+/* ── Mini-map (BATT terminal inset) ─────────────────────────── */
 
-.route-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
-  max-height: none;
-  overflow-y: visible;
-  padding-right: 6px;
-}
-
-.route-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  border-radius: var(--radius-md);
-  transition: background 0.15s ease, opacity 0.15s ease;
+.mini-map {
+  position: relative;
   width: 100%;
-  min-width: 0;
-}
-
-.route-item--display {
-  background: rgba(0, 0, 0, 0.04);
+  max-width: min(30vw, 400px);
+  min-width: 240px;
+  height: clamp(240px, 30vh, 400px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 0 auto;
+  padding: 14px;
+  z-index: 1010;
   pointer-events: none;
+  animation: panel-reveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.35s both;
 }
 
-.route-item:hover {
-  background: rgba(0, 78, 128, 0.12);
+.mini-map__title {
+  font-family: var(--font-display);
+  font-size: clamp(18px, 2vw, 22px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--transit-blue);
+  text-align: center;
+  line-height: 1.2;
 }
 
-.route-item.route-hidden {
-  opacity: 0.35;
-}
-
-.swatch {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 3px solid #ffffff;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25);
-  flex-shrink: 0;
-}
-
-.route-name {
+.mini-map__canvas {
   flex: 1;
-  font-size: clamp(16px, 1.8vw, 20px);
-  font-weight: 600;
-  letter-spacing: 0.015em;
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
-.route-list::-webkit-scrollbar {
-  width: 6px;
+.mini-map--hidden {
+  display: none !important;
 }
 
-.route-list::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 999px;
+.mini-map__canvas .leaflet-container {
+  background: transparent;
 }
+
+@media (max-width: 320px),
+(max-height: 320px) {
+  .mini-map {
+    display: none;
+  }
+}
+
+/* ── Basemap tiles ──────────────────────────────────────────── */
 
 .leaflet-tile {
-  filter: saturate(0.9) brightness(1.08) contrast(0.95);
+  filter: saturate(0.35) brightness(1.1) contrast(0.88);
 }
+
+/* ── Vehicle markers ────────────────────────────────────────── */
 
 .vehicle-icon {
   border: none !important;
@@ -451,14 +631,15 @@ body {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: var(--route-color, var(--brand-blue-700));
+  background: var(--route-color, var(--brand-accent));
   color: var(--text-color, #ffffff);
   display: flex;
   align-items: center;
   justify-content: center;
+  font-family: var(--font-display);
   font-size: var(--label-size, 22px);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.02em;
   border: var(--bubble-border-width, 4px) solid rgba(255, 255, 255, 0.98);
   box-shadow: var(--bubble-shadow, var(--shadow-medium));
   text-transform: uppercase;
@@ -471,8 +652,8 @@ body {
   position: absolute;
   inset: var(--bubble-inner-inset, 7px);
   border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.45);
-  opacity: 0.85;
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  opacity: 0.8;
   z-index: 1;
 }
 
@@ -588,11 +769,12 @@ body {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--chip-bg, var(--brand-blue-700));
+  background: var(--chip-bg, var(--brand-accent));
   color: var(--chip-fg, #ffffff);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-family: var(--font-display);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -602,7 +784,7 @@ body {
 }
 
 .vehicle-mini--count {
-  background: var(--brand-blue-900);
+  background: var(--brand-primary);
   color: #ffffff;
   font-size: 11px;
   letter-spacing: 0.01em;
@@ -614,239 +796,12 @@ body {
   position: absolute;
   inset: 4px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  opacity: 0.65;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  opacity: 0.6;
 }
 
 .vehicle-mini--count::after {
   display: none;
-}
-
-/* Hide zoom controls for TV display */
-.leaflet-control-zoom {
-  display: none !important;
-}
-
-/* Hide Leaflet logo/info icon */
-.leaflet-control-attribution a[href*="leaflet"] {
-  display: none !important;
-}
-
-.leaflet-control-attribution svg,
-.leaflet-control-attribution img {
-  display: none !important;
-}
-
-/* Make Leaflet attribution subtle */
-.leaflet-control-attribution {
-  font-size: 9px !important;
-  background: rgba(255, 255, 255, 0.5) !important;
-  padding: 2px 6px !important;
-  opacity: 0.5;
-}
-
-/* Hide any Leaflet bottom-left controls */
-.leaflet-bottom.leaflet-left {
-  display: none !important;
-}
-
-.leaflet-popup-content-wrapper,
-.leaflet-popup-tip {
-  background: var(--overlay-surface);
-  color: var(--text-primary);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
-.leaflet-popup-content {
-  margin: 12px 16px;
-  line-height: 1.4;
-  font-size: 13px;
-}
-
-.major-road-label {
-  background: rgba(255, 255, 255, 0.85);
-  border: none;
-  border-radius: 999px;
-  color: var(--brand-blue-900);
-  font: 600 11px/1.2 "Inter", "Segoe UI", sans-serif;
-  letter-spacing: 0.04em;
-  padding: 4px 11px;
-  text-align: center;
-  text-transform: uppercase;
-  box-shadow: 0 4px 8px rgba(13, 43, 69, 0.12);
-  pointer-events: none;
-  white-space: nowrap;
-  transform-origin: 50% 50%;
-  transform: rotate(var(--major-road-angle, 0deg));
-  will-change: transform;
-}
-
-.major-road-label::before {
-  display: none;
-}
-
-.map-title {
-  position: fixed;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--brand-primary);
-  color: #ffffff;
-  padding: 12px 24px;
-  border-radius: var(--radius-full);
-  font: 600 16px/1.2 "Inter", "Segoe UI", sans-serif;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  z-index: 460;
-  box-shadow: var(--shadow-xl);
-  pointer-events: none;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.map-title__main {
-  font-size: 36px;
-  line-height: 1;
-  letter-spacing: 0.01em;
-}
-
-.map-title__sub {
-  font-size: 16px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.85;
-}
-
-.map-title__group {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.map-title__row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 4px;
-}
-
-.map-title__sub {
-  font-size: 16px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0.85;
-  margin: 0;
-}
-
-.map-title__info-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 8px;
-  font-size: 20px;
-  font-weight: 500;
-  opacity: 0.9;
-}
-
-.current-time {
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-}
-
-.info-separator {
-  opacity: 0.5;
-}
-
-.last-updated {
-  font-size: 18px;
-  opacity: 0.85;
-}
-
-.live-status-pill {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  /* Slightly smaller to fit better */
-  background: rgba(13, 24, 36, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 100px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  transition: all 0.3s ease;
-  margin-top: 0;
-  /* Remove previous margin */
-}
-
-.live-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  transition: all 0.3s ease;
-}
-
-/* Status: OK (Green) */
-.status-ok .live-dot {
-  background: #00ff9d;
-  box-shadow: 0 0 8px #00ff9d;
-  animation: status-pulse 2s infinite;
-}
-
-.status-ok {
-  border-color: rgba(0, 255, 157, 0.3);
-}
-
-/* Status: Warning (Amber) */
-.status-warning .live-dot {
-  background: #ffb300;
-  box-shadow: 0 0 6px #ffb300;
-  animation: none;
-}
-
-.status-warning {
-  border-color: rgba(255, 179, 0, 0.4);
-  color: #ffb300;
-}
-
-/* Status: Stale (Red) */
-.status-stale .live-dot {
-  background: #ff3d3d;
-  box-shadow: 0 0 6px #ff3d3d;
-  animation: none;
-}
-
-.status-stale {
-  border-color: rgba(255, 61, 61, 0.4);
-  color: #ff3d3d;
-}
-
-@keyframes status-pulse {
-  0% {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  50% {
-    opacity: 0.6;
-    transform: scale(0.85);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
 }
 
 /* Vehicle Pulse Animation */
@@ -867,22 +822,79 @@ body {
 }
 
 @keyframes pulse-ring {
-  0% {
-    width: 90%;
-    height: 90%;
-    opacity: 0.8;
-    border-width: 3px;
-  }
-
-  100% {
-    width: 240%;
-    height: 240%;
-    opacity: 0;
-    border-width: 0px;
-  }
+  0% { width: 90%; height: 90%; opacity: 0.8; border-width: 3px; }
+  100% { width: 240%; height: 240%; opacity: 0; border-width: 0px; }
 }
 
+/* ── Leaflet control overrides ──────────────────────────────── */
 
+.leaflet-control-zoom {
+  display: none !important;
+}
+
+.leaflet-control-attribution a[href*="leaflet"] {
+  display: none !important;
+}
+
+.leaflet-control-attribution svg,
+.leaflet-control-attribution img {
+  display: none !important;
+}
+
+.leaflet-control-attribution {
+  font-size: 9px !important;
+  background: rgba(255, 255, 255, 0.4) !important;
+  padding: 2px 6px !important;
+  opacity: 0.4;
+}
+
+.leaflet-bottom.leaflet-left {
+  display: none !important;
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  color: var(--text-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+}
+
+.leaflet-popup-content {
+  margin: 12px 16px;
+  line-height: 1.4;
+  font-size: 13px;
+}
+
+/* ── Major road labels ──────────────────────────────────────── */
+
+.major-road-label {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: none;
+  border-radius: 999px;
+  color: var(--brand-primary);
+  font: 600 11px/1.2 var(--font-body);
+  letter-spacing: 0.04em;
+  padding: 4px 11px;
+  text-align: center;
+  text-transform: uppercase;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+  white-space: nowrap;
+  transform-origin: 50% 50%;
+  transform: rotate(var(--major-road-angle, 0deg));
+  will-change: transform;
+}
+
+.major-road-label::before {
+  display: none;
+}
+
+/* ── Stop highlight labels ──────────────────────────────────── */
 
 .stop-highlight-icon {
   pointer-events: none;
@@ -898,10 +910,10 @@ body {
 .stop-highlight-callout {
   width: 2px;
   height: 40px;
-  background: rgba(0, 62, 102, 0.85);
+  background: var(--brand-accent);
   margin: 0 auto 6px auto;
   border-radius: 999px;
-  box-shadow: 0 2px 6px rgba(13, 43, 69, 0.24);
+  box-shadow: 0 2px 6px rgba(8, 145, 178, 0.3);
 }
 
 .stop-highlight-label {
@@ -911,18 +923,20 @@ body {
   gap: 3px;
   padding: 8px 18px;
   border-radius: var(--radius-md);
-  background: rgba(0, 56, 94, 0.92);
+  background: var(--transit-blue);
   color: #ffffff;
-  font-size: 18px;
+  font-family: var(--font-display);
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   box-shadow: var(--shadow-medium);
   white-space: nowrap;
 }
 
 .stop-highlight-note {
-  font-size: 14px;
+  font-family: var(--font-body);
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: none;
@@ -931,8 +945,53 @@ body {
 
 .stop-highlight[data-stop="9005"] .stop-highlight-note,
 .stop-highlight[data-stop="9002"] .stop-highlight-note {
-  font-size: 14px;
+  font-size: 13px;
 }
+
+/* Enhanced BATT Stop Styling */
+.stop-highlight[data-stop="9002"],
+.stop-highlight[data-stop="9005"] {
+  z-index: 1000;
+}
+
+.stop-highlight[data-stop="9002"]::before,
+.stop-highlight[data-stop="9005"]::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--brand-accent);
+  opacity: 0;
+  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+  z-index: -1;
+}
+
+.stop-highlight[data-stop="9002"] .stop-highlight-label,
+.stop-highlight[data-stop="9005"] .stop-highlight-label {
+  background: linear-gradient(135deg, var(--transit-blue), var(--transit-blue-dark));
+  border: 2px solid var(--brand-accent);
+  box-shadow: 0 4px 16px rgba(8, 145, 178, 0.3);
+  padding: 8px 16px;
+  border-radius: 12px;
+}
+
+.stop-highlight[data-stop="9002"] .stop-highlight-note,
+.stop-highlight[data-stop="9005"] .stop-highlight-note {
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  margin-top: 4px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Service notice banner ──────────────────────────────────── */
 
 .service-notice {
   position: fixed;
@@ -940,9 +999,10 @@ body {
   left: 0;
   width: 100%;
   padding: 20px 28px;
-  background: linear-gradient(90deg, var(--brand-blue-900), var(--brand-blue-700));
-  border-top: 4px solid var(--brand-blue-100);
+  background: linear-gradient(90deg, var(--transit-blue), var(--transit-blue-dark));
+  border-top: 3px solid var(--brand-accent);
   color: #ffffff;
+  font-family: var(--font-display);
   font-size: 36px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -993,38 +1053,31 @@ body {
 }
 
 @keyframes service-notice-scroll {
-  0% {
-    transform: translateX(0);
-  }
-
-  100% {
-    transform: translateX(calc(-50% - var(--service-notice-gap) / 2));
-  }
+  0% { transform: translateX(0); }
+  100% { transform: translateX(calc(-50% - var(--service-notice-gap) / 2)); }
 }
 
-/* Winter Town Image */
+/* ── Weather widget ─────────────────────────────────────────── */
+
 .town-image-container {
   width: 100%;
   max-width: 300px;
-  aspect-ratio: 16 / 10;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow:
-    0 10px 15px -5px rgba(0, 0, 0, 0.1),
-    0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  border: var(--glass-border);
+  box-shadow: var(--glass-shadow);
   margin-top: 6px;
   pointer-events: auto;
   box-sizing: border-box;
   position: relative;
   flex-shrink: 0;
+  animation: panel-reveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.4s both;
 }
 
 .town-image {
   width: 100%;
-  height: 100%;
+  height: auto;
   display: block;
-  object-fit: cover;
-  object-position: center center;
 }
 
 .weather-overlay {
@@ -1039,10 +1092,10 @@ body {
   justify-content: space-between;
   align-items: flex-start;
   color: #ffffff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
   pointer-events: none;
   box-sizing: border-box;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0) 50%);
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0) 50%);
 }
 
 .weather-header {
@@ -1052,9 +1105,10 @@ body {
 }
 
 .weather-title {
-  font-size: 20px;
+  font-family: var(--font-display);
+  font-size: 22px;
   font-weight: 800;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   margin: 0;
   line-height: 1;
   text-transform: uppercase;
@@ -1062,10 +1116,10 @@ body {
 }
 
 .weather-date {
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  opacity: 0.85;
+  opacity: 0.9;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -1079,65 +1133,56 @@ body {
 }
 
 .weather-temp {
-  font-size: 42px;
+  font-family: var(--font-display);
+  font-size: 44px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.02em;
 }
 
 .weather-condition {
-  font-size: 13px;
-  font-weight: 600;
-  opacity: 0.9;
+  font-size: 16px;
+  font-weight: 700;
+  opacity: 0.95;
   text-transform: capitalize;
   white-space: nowrap;
 }
 
-/* Enhanced BATT Stop Styling */
-.stop-highlight[data-stop="9002"],
-.stop-highlight[data-stop="9005"] {
-  z-index: 1000;
-  /* Ensure it sits above other elements */
+/* ── Debug panel ────────────────────────────────────────────── */
+
+.debug-panel {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  width: min(360px, 42vw);
+  max-height: 45vh;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(8, 19, 31, 0.94);
+  color: #f5f7fa;
+  font: 12px/1.4 "Roboto Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+  z-index: 9999;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
 }
 
-/* Pulsing Ring Effect */
-.stop-highlight[data-stop="9002"]::before,
-.stop-highlight[data-stop="9005"]::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 100%;
-  height: 100%;
-  min-width: 40px;
-  min-height: 40px;
-  border-radius: 50%;
-  border: 2px solid var(--brand-accent);
-  opacity: 0;
-  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
-  z-index: -1;
+.debug-panel[hidden] {
+  display: none;
 }
 
-/* Label Container */
-.stop-highlight[data-stop="9002"] .stop-highlight-label,
-.stop-highlight[data-stop="9005"] .stop-highlight-label {
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
-  border: 2px solid #f59e0b;
-  /* Dark Yellow/Amber Border */
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  padding: 8px 16px;
-  border-radius: 12px;
+.debug-panel__section {
+  margin-bottom: 8px;
 }
 
-/* "YOU ARE HERE" Text */
-.stop-highlight[data-stop="9002"] .stop-highlight-note,
-.stop-highlight[data-stop="9005"] .stop-highlight-note {
-  color: #ffffff;
-  /* White text */
-  font-weight: 800;
+.debug-panel__section:last-child {
+  margin-bottom: 0;
+}
+
+.debug-panel__logs {
   font-size: 11px;
-  letter-spacing: 0.1em;
-  margin-top: 4px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  opacity: 0.85;
+  max-height: 18vh;
+  overflow-y: auto;
 }

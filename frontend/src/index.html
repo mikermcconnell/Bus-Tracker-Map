@@ -13,15 +13,15 @@
 
 <body>
   <header class="map-title">
-    <span class="map-title__main">Barrie Allandale Transit Terminal Routes</span>
-    <div class="map-title__row">
+    <div class="map-title__left">
+      <span class="map-title__main">Barrie Allandale Transit Terminal Routes</span>
       <span class="map-title__sub">Barrie Transit routes only</span>
-      <div id="connection-status" class="live-status-pill status-ok">
-        <div class="live-dot"></div>
-        <span class="live-text">LIVE</span>
-      </div>
     </div>
-    <div class="map-title__info-row">
+    <div id="connection-status" class="live-status-pill status-ok">
+      <div class="live-dot"></div>
+      <span class="live-text">LIVE</span>
+    </div>
+    <div class="map-title__right">
       <span id="current-time" class="current-time"></span>
       <span class="info-separator">•</span>
       <span id="last-updated" class="last-updated">Updated just now</span>
@@ -54,7 +54,6 @@
         </div>
       </div>
     </div>
-  </div>
   </div>
   <div id="service-notice" class="service-notice" role="status" aria-live="polite" hidden>
     <div class="service-notice__track">
