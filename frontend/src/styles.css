@@ -15,8 +15,9 @@
   /* Slate 500 */
   --text-tertiary: #94a3b8;
 
-  --overlay-bg: rgba(255, 255, 255, 0.85);
-  --overlay-border: rgba(255, 255, 255, 0.5);
+  /* TV Display: Solid backgrounds for better readability at distance */
+  --overlay-bg: rgba(255, 255, 255, 0.96);
+  --overlay-border: rgba(0, 0, 0, 0.12);
 
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
@@ -78,7 +79,7 @@ body {
   left: 0;
   inset: 0;
   padding: clamp(16px, 2vw, 36px);
-  padding-bottom: clamp(110px, 11vh, 150px);
+  padding-bottom: clamp(80px, 9vh, 120px);
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -90,14 +91,17 @@ body {
 .map-overlay-column {
   display: flex;
   flex-direction: column;
-  gap: clamp(12px, 2vh, 24px);
+  gap: clamp(10px, 1.5vh, 20px);
   width: min(26vw, 320px);
   min-width: 220px;
   pointer-events: none;
+  max-height: 100%;
 }
 
 .map-overlay-column--right {
   align-items: flex-end;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .map-overlay-column>* {
@@ -145,22 +149,20 @@ body {
   position: relative;
   z-index: 1000;
   width: 100%;
-  max-width: 320px;
+  max-width: 280px;
   background: var(--overlay-bg);
   border-radius: var(--radius-lg);
-  border: 1px solid var(--overlay-border);
+  border: 2px solid var(--overlay-border);
   box-shadow: var(--shadow-lg);
-  padding: 16px 20px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   pointer-events: auto;
 }
 
 .stop-legend-title {
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -170,7 +172,7 @@ body {
 .stop-legend-list {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 6px 12px;
+  gap: 3px 10px;
   margin: 0;
   padding: 0;
 }
@@ -178,36 +180,38 @@ body {
 .stop-legend-list dt,
 .stop-legend-list dd {
   margin: 0;
+  line-height: 1.3;
 }
 
 .stop-legend-list dt {
-  font-size: clamp(14px, 1.6vw, 16px);
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: 0.02em;
 }
 
 .stop-legend-list dd {
-  font-size: clamp(12px, 1.3vw, 15px);
+  font-size: 12px;
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .legend {
   position: relative;
   z-index: 1000;
   width: 100%;
-  max-width: 340px;
+  max-width: 380px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   background: var(--overlay-bg);
-  padding: 16px 20px;
+  padding: 20px 24px;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--overlay-border);
+  border: 2px solid var(--overlay-border);
   box-shadow: var(--shadow-lg);
   line-height: 1.4;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   overflow: visible;
   pointer-events: auto;
   box-sizing: border-box;
@@ -217,26 +221,24 @@ body {
 .mini-map {
   position: relative;
   width: 100%;
-  max-width: min(28vw, 340px);
-  min-width: 220px;
-  height: clamp(220px, 28vh, 360px);
+  max-width: min(28vw, 380px);
+  min-width: 240px;
+  height: clamp(240px, 30vh, 400px);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   flex: 1 0 auto;
-  padding: 12px;
+  padding: 14px;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--overlay-border);
+  border: 2px solid var(--overlay-border);
   background: var(--overlay-bg);
   box-shadow: var(--shadow-lg);
   z-index: 1010;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   pointer-events: none;
 }
 
 .mini-map__title {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -303,7 +305,7 @@ body {
 }
 
 .legend-section-title {
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -355,21 +357,20 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 20px;
+  padding: 6px 24px;
   border-radius: 999px;
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 700;
   letter-spacing: 0.05em;
   color: var(--route-text-color, #1f1f1f);
-  background: var(--route-label-bg, rgba(255, 255, 255, 0.92));
-  border: 2px solid var(--route-color, rgba(0, 78, 128, 0.6));
+  background: var(--route-label-bg, rgba(255, 255, 255, 0.96));
+  border: 3px solid var(--route-color, rgba(0, 78, 128, 0.7));
   box-shadow: var(--shadow-soft);
   transform: translate(-50%, -50%) rotate(var(--route-bearing, 0deg));
   transform-origin: center center;
   text-transform: uppercase;
   white-space: nowrap;
   pointer-events: none;
-  backdrop-filter: blur(2px);
 }
 
 .route-label span {
@@ -390,12 +391,17 @@ body {
 .route-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 10px;
+  padding: 8px 14px;
   border-radius: var(--radius-md);
   transition: background 0.15s ease, opacity 0.15s ease;
   width: 100%;
   min-width: 0;
+}
+
+.route-item--display {
+  background: rgba(0, 0, 0, 0.04);
+  pointer-events: none;
 }
 
 .route-item:hover {
@@ -407,15 +413,17 @@ body {
 }
 
 .swatch {
-  width: 15px;
-  height: 15px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  border: 2px solid #ffffff;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06);
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
 }
 
 .route-name {
   flex: 1;
+  font-size: clamp(16px, 1.8vw, 20px);
   font-weight: 600;
   letter-spacing: 0.015em;
 }
@@ -448,15 +456,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--label-size, 18px);
+  font-size: var(--label-size, 22px);
   font-weight: 700;
   letter-spacing: -0.02em;
-  border: var(--bubble-border-width, 3px) solid rgba(255, 255, 255, 0.96);
+  border: var(--bubble-border-width, 4px) solid rgba(255, 255, 255, 0.98);
   box-shadow: var(--bubble-shadow, var(--shadow-medium));
   text-transform: uppercase;
   white-space: nowrap;
   pointer-events: none;
-  backdrop-filter: blur(2px);
 }
 
 .vehicle-bubble::after {
@@ -615,38 +622,32 @@ body {
   display: none;
 }
 
+/* Hide zoom controls for TV display */
 .leaflet-control-zoom {
-  border: none;
-  border-radius: var(--radius-lg);
-  overflow: visible;
-  box-shadow: var(--shadow-soft);
+  display: none !important;
 }
 
-.leaflet-control-zoom a {
-  background: var(--overlay-surface);
-  color: var(--brand-blue-900);
-  border: none;
-  width: 44px;
-  height: 44px;
-  line-height: 44px;
-  font-size: 20px;
-  transition: background 0.2s ease;
+/* Hide Leaflet logo/info icon */
+.leaflet-control-attribution a[href*="leaflet"] {
+  display: none !important;
 }
 
-.leaflet-control-zoom a:first-child {
-  border-top-left-radius: var(--radius-lg);
-  border-top-right-radius: var(--radius-lg);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+.leaflet-control-attribution svg,
+.leaflet-control-attribution img {
+  display: none !important;
 }
 
-.leaflet-control-zoom a:last-child {
-  border-bottom-left-radius: var(--radius-lg);
-  border-bottom-right-radius: var(--radius-lg);
+/* Make Leaflet attribution subtle */
+.leaflet-control-attribution {
+  font-size: 9px !important;
+  background: rgba(255, 255, 255, 0.5) !important;
+  padding: 2px 6px !important;
+  opacity: 0.5;
 }
 
-.leaflet-control-zoom a:hover {
-  background: var(--brand-blue-050);
-  color: var(--brand-blue-900);
+/* Hide any Leaflet bottom-left controls */
+.leaflet-bottom.leaflet-left {
+  display: none !important;
 }
 
 .leaflet-popup-content-wrapper,
@@ -744,7 +745,31 @@ body {
   text-transform: uppercase;
   opacity: 0.85;
   margin: 0;
-  /* Reset margin */
+}
+
+.map-title__info-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 20px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.current-time {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.info-separator {
+  opacity: 0.5;
+}
+
+.last-updated {
+  font-size: 18px;
+  opacity: 0.85;
 }
 
 .live-status-pill {
@@ -883,12 +908,12 @@ body {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 6px 14px;
+  gap: 3px;
+  padding: 8px 18px;
   border-radius: var(--radius-md);
-  background: rgba(0, 56, 94, 0.82);
+  background: rgba(0, 56, 94, 0.92);
   color: #ffffff;
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -897,11 +922,11 @@ body {
 }
 
 .stop-highlight-note {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: none;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .stop-highlight[data-stop="9005"] .stop-highlight-note,
@@ -914,11 +939,11 @@ body {
   bottom: 0;
   left: 0;
   width: 100%;
-  padding: 16px 24px;
+  padding: 20px 28px;
   background: linear-gradient(90deg, var(--brand-blue-900), var(--brand-blue-700));
   border-top: 4px solid var(--brand-blue-100);
   color: #ffffff;
-  font-size: 32px;
+  font-size: 36px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: none;
@@ -928,7 +953,16 @@ body {
   pointer-events: none;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
+}
+
+.service-notice[hidden] {
+  display: none !important;
+}
+
+.service-notice:empty,
+.service-notice:has(.service-notice__text:empty) {
+  display: none !important;
 }
 
 .service-notice::before {
@@ -943,12 +977,12 @@ body {
 }
 
 .service-notice__track {
-  --service-notice-gap: 64px;
+  --service-notice-gap: 80px;
   display: inline-flex;
   width: max-content;
   gap: var(--service-notice-gap);
   align-items: center;
-  animation: service-notice-scroll 20s linear infinite;
+  animation: service-notice-scroll 30s linear infinite;
   will-change: transform;
   flex: 1;
 }
@@ -971,23 +1005,26 @@ body {
 /* Winter Town Image */
 .town-image-container {
   width: 100%;
-  max-width: 340px;
-  border-radius: 24px;
+  max-width: 300px;
+  aspect-ratio: 16 / 10;
+  border-radius: 12px;
   overflow: hidden;
   box-shadow:
-    0 20px 25px -5px rgba(0, 0, 0, 0.1),
-    0 8px 10px -6px rgba(0, 0, 0, 0.1);
-  margin-top: 12px;
+    0 10px 15px -5px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  margin-top: 6px;
   pointer-events: auto;
   box-sizing: border-box;
   position: relative;
+  flex-shrink: 0;
 }
 
 .town-image {
   width: 100%;
-  height: auto;
+  height: 100%;
   display: block;
   object-fit: cover;
+  object-position: center center;
 }
 
 .weather-overlay {
@@ -996,28 +1033,28 @@ body {
   left: 0;
   width: 100%;
   height: 100%;
-  padding: 24px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: row;
   justify-content: space-between;
   align-items: flex-start;
   color: #ffffff;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
   pointer-events: none;
   box-sizing: border-box;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0) 40%);
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0) 50%);
 }
 
 .weather-header {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .weather-title {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 800;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   margin: 0;
   line-height: 1;
   text-transform: uppercase;
@@ -1025,11 +1062,12 @@ body {
 }
 
 .weather-date {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   opacity: 0.85;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .weather-current {
@@ -1041,17 +1079,18 @@ body {
 }
 
 .weather-temp {
-  font-size: 48px;
+  font-size: 42px;
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.02em;
 }
 
 .weather-condition {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   opacity: 0.9;
   text-transform: capitalize;
+  white-space: nowrap;
 }
 
 /* Enhanced BATT Stop Styling */

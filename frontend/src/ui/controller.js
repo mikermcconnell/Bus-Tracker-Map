@@ -24,6 +24,9 @@ export function createUiController() {
   let stopLegendEl = null;
   let serviceNoticeEl = null;
   let serviceNoticeTimer = null;
+  let currentTimeEl = null;
+  let lastUpdatedEl = null;
+  let lastVehicleUpdate = null;
   const bannerMessages = Object.create(null);
 
   function init() {
@@ -31,6 +34,8 @@ export function createUiController() {
     legendEl = document.getElementById('legend');
     stopLegendEl = document.getElementById('stop-legend');
     serviceNoticeEl = document.getElementById('service-notice');
+    currentTimeEl = document.getElementById('current-time');
+    lastUpdatedEl = document.getElementById('last-updated');
 
     if (bannerEl) {
       bannerDefaultText = bannerEl.textContent || 'Live data unavailable, retrying';
@@ -39,7 +44,48 @@ export function createUiController() {
 
     setupServiceNotice();
     initWeather();
+    initClock();
   }
+
+  function initClock() {
+    if (!currentTimeEl) return;
+
+    const updateClock = () => {
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      const displayHours = hours % 12 || 12;
+      currentTimeEl.textContent = `${displayHours}:${minutes} ${ampm}`;
+    };
+
+    updateClock();
+    setInterval(updateClock, 1000);
+  }
+
+  function updateLastUpdated() {
+    lastVehicleUpdate = Date.now();
+    refreshLastUpdatedDisplay();
+  }
+
+  function refreshLastUpdatedDisplay() {
+    if (!lastUpdatedEl || !lastVehicleUpdate) return;
+
+    const elapsed = Date.now() - lastVehicleUpdate;
+    const seconds = Math.floor(elapsed / 1000);
+
+    if (seconds < 10) {
+      lastUpdatedEl.textContent = 'Updated just now';
+    } else if (seconds < 60) {
+      lastUpdatedEl.textContent = `Updated ${seconds}s ago`;
+    } else {
+      const minutes = Math.floor(seconds / 60);
+      lastUpdatedEl.textContent = `Updated ${minutes}m ago`;
+    }
+  }
+
+  // Refresh the "Updated X ago" display every 5 seconds
+  setInterval(refreshLastUpdatedDisplay, 5000);
 
   function initWeather() {
     const dateEl = document.getElementById('weather-date');
@@ -213,68 +259,13 @@ export function createUiController() {
 
     const routesTitle = document.createElement('div');
     routesTitle.className = 'legend-section-title';
-    routesTitle.textContent = 'Routes';
+    routesTitle.textContent = 'BATT Routes';
     routesSection.appendChild(routesTitle);
-
-    const actions = document.createElement('div');
-    actions.className = 'legend-actions';
-    routesSection.appendChild(actions);
-
-    const showAllBtn = document.createElement('button');
-    showAllBtn.type = 'button';
-    showAllBtn.id = 'btnShowAllRoutes';
-    showAllBtn.textContent = 'Show All';
-    actions.appendChild(showAllBtn);
-
-    const hideAllBtn = document.createElement('button');
-    hideAllBtn.type = 'button';
-    hideAllBtn.id = 'btnHideAllRoutes';
-    hideAllBtn.textContent = 'Hide All';
-    actions.appendChild(hideAllBtn);
 
     const routeList = document.createElement('div');
     routeList.className = 'route-list';
     routeList.id = 'routeList';
     routesSection.appendChild(routeList);
-
-    routeList.addEventListener('change', (event) => {
-      const target = event.target;
-      if (target && target.matches('input[type="checkbox"][data-route]')) {
-        const routeId = target.getAttribute('data-route');
-        context.setRouteVisibility(routeId, target.checked);
-        updateRouteLegendState(context);
-      }
-    });
-
-    showAllBtn.addEventListener('click', () => {
-      context.getRouteIds().forEach((id) => context.setRouteVisibility(id, true));
-      updateRouteLegendState(context);
-    });
-
-    hideAllBtn.addEventListener('click', () => {
-      context.getRouteIds().forEach((id) => context.setRouteVisibility(id, false));
-      updateRouteLegendState(context);
-    });
-
-    const vehiclesLabel = document.createElement('label');
-    vehiclesLabel.className = 'legend-check';
-    const vehiclesCheckbox = document.createElement('input');
-    vehiclesCheckbox.type = 'checkbox';
-    vehiclesCheckbox.id = 'chkVehicles';
-    vehiclesCheckbox.checked = context.isVehiclesVisible();
-    vehiclesLabel.appendChild(vehiclesCheckbox);
-    const vehiclesText = document.createElement('span');
-    vehiclesText.textContent = 'Vehicles';
-    vehiclesLabel.appendChild(vehiclesText);
-    legendEl.appendChild(vehiclesLabel);
-
-    vehiclesCheckbox.addEventListener('change', (event) => {
-      if (event.target.checked) {
-        context.showVehicles();
-      } else {
-        context.hideVehicles();
-      }
-    });
 
     renderRouteLegend(context);
     renderStopLegend(context);
@@ -287,36 +278,32 @@ export function createUiController() {
 
     routeList.innerHTML = '';
     const routeIds = context.getRouteIds();
+    const routeLayers = context.getRouteLayers();
 
     routeIds.forEach((routeId) => {
-      const entry = context.getRouteLayers()[routeId];
+      const entry = routeLayers[routeId];
       if (!entry) return;
 
-      const meta = context.getRouteMeta(routeId);
-      const label = document.createElement('label');
-      label.className = 'route-item';
-      label.title = meta.longName ? `${meta.displayName} - ${meta.longName}` : meta.displayName;
+      // Only show visible/active routes
+      if (entry.visible === false) return;
 
-      const input = document.createElement('input');
-      input.type = 'checkbox';
-      input.checked = entry.visible !== false;
-      input.setAttribute('data-route', routeId);
-      label.appendChild(input);
+      const meta = context.getRouteMeta(routeId);
+      const item = document.createElement('div');
+      item.className = 'route-item route-item--display';
+      item.title = meta.longName ? `${meta.displayName} - ${meta.longName}` : meta.displayName;
 
       const swatch = document.createElement('span');
       swatch.className = 'swatch';
       swatch.style.background = meta.color;
-      label.appendChild(swatch);
+      item.appendChild(swatch);
 
       const nameSpan = document.createElement('span');
       nameSpan.className = 'route-name';
       nameSpan.textContent = meta.displayName;
-      label.appendChild(nameSpan);
+      item.appendChild(nameSpan);
 
-      routeList.appendChild(label);
+      routeList.appendChild(item);
     });
-
-    updateRouteLegendState(context);
   }
 
   function renderStopLegend(context) {
@@ -355,25 +342,8 @@ export function createUiController() {
   }
 
   function updateRouteLegendState(context) {
-    if (!legendEl) return;
-    const routeList = legendEl.querySelector('#routeList');
-    if (!routeList) return;
-    const routeLayers = context.getRouteLayers();
-
-    routeList.querySelectorAll('label.route-item').forEach((label) => {
-      const input = label.querySelector('input[type="checkbox"][data-route]');
-      if (!input) return;
-      const routeId = input.getAttribute('data-route');
-      const entry = routeLayers[routeId];
-      if (!entry) return;
-      if (entry.visible !== false) {
-        label.classList.remove('route-hidden');
-        input.checked = true;
-      } else {
-        label.classList.add('route-hidden');
-        input.checked = false;
-      }
-    });
+    // Re-render the legend to reflect current visibility state
+    renderRouteLegend(context);
   }
 
   return {
@@ -386,6 +356,7 @@ export function createUiController() {
     renderRouteLegend,
     renderStopLegend,
     updateRouteLegendState,
+    updateLastUpdated,
     setConnectionStatus(status) {
       const el = document.getElementById('connection-status');
       if (!el) return;
@@ -404,7 +375,5 @@ export function createUiController() {
         if (text) text.textContent = 'LIVE';
       }
     },
-
-
   };
 }

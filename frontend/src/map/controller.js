@@ -186,6 +186,7 @@ export function createMapController({ dataClient, ui }) {
   var deadReckonLoopId = null;
   var DEAD_RECKON_MIN_SAMPLE_MS = 400;
   var DEAD_RECKON_MAX_DURATION_FACTOR = 1.6;
+  var ANIMATION_DURATION_FACTOR = 2.0;
 
   function updateDebugState(key, value) {
     if (typeof window === 'undefined') return;
@@ -2751,7 +2752,7 @@ export function createMapController({ dataClient, ui }) {
             smoothFactor: 1.5,
             filter: onlyLinework,
             style: function () {
-              return { color: '#ffffff', weight: 11, opacity: 0.85, lineJoin: 'round', lineCap: 'round' };
+              return { color: '#ffffff', weight: 14, opacity: 0.9, lineJoin: 'round', lineCap: 'round' };
             }
           });
 
@@ -2761,7 +2762,7 @@ export function createMapController({ dataClient, ui }) {
             smoothFactor: 1.5,
             filter: onlyLinework,
             style: function () {
-              return { color: meta.color, weight: 6.4, opacity: 0.95, lineJoin: 'round', lineCap: 'round' };
+              return { color: meta.color, weight: 9, opacity: 0.95, lineJoin: 'round', lineCap: 'round' };
             }
           });
 
@@ -2966,7 +2967,7 @@ export function createMapController({ dataClient, ui }) {
             markerData.marker,
             [markerData.lastLat, markerData.lastLon],
             [clusterLat, clusterLon],
-            pollMs,
+            pollMs * ANIMATION_DURATION_FACTOR,
             function () {
               refreshPredictionAnchor(markerData);
             }
@@ -3119,6 +3120,9 @@ export function createMapController({ dataClient, ui }) {
             lastFetchTime = Date.now();
             ui.setConnectionStatus('ok');
             updateVehicles(data.vehicles);
+            if (typeof ui.updateLastUpdated === 'function') {
+              ui.updateLastUpdated();
+            }
           }
         })
         .catch(function (err) {
