@@ -269,13 +269,20 @@ function buildHtml(report) {
   const tableRows = report.rows
     .map((row, i) => {
       const bg = i % 2 === 0 ? '#FFFFFF' : '#F2F2F2';
+      const isMonitoring = row.missing > 0 && !row.confirmed;
       const missingStyle = row.missing > 0
-        ? 'color:#C00000;font-weight:bold'
+        ? (isMonitoring ? 'color:#B45309;font-weight:bold' : 'color:#C00000;font-weight:bold')
         : 'color:#333333';
-      const durationText = row.duration || '—';
-      const durationStyle = row.duration && row.duration !== '0 min'
-        ? 'color:#C00000;font-weight:bold'
-        : 'color:#333333';
+      let durationText = row.duration || '—';
+      let durationStyle = 'color:#333333';
+      if (row.duration && row.duration !== '0 min') {
+        if (isMonitoring) {
+          durationText = `${row.duration} <span style="font-size:11px;font-weight:normal">(monitoring)</span>`;
+          durationStyle = 'color:#B45309;font-weight:bold';
+        } else {
+          durationStyle = 'color:#C00000;font-weight:bold';
+        }
+      }
       return `
       <tr style="background:${bg}">
         <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center">${row.routeId}</td>
@@ -329,7 +336,7 @@ function buildHtml(report) {
             <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center">${report.totalExpected}</td>
             <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center">${report.totalTracking}</td>
             <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center;color:#C00000">${report.totalMissing}</td>
-            <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center"></td>
+            <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center">${report.totalMonitoring > 0 ? `<span style="font-size:11px;color:#B45309;font-weight:normal">+${report.totalMonitoring} monitoring</span>` : ''}</td>
           </tr>
         </table>
       </td>
@@ -371,15 +378,18 @@ function buildPlainText(report) {
   ];
 
   for (const row of report.rows) {
-    const dur = row.duration || '—';
+    const isMonitoring = row.missing > 0 && !row.confirmed;
+    let dur = row.duration || '—';
+    if (isMonitoring && row.duration) dur = `${row.duration} (monitoring)`;
     lines.push(
       `${String(row.routeId).padEnd(6)} | ${String(row.expected).padStart(8)} | ${String(row.tracking).padStart(8)} | ${String(row.missing).padStart(7)} | ${dur}`
     );
   }
 
   lines.push('-------+----------+----------+---------+---------');
+  const monitoringNote = report.totalMonitoring > 0 ? ` (+${report.totalMonitoring} monitoring)` : '';
   lines.push(
-    `TOTAL  | ${String(report.totalExpected).padStart(8)} | ${String(report.totalTracking).padStart(8)} | ${String(report.totalMissing).padStart(7)} |`
+    `TOTAL  | ${String(report.totalExpected).padStart(8)} | ${String(report.totalTracking).padStart(8)} | ${String(report.totalMissing).padStart(7)} |${monitoringNote}`
   );
   lines.push('');
   lines.push('Note: Some variance is normal (vehicles between trips, operator changes).');

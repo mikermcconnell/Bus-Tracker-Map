@@ -234,7 +234,8 @@ function formatDuration(ms) {
 
     // 6. Compare expected vs actual per route
     const rows = [];
-    let totalMissing = 0;
+    let totalMissing = 0;       // Only confirmed (>= ALERT_AFTER_MIN)
+    let totalMonitoring = 0;    // Under threshold, still watching
 
     const allRoutes = new Set([...expected.byRoute.keys(), ...trackingByRoute.keys()]);
     const sortedRoutes = [...allRoutes].sort((a, b) => {
@@ -254,21 +255,27 @@ function formatDuration(ms) {
       const exp = expected.byRoute.get(routeId) || 0;
       const trk = trackingByRoute.get(routeId) || 0;
       const mis = Math.max(0, exp - trk);
-      totalMissing += mis;
 
       let duration = null;
       let durationMs = 0;
+      let confirmed = false;
       if (mis > 0) {
         // Track when this route first went missing
         const firstSeen = prevState[routeId] || nowMs;
         newState[routeId] = firstSeen;
         durationMs = nowMs - firstSeen;
         duration = formatDuration(durationMs);
-        if (durationMs >= alertThresholdMs) anyOverThreshold = true;
+        confirmed = durationMs >= alertThresholdMs;
+        if (confirmed) {
+          anyOverThreshold = true;
+          totalMissing += mis;
+        } else {
+          totalMonitoring += mis;
+        }
       }
 
       if (exp > 0) {
-        rows.push({ routeId, expected: exp, tracking: trk, missing: mis, duration });
+        rows.push({ routeId, expected: exp, tracking: trk, missing: mis, duration, confirmed });
       }
     }
 
@@ -276,14 +283,14 @@ function formatDuration(ms) {
     saveState(newState);
 
     // 7. Decide whether to alert
-    if (totalMissing === 0) {
+    if (totalMissing === 0 && totalMonitoring === 0) {
       console.log('[monitor] All expected buses are tracking. No alert needed.');
       await saveSuccessHeartbeat(emailConfig);
       process.exit(0);
     }
 
-    if (!anyOverThreshold) {
-      console.log('[monitor] Missing: %d buses, but none over %d min threshold yet. No alert.', totalMissing, ALERT_AFTER_MIN);
+    if (totalMissing === 0) {
+      console.log('[monitor] %d buses monitoring (under %d min threshold). No alert.', totalMonitoring, ALERT_AFTER_MIN);
       await saveSuccessHeartbeat(emailConfig);
       process.exit(0);
     }
@@ -296,6 +303,7 @@ function formatDuration(ms) {
       totalExpected: expected.totalExpected,
       totalTracking,
       totalMissing,
+      totalMonitoring,
       checkedAt: now,
     };
 
