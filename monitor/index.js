@@ -32,6 +32,12 @@ const CACHE_DIR = path.join(__dirname, 'cache');
 const STATE_FILE = path.join(CACHE_DIR, 'state.json');
 const HEARTBEAT_FILE = path.join(CACHE_DIR, 'heartbeat.json');
 
+function writeJsonFile(filePath, data) {
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+}
+
 function loadState() {
   try {
     if (fs.existsSync(STATE_FILE)) {
@@ -44,8 +50,7 @@ function loadState() {
 }
 
 function saveState(state) {
-  if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  writeJsonFile(STATE_FILE, state);
 }
 
 function loadHeartbeat() {
@@ -68,8 +73,7 @@ function saveHeartbeat(success) {
     alertedDown: prev.alertedDown || false,
   };
   if (success) next.lastSuccessAt = nowIso;
-  if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
-  fs.writeFileSync(HEARTBEAT_FILE, JSON.stringify(next, null, 2));
+  writeJsonFile(HEARTBEAT_FILE, next);
 }
 
 async function pingHeartbeat() {
@@ -100,8 +104,7 @@ async function saveSuccessHeartbeat(emailConfig) {
   }
   const nowIso = new Date().toISOString();
   const next = { lastRunAt: nowIso, lastSuccessAt: nowIso, alertedDown: false };
-  if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
-  fs.writeFileSync(HEARTBEAT_FILE, JSON.stringify(next, null, 2));
+  writeJsonFile(HEARTBEAT_FILE, next);
   await pingHeartbeat();
 }
 
@@ -110,37 +113,149 @@ function formatDuration(ms) {
   return `${totalMin} min`;
 }
 
-(async function main() {
+function normalizeMissingSinceEntry(entry) {
+  if (Array.isArray(entry)) {
+    return entry
+      .filter((value) => value !== null && value !== undefined && value !== '')
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value))
+      .sort((a, b) => a - b);
+  }
+
+  if (Number.isFinite(Number(entry))) {
+    return [Number(entry)];
+  }
+
+  if (entry && typeof entry === 'object' && Array.isArray(entry.missingSince)) {
+    return entry.missingSince
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value))
+      .sort((a, b) => a - b);
+  }
+
+  return [];
+}
+
+function sortRouteIds(routeIds) {
+  return [...routeIds].sort((a, b) => {
+    const numA = parseInt(a, 10);
+    const numB = parseInt(b, 10);
+    if (!isNaN(numA) && !isNaN(numB)) {
+      if (numA !== numB) return numA - numB;
+      return a.localeCompare(b);
+    }
+    return a.localeCompare(b);
+  });
+}
+
+function summarizeMissingDuration(durationsMs, confirmedMissing, monitoringMissing) {
+  if (!durationsMs.length) return null;
+
+  const oldest = formatDuration(Math.max(...durationsMs));
+  if (confirmedMissing === 0) return oldest;
+  if (monitoringMissing === 0) return oldest;
+  return `${oldest} oldest (+${monitoringMissing} monitoring)`;
+}
+
+function buildRouteReport(expectedByRoute, trackingByRoute, prevState, nowMs, alertThresholdMs) {
+  const rows = [];
+  const newState = {};
+  let totalMissing = 0;
+  let totalMonitoring = 0;
+
+  const allRoutes = new Set([...expectedByRoute.keys(), ...trackingByRoute.keys()]);
+  const sortedRoutes = sortRouteIds(allRoutes);
+
+  for (const routeId of sortedRoutes) {
+    const exp = expectedByRoute.get(routeId) || 0;
+    const trk = trackingByRoute.get(routeId) || 0;
+    const mis = Math.max(0, exp - trk);
+
+    let duration = null;
+    let confirmed = false;
+    let confirmedMissing = 0;
+    let monitoringMissing = 0;
+
+    if (mis > 0) {
+      const priorMissingSince = normalizeMissingSinceEntry(prevState[routeId]);
+      const currentMissingSince = [];
+      for (let i = 0; i < mis; i++) {
+        currentMissingSince.push(priorMissingSince[i] || nowMs);
+      }
+
+      const durationsMs = currentMissingSince.map((startedAt) => nowMs - startedAt);
+      confirmedMissing = durationsMs.filter((value) => value >= alertThresholdMs).length;
+      monitoringMissing = mis - confirmedMissing;
+      confirmed = confirmedMissing > 0;
+      duration = summarizeMissingDuration(durationsMs, confirmedMissing, monitoringMissing);
+
+      newState[routeId] = currentMissingSince;
+      totalMissing += confirmedMissing;
+      totalMonitoring += monitoringMissing;
+    }
+
+    if (exp > 0) {
+      rows.push({
+        routeId,
+        expected: exp,
+        tracking: trk,
+        missing: mis,
+        duration,
+        confirmed,
+        confirmedMissing,
+        monitoringMissing,
+      });
+    }
+  }
+
+  return { rows, newState, totalMissing, totalMonitoring };
+}
+
+function getWatchdogAlertDetails(heartbeat, now, maxAgeMin) {
+  if (!heartbeat || !heartbeat.lastSuccessAt || heartbeat.alertedDown) return null;
+
+  const lastSuccessAt = new Date(heartbeat.lastSuccessAt);
+  if (Number.isNaN(lastSuccessAt.getTime())) return null;
+
+  const lastSuccessAgeMs = now.getTime() - lastSuccessAt.getTime();
+  const maxAgeMs = maxAgeMin * 60 * 1000;
+  if (lastSuccessAgeMs <= maxAgeMs) return null;
+
+  return {
+    lastSuccessAt,
+    lastSuccessAgeMs,
+    ageMinutes: Math.round(lastSuccessAgeMs / 60000),
+  };
+}
+
+async function main() {
   const now = new Date();
   const timeStr = now.toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour12: false });
   console.log(`[monitor] Starting check at ${timeStr}`);
 
   // Watchdog: check if previous runs have been failing
   const heartbeat = loadHeartbeat();
-  if (heartbeat.lastSuccessAt) {
-    const lastSuccessAge = now.getTime() - new Date(heartbeat.lastSuccessAt).getTime();
-    const maxAgeMs = WATCHDOG_MAX_AGE_MIN * 60 * 1000;
-    if (lastSuccessAge > maxAgeMs && !heartbeat.alertedDown) {
-      console.warn('[monitor] Watchdog: last success was %d min ago (threshold: %d min). Sending DOWN alert.',
-        Math.round(lastSuccessAge / 60000), WATCHDOG_MAX_AGE_MIN);
+  const watchdogAlert = getWatchdogAlertDetails(heartbeat, now, WATCHDOG_MAX_AGE_MIN);
+  if (watchdogAlert) {
+    console.warn('[monitor] Watchdog: last success was %d min ago (threshold: %d min). Sending DOWN alert.',
+      watchdogAlert.ageMinutes, WATCHDOG_MAX_AGE_MIN);
+    try {
+      const watchdogEmailConfig = {
+        smtpHost: SMTP_HOST, smtpPort: SMTP_PORT, smtpUser: SMTP_USER, smtpPass: SMTP_PASS,
+        recipient: ALERT_RECIPIENT, smtpForceIpv4: SMTP_FORCE_IPV4,
+        resendApiKey: RESEND_API_KEY, resendFromEmail: RESEND_FROM_EMAIL,
+      };
+      await sendSystemAlert(watchdogEmailConfig, {
+        kind: 'down',
+        checkedAt: now,
+        lastSuccessAt: watchdogAlert.lastSuccessAt,
+        maxAgeMin: WATCHDOG_MAX_AGE_MIN,
+        details: `No successful monitor run in ${watchdogAlert.ageMinutes} minutes.`,
+      });
       heartbeat.alertedDown = true;
-      fs.writeFileSync(HEARTBEAT_FILE, JSON.stringify(heartbeat, null, 2));
-      try {
-        const watchdogEmailConfig = {
-          smtpHost: SMTP_HOST, smtpPort: SMTP_PORT, smtpUser: SMTP_USER, smtpPass: SMTP_PASS,
-          recipient: ALERT_RECIPIENT, smtpForceIpv4: SMTP_FORCE_IPV4,
-          resendApiKey: RESEND_API_KEY, resendFromEmail: RESEND_FROM_EMAIL,
-        };
-        await sendSystemAlert(watchdogEmailConfig, {
-          kind: 'down',
-          checkedAt: now,
-          lastSuccessAt: new Date(heartbeat.lastSuccessAt),
-          maxAgeMin: WATCHDOG_MAX_AGE_MIN,
-          details: `No successful monitor run in ${Math.round(lastSuccessAge / 60000)} minutes.`,
-        });
-      } catch (err) {
-        console.error('[monitor] Watchdog DOWN email failed:', err.message || err);
-      }
+      writeJsonFile(HEARTBEAT_FILE, heartbeat);
+    } catch (err) {
+      console.error('[monitor] Watchdog DOWN email failed:', err.message || err);
     }
   }
 
@@ -229,55 +344,17 @@ function formatDuration(ms) {
 
     // 5. Load persistent state for duration tracking
     const prevState = loadState();
-    const newState = {};
     const nowMs = now.getTime();
 
     // 6. Compare expected vs actual per route
-    const rows = [];
-    let totalMissing = 0;       // Only confirmed (>= ALERT_AFTER_MIN)
-    let totalMonitoring = 0;    // Under threshold, still watching
-
-    const allRoutes = new Set([...expected.byRoute.keys(), ...trackingByRoute.keys()]);
-    const sortedRoutes = [...allRoutes].sort((a, b) => {
-      const numA = parseInt(a, 10);
-      const numB = parseInt(b, 10);
-      if (!isNaN(numA) && !isNaN(numB)) {
-        if (numA !== numB) return numA - numB;
-        return a.localeCompare(b);
-      }
-      return a.localeCompare(b);
-    });
-
     const alertThresholdMs = ALERT_AFTER_MIN * 60 * 1000;
-    let anyOverThreshold = false;
-
-    for (const routeId of sortedRoutes) {
-      const exp = expected.byRoute.get(routeId) || 0;
-      const trk = trackingByRoute.get(routeId) || 0;
-      const mis = Math.max(0, exp - trk);
-
-      let duration = null;
-      let durationMs = 0;
-      let confirmed = false;
-      if (mis > 0) {
-        // Track when this route first went missing
-        const firstSeen = prevState[routeId] || nowMs;
-        newState[routeId] = firstSeen;
-        durationMs = nowMs - firstSeen;
-        duration = formatDuration(durationMs);
-        confirmed = durationMs >= alertThresholdMs;
-        if (confirmed) {
-          anyOverThreshold = true;
-          totalMissing += mis;
-        } else {
-          totalMonitoring += mis;
-        }
-      }
-
-      if (exp > 0) {
-        rows.push({ routeId, expected: exp, tracking: trk, missing: mis, duration, confirmed });
-      }
-    }
+    const { rows, newState, totalMissing, totalMonitoring } = buildRouteReport(
+      expected.byRoute,
+      trackingByRoute,
+      prevState,
+      nowMs,
+      alertThresholdMs
+    );
 
     // Save state (only routes currently missing are kept)
     saveState(newState);
@@ -320,4 +397,22 @@ function formatDuration(ms) {
     await pingHeartbeat();
     process.exit(1);
   }
-})();
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  main,
+  loadState,
+  saveState,
+  loadHeartbeat,
+  saveHeartbeat,
+  formatDuration,
+  normalizeMissingSinceEntry,
+  sortRouteIds,
+  summarizeMissingDuration,
+  buildRouteReport,
+  getWatchdogAlertDetails,
+};

@@ -133,14 +133,24 @@ function getTripTimeSpans(zip, serviceIds) {
     const arrival = parseGtfsTime(row.arrival_time);
     const departure = parseGtfsTime(row.departure_time);
     if (arrival === null && departure === null) continue;
-
-    const timeSecs = arrival !== null ? arrival : departure;
     const existing = tripTimes.get(row.trip_id);
     if (!existing) {
-      tripTimes.set(row.trip_id, { minSecs: timeSecs, maxSecs: timeSecs });
+      const initialMin = arrival !== null && departure !== null
+        ? Math.min(arrival, departure)
+        : (arrival !== null ? arrival : departure);
+      const initialMax = arrival !== null && departure !== null
+        ? Math.max(arrival, departure)
+        : (arrival !== null ? arrival : departure);
+      tripTimes.set(row.trip_id, { minSecs: initialMin, maxSecs: initialMax });
     } else {
-      existing.minSecs = Math.min(existing.minSecs, timeSecs);
-      existing.maxSecs = Math.max(existing.maxSecs, timeSecs);
+      if (arrival !== null) {
+        existing.minSecs = Math.min(existing.minSecs, arrival);
+        existing.maxSecs = Math.max(existing.maxSecs, arrival);
+      }
+      if (departure !== null) {
+        existing.minSecs = Math.min(existing.minSecs, departure);
+        existing.maxSecs = Math.max(existing.maxSecs, departure);
+      }
     }
   }
 

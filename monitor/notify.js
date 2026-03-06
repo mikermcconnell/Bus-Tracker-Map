@@ -269,10 +269,19 @@ function buildHtml(report) {
   const tableRows = report.rows
     .map((row, i) => {
       const bg = i % 2 === 0 ? '#FFFFFF' : '#F2F2F2';
-      const isMonitoring = row.missing > 0 && !row.confirmed;
+      const confirmedMissing = Number.isFinite(Number(row.confirmedMissing))
+        ? Number(row.confirmedMissing)
+        : (row.confirmed ? row.missing : 0);
+      const monitoringMissing = Number.isFinite(Number(row.monitoringMissing))
+        ? Number(row.monitoringMissing)
+        : Math.max(0, row.missing - confirmedMissing);
+      const isMonitoring = row.missing > 0 && confirmedMissing === 0;
       const missingStyle = row.missing > 0
         ? (isMonitoring ? 'color:#B45309;font-weight:bold' : 'color:#C00000;font-weight:bold')
         : 'color:#333333';
+      const missingText = monitoringMissing > 0 && confirmedMissing > 0
+        ? `${row.missing} <span style="font-size:11px;font-weight:normal">(${confirmedMissing} confirmed, ${monitoringMissing} monitoring)</span>`
+        : String(row.missing);
       let durationText = row.duration || '—';
       let durationStyle = 'color:#333333';
       if (row.duration && row.duration !== '0 min') {
@@ -288,7 +297,7 @@ function buildHtml(report) {
         <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center">${row.routeId}</td>
         <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center">${row.expected}</td>
         <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center">${row.tracking}</td>
-        <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center;${missingStyle}">${row.missing}</td>
+        <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center;${missingStyle}">${missingText}</td>
         <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center;${durationStyle}">${durationText}</td>
       </tr>`;
     })
@@ -378,11 +387,20 @@ function buildPlainText(report) {
   ];
 
   for (const row of report.rows) {
-    const isMonitoring = row.missing > 0 && !row.confirmed;
+    const confirmedMissing = Number.isFinite(Number(row.confirmedMissing))
+      ? Number(row.confirmedMissing)
+      : (row.confirmed ? row.missing : 0);
+    const monitoringMissing = Number.isFinite(Number(row.monitoringMissing))
+      ? Number(row.monitoringMissing)
+      : Math.max(0, row.missing - confirmedMissing);
+    const isMonitoring = row.missing > 0 && confirmedMissing === 0;
+    const missingText = monitoringMissing > 0 && confirmedMissing > 0
+      ? `${row.missing} (${confirmedMissing} confirmed, ${monitoringMissing} monitoring)`
+      : String(row.missing);
     let dur = row.duration || '—';
     if (isMonitoring && row.duration) dur = `${row.duration} (monitoring)`;
     lines.push(
-      `${String(row.routeId).padEnd(6)} | ${String(row.expected).padStart(8)} | ${String(row.tracking).padStart(8)} | ${String(row.missing).padStart(7)} | ${dur}`
+      `${String(row.routeId).padEnd(6)} | ${String(row.expected).padStart(8)} | ${String(row.tracking).padStart(8)} | ${missingText.padStart(7)} | ${dur}`
     );
   }
 
