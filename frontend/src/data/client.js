@@ -27,9 +27,37 @@ function resolveWithBase(basePath, targetPath) {
 }
 
 function fetchJson(url, options) {
-  return fetch(url, options).then((response) => {
-    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-    return response.json();
+  if (typeof fetch === 'function') {
+    return fetch(url, options).then((response) => {
+      if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+      return response.json();
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    if (typeof XMLHttpRequest !== 'function') {
+      reject(new Error('No supported HTTP client available'));
+      return;
+    }
+
+    const request = new XMLHttpRequest();
+    request.open((options && options.method) || 'GET', url, true);
+    request.onreadystatechange = function () {
+      if (request.readyState !== 4) return;
+      if (request.status >= 200 && request.status < 300) {
+        try {
+          resolve(JSON.parse(request.responseText));
+        } catch (err) {
+          reject(err);
+        }
+        return;
+      }
+      reject(new Error(`Request failed: ${request.status}`));
+    };
+    request.onerror = function () {
+      reject(new Error('Network request failed'));
+    };
+    request.send(null);
   });
 }
 

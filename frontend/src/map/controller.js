@@ -319,6 +319,13 @@ export function createMapController({ dataClient, ui }) {
     if (!miniMapContainer || !miniMapCanvas) return;
 
     miniMapInitialized = true;
+    if (typeof window.matchMedia !== 'function') {
+      miniMapMediaQueryList = null;
+      updateDebugState('miniMapMedia', 'unsupported');
+      setMiniMapActive(true);
+      return;
+    }
+
     miniMapMediaQueryList = window.matchMedia(MINI_MAP_MEDIA_QUERY);
     if (miniMapMediaQueryList) {
       var handler = handleMiniMapMediaChange;

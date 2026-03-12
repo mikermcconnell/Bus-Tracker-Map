@@ -116,13 +116,23 @@ body {
 
 .map-overlay-frame {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
+  padding: 24px;
   padding: clamp(16px, 2vw, 36px);
+  padding-top: 72px;
   padding-top: clamp(64px, 8vh, 80px);
+  padding-bottom: 48px;
   padding-bottom: clamp(40px, 5vh, 80px);
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
+  align-content: flex-start;
   align-items: flex-start;
+  gap: 20px;
   gap: clamp(12px, 3vw, 40px);
   pointer-events: none;
   z-index: 450;
@@ -131,8 +141,12 @@ body {
 .map-overlay-column {
   display: flex;
   flex-direction: column;
+  gap: 14px;
   gap: clamp(10px, 1.5vh, 20px);
+  width: 320px;
   width: min(28vw, 360px);
+  max-width: 360px;
+  flex: 1 1 280px;
   min-width: 240px;
   pointer-events: none;
   max-height: 100%;
@@ -140,6 +154,7 @@ body {
 
 .map-overlay-column--right {
   align-items: flex-end;
+  margin-left: auto;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -155,8 +170,10 @@ body {
   top: 0;
   left: 0;
   right: 0;
+  background: #004e80;
   background: var(--transit-blue);
   color: #ffffff;
+  padding: 12px 24px;
   padding: 12px clamp(16px, 2vw, 36px);
   font-family: var(--font-body);
   font-weight: 500;
@@ -168,6 +185,7 @@ body {
   pointer-events: none;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 16px;
   border-bottom: 3px solid var(--brand-accent);
@@ -176,8 +194,10 @@ body {
 
 .map-title__left {
   display: flex;
-  align-items: baseline;
-  gap: 14px;
+  align-items: center;
+  flex: 1 1 520px;
+  flex-wrap: wrap;
+  gap: 18px;
   min-width: 0;
 }
 
@@ -189,15 +209,22 @@ body {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .map-title__sub {
+  display: inline-flex;
+  align-items: center;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   opacity: 0.75;
   white-space: nowrap;
+  margin-left: 8px;
+  padding-left: 18px;
+  border-left: 1px solid rgba(255, 255, 255, 0.35);
 }
 
 .map-title__right {
@@ -208,6 +235,7 @@ body {
   font-weight: 600;
   opacity: 1;
   white-space: nowrap;
+  margin-left: auto;
 }
 
 .current-time {
@@ -295,11 +323,15 @@ body {
 .stop-legend,
 .legend,
 .mini-map {
+  background: rgba(255, 255, 255, 0.92);
   background: var(--glass-bg-strong);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border: var(--glass-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.06);
   box-shadow: var(--glass-shadow);
+  border-radius: 14px;
   border-radius: var(--radius-lg);
 }
 
@@ -570,6 +602,7 @@ body {
   width: 100%;
   max-width: min(30vw, 400px);
   min-width: 240px;
+  height: 300px;
   height: clamp(240px, 30vh, 400px);
   display: flex;
   flex-direction: column;
@@ -1064,7 +1097,10 @@ body {
   max-width: 300px;
   border-radius: var(--radius-lg);
   overflow: hidden;
+  background: rgba(255, 255, 255, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border: var(--glass-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.06);
   box-shadow: var(--glass-shadow);
   margin-top: 6px;
   pointer-events: auto;
@@ -1096,6 +1132,47 @@ body {
   pointer-events: none;
   box-sizing: border-box;
   background: linear-gradient(to bottom, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0) 50%);
+}
+
+@media (max-width: 1180px) {
+  .map-title {
+    align-items: flex-start;
+  }
+
+  .map-title__right {
+    margin-left: 0;
+  }
+
+  .map-overlay-frame {
+    justify-content: flex-start;
+  }
+
+  .map-overlay-column--right {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 900px) {
+  .map-overlay-column {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .map-overlay-column--right {
+    align-items: stretch;
+  }
+
+  .legend,
+  .stop-legend,
+  .mini-map,
+  .town-image-container {
+    max-width: 100%;
+  }
+
+  .map-title__sub {
+    margin-left: 0;
+  }
 }
 
 .weather-header {

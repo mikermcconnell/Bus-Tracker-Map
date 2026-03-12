@@ -4,6 +4,8 @@ import { createUiController } from './ui/controller.js';
 
 
 document.addEventListener('DOMContentLoaded', function () {
+  setupDebugPanel();
+
   var dataClient = createDataClient({
     // baseUrl: 'http://localhost:3000' // Removed to allow relative path (works on any port)
   });
@@ -30,8 +32,7 @@ function setupDebugPanel() {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     return null;
   }
-  const params = new URLSearchParams(window.location.search);
-  if (!params.has('debug')) {
+  if (!hasDebugFlag()) {
     return null;
   }
   const panel = document.getElementById('debug-panel');
@@ -56,18 +57,22 @@ function setupDebugPanel() {
   };
 
   const getOverlaySnapshot = () => {
-    const ids = ['legend', 'mini-map', 'stop-legend'];
+    const elements = [
+      { label: 'legend', element: document.getElementById('legend') },
+      { label: 'mini-map', element: document.getElementById('mini-map') },
+      { label: 'stop-legend', element: document.getElementById('stop-legend') },
+      { label: 'weather', element: document.querySelector('.town-image-container') }
+    ];
     const lines = [];
-    ids.forEach((id) => {
-      const el = document.getElementById(id);
+    elements.forEach(({ label, element: el }) => {
       if (!el) {
-        lines.push(`${id}: missing`);
+        lines.push(`${label}: missing`);
         return;
       }
       const rect = el.getBoundingClientRect();
       const styles = window.getComputedStyle ? window.getComputedStyle(el) : null;
       lines.push(
-        `${id}: ${Math.round(rect.width)}x${Math.round(rect.height)} ` +
+        `${label}: ${Math.round(rect.width)}x${Math.round(rect.height)} ` +
         `(${Math.round(rect.left)}, ${Math.round(rect.top)}) ` +
         `display = ${styles ? styles.display : 'n/a'} hidden = ${el.hidden} `
       );
@@ -136,4 +141,14 @@ function setupDebugPanel() {
   window.__APP_DEBUG__ = { setState, log };
   updatePanel();
   return window.__APP_DEBUG__;
+}
+
+function hasDebugFlag() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+  if (typeof URLSearchParams === 'function') {
+    return new URLSearchParams(window.location.search).has('debug');
+  }
+  return /(?:\?|&)debug(?:=|&|$)/.test(window.location.search || '');
 }

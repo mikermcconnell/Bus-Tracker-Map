@@ -47,6 +47,41 @@ export function createUiController() {
     initClock();
   }
 
+  function requestJson(url) {
+    if (typeof fetch === 'function') {
+      return fetch(url).then((response) => {
+        if (!response.ok) throw new Error('Request failed: ' + response.status);
+        return response.json();
+      });
+    }
+
+    return new Promise((resolve, reject) => {
+      if (typeof XMLHttpRequest !== 'function') {
+        reject(new Error('No supported HTTP client available'));
+        return;
+      }
+
+      const request = new XMLHttpRequest();
+      request.open('GET', url, true);
+      request.onreadystatechange = function () {
+        if (request.readyState !== 4) return;
+        if (request.status >= 200 && request.status < 300) {
+          try {
+            resolve(JSON.parse(request.responseText));
+          } catch (err) {
+            reject(err);
+          }
+          return;
+        }
+        reject(new Error('Request failed: ' + request.status));
+      };
+      request.onerror = function () {
+        reject(new Error('Network request failed'));
+      };
+      request.send(null);
+    });
+  }
+
   function initClock() {
     if (!currentTimeEl) return;
 
@@ -103,11 +138,9 @@ export function createUiController() {
     const fetchWeather = async () => {
       try {
         // Barrie coordinates: 44.3894,-79.6903
-        const res = await fetch(
+        const data = await requestJson(
           'https://api.open-meteo.com/v1/forecast?latitude=44.3894&longitude=-79.6903&current=temperature_2m,weather_code&timezone=America%2FNew_York'
         );
-        if (!res.ok) throw new Error('Weather fetch failed');
-        const data = await res.json();
         const temp = Math.round(data.current.temperature_2m);
         const code = data.current.weather_code;
 
