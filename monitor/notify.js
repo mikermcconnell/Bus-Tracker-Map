@@ -113,27 +113,26 @@ function formatMinutes(value) {
 function buildSystemSubject(payload) {
   switch (payload.kind) {
     case 'recovered':
-      return 'Barrie Transit GPS Alert: Monitor reporting recovered';
+      return 'Barrie Transit GPS Alert: Monitoring is back to normal';
     case 'vehicle_feed_stale':
-      return 'Barrie Transit GPS Alert: Vehicle positions feed stale';
+      return 'Barrie Transit GPS Alert: Live bus locations are out of date';
     case 'vehicle_feed_unreachable':
-      return 'Barrie Transit GPS Alert: Vehicle positions feed unreachable';
+      return 'Barrie Transit GPS Alert: Live bus locations feed is unavailable';
     case 'vehicle_feed_out_of_sync':
-      return 'Barrie Transit GPS Alert: GTFS feeds out of sync';
+      return 'Barrie Transit GPS Alert: Live bus locations and trip updates do not match';
     case 'all_buses_not_tracking':
-      return 'Barrie Transit GPS Alert: All expected buses not tracking';
+      return 'Barrie Transit GPS Alert: No buses are reporting GPS';
     case 'runtime_failure':
-      return 'Barrie Transit GPS Alert: Monitor run failed';
+      return 'Barrie Transit GPS Alert: Monitor could not finish its check';
     case 'issue_recovered':
-      return 'Barrie Transit GPS Alert: Service restored';
+      return 'Barrie Transit GPS Alert: Problem cleared';
     case 'down':
     default:
-      return 'Barrie Transit GPS Alert: Reporting pipeline stale';
+      return 'Barrie Transit GPS Alert: Monitoring is overdue';
   }
 }
 
 function buildSystemDescriptor(payload) {
-  const severity = payload.severity || (payload.kind === 'issue_recovered' || payload.kind === 'recovered' ? 'Info' : 'Critical');
   const checkedAt = formatAlertTimestamp(payload.checkedAt || new Date());
 
   switch (payload.kind) {
@@ -142,17 +141,16 @@ function buildSystemDescriptor(payload) {
         banner: '#7F1D1D',
         title: 'BARRIE TRANSIT GPS ALERT',
         rows: [
-          ['Alert code', payload.code || 'VEHICLE_FEED_STALE'],
-          ['Severity', severity],
-          ['Checked', checkedAt],
-          ['Issue', 'The GTFS vehicle positions feed is stale and appears to have stopped updating.'],
-          ['Feed URL', payload.feedUrl || 'unknown'],
-          ['Feed timestamp', formatIsoTimestamp(payload.feedTimestamp)],
-          ['Feed age', formatMinutes(payload.feedAgeMin)],
-          ['Last-Modified', payload.lastModified || 'unknown'],
-          ['Impact', 'Bus not-tracking alerts may be false positives because live vehicle timestamps are outdated.'],
-          ['Suggested focus', 'Check the AVL/GPS source, the vehicle positions export job, and the publishing process for the vehicle positions feed.'],
-          ['Details', payload.details || '—'],
+          ['Alert ID', payload.code || 'VEHICLE_FEED_STALE'],
+          ['Checked at', checkedAt],
+          ['What happened', 'The live bus locations feed is old and does not look like it is updating.'],
+          ['Live feed link', payload.feedUrl || 'unknown'],
+          ['Live feed time', formatIsoTimestamp(payload.feedTimestamp)],
+          ['How old it is', formatMinutes(payload.feedAgeMin)],
+          ['Last changed', payload.lastModified || 'unknown'],
+          ['What this affects', 'Map views and email alerts may show old bus locations. Some GPS outage alerts may be wrong.'],
+          ['What to check', 'Check the GPS source, the job that exports live bus locations, and the process that publishes that feed.'],
+          ['More details', payload.details || '—'],
         ],
       };
     case 'vehicle_feed_unreachable':
@@ -160,16 +158,15 @@ function buildSystemDescriptor(payload) {
         banner: '#7F1D1D',
         title: 'BARRIE TRANSIT GPS ALERT',
         rows: [
-          ['Alert code', payload.code || 'VEHICLE_FEED_UNREACHABLE'],
-          ['Severity', severity],
-          ['Checked', checkedAt],
-          ['Issue', 'The monitor could not reach the GTFS vehicle positions feed.'],
-          ['Feed URL', payload.feedUrl || 'unknown'],
-          ['HTTP status', payload.httpStatus || 'unknown'],
-          ['Error', payload.errorMessage || 'unknown'],
-          ['Impact', 'The monitor cannot verify current bus locations, so tracking alerts may be incomplete or unavailable.'],
-          ['Suggested focus', 'Check feed availability, IIS or server status, DNS or network access, SSL, and upstream publishing services.'],
-          ['Details', payload.details || '—'],
+          ['Alert ID', payload.code || 'VEHICLE_FEED_UNREACHABLE'],
+          ['Checked at', checkedAt],
+          ['What happened', 'The monitor could not reach the live bus locations feed.'],
+          ['Live feed link', payload.feedUrl || 'unknown'],
+          ['Response code', payload.httpStatus || 'unknown'],
+          ['Error message', payload.errorMessage || 'unknown'],
+          ['What this affects', 'The monitor cannot confirm where buses are, so GPS alerts may be missing or incomplete.'],
+          ['What to check', 'Check the feed, the server, network access, SSL, and the service that publishes the live updates.'],
+          ['More details', payload.details || '—'],
         ],
       };
     case 'vehicle_feed_out_of_sync':
@@ -177,19 +174,18 @@ function buildSystemDescriptor(payload) {
         banner: '#7F1D1D',
         title: 'BARRIE TRANSIT GPS ALERT',
         rows: [
-          ['Alert code', payload.code || 'VEHICLE_FEED_OUT_OF_SYNC'],
-          ['Severity', severity],
-          ['Checked', checkedAt],
-          ['Issue', 'GTFS trip updates appear current, but GTFS vehicle positions appear stale.'],
-          ['Vehicle feed URL', payload.feedUrl || 'unknown'],
-          ['Vehicle feed timestamp', formatIsoTimestamp(payload.feedTimestamp)],
-          ['Vehicle feed age', formatMinutes(payload.feedAgeMin)],
-          ['Trip updates URL', payload.tripUpdatesUrl || 'unknown'],
-          ['Trip updates timestamp', formatIsoTimestamp(payload.tripUpdatesTimestamp)],
+          ['Alert ID', payload.code || 'VEHICLE_FEED_OUT_OF_SYNC'],
+          ['Checked at', checkedAt],
+          ['What happened', 'Live bus locations are old, but trip updates are current.'],
+          ['Live feed link', payload.feedUrl || 'unknown'],
+          ['Live feed time', formatIsoTimestamp(payload.feedTimestamp)],
+          ['How old it is', formatMinutes(payload.feedAgeMin)],
+          ['Trip updates link', payload.tripUpdatesUrl || 'unknown'],
+          ['Trip updates time', formatIsoTimestamp(payload.tripUpdatesTimestamp)],
           ['Trip updates age', formatMinutes(payload.tripUpdatesAgeMin)],
-          ['Impact', 'Bus alert emails may report false GPS outages even though other GTFS real-time services are active.'],
-          ['Suggested focus', 'Check the vehicle positions publishing pipeline specifically rather than the full GTFS environment.'],
-          ['Details', payload.details || '—'],
+          ['What this affects', 'GPS outage emails may be wrong because trip updates are current but bus location data is old.'],
+          ['What to check', 'Check the process that publishes live bus locations, not the full GTFS setup.'],
+          ['More details', payload.details || '—'],
         ],
       };
     case 'all_buses_not_tracking':
@@ -197,16 +193,15 @@ function buildSystemDescriptor(payload) {
         banner: '#92400E',
         title: 'BARRIE TRANSIT GPS ALERT',
         rows: [
-          ['Alert code', payload.code || 'ALL_BUSES_NOT_TRACKING'],
-          ['Severity', severity],
-          ['Checked', checkedAt],
-          ['Issue', 'No expected buses are reporting current GPS data.'],
+          ['Alert ID', payload.code || 'ALL_BUSES_NOT_TRACKING'],
+          ['Checked at', checkedAt],
+          ['What happened', 'No expected buses are sending current GPS data.'],
           ['Expected buses', String(payload.expectedCount ?? 'unknown')],
-          ['Tracking buses', String(payload.trackingCount ?? 'unknown')],
-          ['Missing buses', String(payload.missingCount ?? 'unknown')],
-          ['Impact', 'This may indicate a major fleet-wide GPS reporting issue.'],
-          ['Suggested focus', 'Confirm the vehicle positions feed is healthy first. If the feed is healthy, check onboard GPS reporting, AVL gateway services, and fleet communications.'],
-          ['Details', payload.details || '—'],
+          ['Buses reporting', String(payload.trackingCount ?? 'unknown')],
+          ['Buses missing', String(payload.missingCount ?? 'unknown')],
+          ['What this affects', 'This affects all expected buses and may point to a system-wide GPS problem.'],
+          ['What to check', 'Check the live bus locations feed first. If that is working, check the bus GPS units, the data gateway, and bus communications.'],
+          ['More details', payload.details || '—'],
         ],
       };
     case 'runtime_failure':
@@ -214,14 +209,13 @@ function buildSystemDescriptor(payload) {
         banner: '#7F1D1D',
         title: 'BARRIE TRANSIT GPS ALERT',
         rows: [
-          ['Alert code', payload.code || 'MONITOR_RUNTIME_FAILURE'],
-          ['Severity', severity],
-          ['Checked', checkedAt],
-          ['Issue', 'The monitor encountered a fatal error and could not complete its run.'],
-          ['Error', payload.errorMessage || 'unknown'],
-          ['Impact', 'Monitoring may be incomplete or unreliable until the next successful run.'],
-          ['Suggested focus', 'Check recent application logs, environment configuration, feed parsing, and email delivery dependencies.'],
-          ['Details', payload.details || '—'],
+          ['Alert ID', payload.code || 'MONITOR_RUNTIME_FAILURE'],
+          ['Checked at', checkedAt],
+          ['What happened', 'The monitor hit an error and could not finish.'],
+          ['Error message', payload.errorMessage || 'unknown'],
+          ['What this affects', 'This check did not finish, so some problems may not be caught until the next run.'],
+          ['What to check', 'Check recent logs, settings, feed reading, and email delivery.'],
+          ['More details', payload.details || '—'],
         ],
       };
     case 'issue_recovered':
@@ -229,14 +223,13 @@ function buildSystemDescriptor(payload) {
         banner: '#166534',
         title: 'BARRIE TRANSIT GPS ALERT',
         rows: [
-          ['Alert code', payload.code || 'SYSTEM_RECOVERED'],
-          ['Severity', severity],
-          ['Checked', checkedAt],
-          ['Issue resolved', 'A previously reported monitoring issue has cleared.'],
-          ['Previous issue code', payload.previousCode || 'unknown'],
-          ['Last successful run', formatAlertTimestamp(payload.lastSuccessAt)],
-          ['Impact', 'Monitoring has resumed and alerts should now reflect current conditions.'],
-          ['Details', payload.details || '—'],
+          ['Alert ID', payload.code || 'SYSTEM_RECOVERED'],
+          ['Checked at', checkedAt],
+          ['What happened', 'A previously reported issue has cleared.'],
+          ['Previous issue', payload.previousCode || 'unknown'],
+          ['Last good check', formatAlertTimestamp(payload.lastSuccessAt)],
+          ['What this affects', 'Monitoring is working again and alerts should now match current conditions.'],
+          ['More details', payload.details || '—'],
         ],
       };
     case 'recovered':
@@ -244,13 +237,13 @@ function buildSystemDescriptor(payload) {
         banner: '#166534',
         title: 'BARRIE TRANSIT GPS ALERT',
         rows: [
-          ['Alert code', payload.code || 'SYSTEM_RECOVERED'],
-          ['Severity', severity],
-          ['Checked', checkedAt],
-          ['Issue resolved', 'The bus monitoring report pipeline has recovered.'],
-          ['Last successful monitor run', formatAlertTimestamp(payload.lastSuccessAt)],
-          ['Watchdog max age', formatMinutes(payload.maxAgeMin)],
-          ['Details', payload.details || '—'],
+          ['Alert ID', payload.code || 'SYSTEM_RECOVERED'],
+          ['Checked at', checkedAt],
+          ['What happened', 'The bus monitoring report is back to normal.'],
+          ['Last good check', formatAlertTimestamp(payload.lastSuccessAt)],
+          ['Allowed delay', formatMinutes(payload.maxAgeMin)],
+          ['What this affects', 'The monitoring report is working again.'],
+          ['More details', payload.details || '—'],
         ],
       };
     case 'down':
@@ -259,15 +252,14 @@ function buildSystemDescriptor(payload) {
         banner: '#7F1D1D',
         title: 'BARRIE TRANSIT GPS ALERT',
         rows: [
-          ['Alert code', payload.code || 'MONITOR_WATCHDOG_DOWN'],
-          ['Severity', severity],
-          ['Checked', checkedAt],
-          ['Issue', 'The monitor has not completed a successful run within the expected time window.'],
-          ['Last successful monitor run', formatAlertTimestamp(payload.lastSuccessAt)],
-          ['Threshold', formatMinutes(payload.maxAgeMin)],
-          ['Impact', 'The monitoring pipeline may be down or repeatedly failing.'],
-          ['Suggested focus', 'Check whether the scheduled job is still running, whether the process is crashing, and whether dependencies are blocking successful completion.'],
-          ['Details', payload.details || '—'],
+          ['Alert ID', payload.code || 'MONITOR_WATCHDOG_DOWN'],
+          ['Checked at', checkedAt],
+          ['What happened', 'The monitor has not finished a successful check in the expected time.'],
+          ['Last good check', formatAlertTimestamp(payload.lastSuccessAt)],
+          ['Allowed delay', formatMinutes(payload.maxAgeMin)],
+          ['What this affects', 'The monitor may miss problems until it starts running successfully again.'],
+          ['What to check', 'Check whether the scheduled job is still running, whether it is crashing, or whether another service is blocking it.'],
+          ['More details', payload.details || '—'],
         ],
       };
   }
@@ -342,7 +334,7 @@ async function sendSystemAlert(config, payload) {
  */
 async function sendTestAlert(config, payload) {
   const checkedAt = payload.checkedAt || new Date();
-  const details = payload.details || 'Scheduled monitor test run completed successfully.';
+  const details = payload.details || 'The scheduled test check completed successfully.';
   const timestamp = formatAlertTimestamp(checkedAt);
 
   const subject = 'Barrie Transit GPS Alert Test: Scheduled check';
@@ -359,11 +351,11 @@ async function sendTestAlert(config, payload) {
     </tr>
     <tr>
       <td style="padding:20px 20px 8px">
-        This is a scheduled test email from the bus monitor.
+        This is a scheduled test message from the Barrie Transit monitor.
       </td>
     </tr>
     <tr>
-      <td style="padding:0 20px 8px">Checked: ${escapeHtml(timestamp)}</td>
+      <td style="padding:0 20px 8px">Checked at: ${escapeHtml(timestamp)}</td>
     </tr>
     <tr>
       <td style="padding:0 20px 20px">Details: ${escapeHtml(details)}</td>
@@ -374,8 +366,8 @@ async function sendTestAlert(config, payload) {
   const text = [
     'BARRIE TRANSIT GPS ALERT TEST',
     '',
-    'This is a scheduled test email from the bus monitor.',
-    `Checked: ${timestamp}`,
+    'This is a scheduled test message from the Barrie Transit monitor.',
+    `Checked at: ${timestamp}`,
     `Details: ${details}`,
   ].join('\n');
   const info = await sendMail(config, { subject, html, text });
@@ -386,12 +378,14 @@ async function sendTestAlert(config, payload) {
 
 function buildAlertSubject(report) {
   const noun = report.totalMissing === 1 ? 'bus' : 'buses';
-  return `Barrie Transit GPS Alert: ${report.totalMissing}/${report.totalExpected} ${noun} not tracking`;
+  const verb = report.totalMissing === 1 ? 'is' : 'are';
+  return `Barrie Transit GPS Alert: ${report.totalMissing} ${noun} out of ${report.totalExpected} ${verb} not sending live updates`;
 }
 
 function missingSummary(report) {
-  const noun = report.totalMissing === 1 ? 'bus is' : 'buses are';
-  return `${report.totalMissing} of ${report.totalExpected} expected ${noun} not reporting GPS data`;
+  const noun = report.totalMissing === 1 ? 'bus' : 'buses';
+  const verb = report.totalMissing === 1 ? 'is' : 'are';
+  return `${report.totalMissing} ${noun} out of ${report.totalExpected} ${verb} not sending live updates`;
 }
 
 function buildHtml(report) {
@@ -452,7 +446,7 @@ function buildHtml(report) {
     </tr>
     <tr>
       <td style="padding:0 20px 20px">
-        <span style="font-size:12px;color:#888888">Checked: ${escapeHtml(timestamp)}</span>
+        <span style="font-size:12px;color:#888888">Checked at: ${escapeHtml(timestamp)}</span>
       </td>
     </tr>
     <tr>
@@ -461,9 +455,9 @@ function buildHtml(report) {
           <tr style="background:#1F4E79">
             <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Route</th>
             <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Expected</th>
-            <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Tracking</th>
+            <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Sending updates</th>
             <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Missing</th>
-            <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Duration Not Reporting</th>
+            <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Missing for</th>
           </tr>
           ${tableRows}
           <tr style="background:#FFFFFF;font-weight:bold">
@@ -479,7 +473,7 @@ function buildHtml(report) {
     <tr>
       <td style="padding:20px">
         <hr style="border:none;border-top:1px solid #CCCCCC;margin:0 0 12px">
-        <span style="font-size:12px;color:#666666">Note: Some variance is normal (vehicles between trips, operator changes). Persistent gaps may indicate GPS equipment issues.</span>
+        <span style="font-size:12px;color:#666666">Note: Some change is normal when buses are between trips or drivers change. Repeated gaps may mean GPS equipment needs attention.</span>
       </td>
     </tr>
   </table>
@@ -495,9 +489,9 @@ function buildPlainText(report) {
     '='.repeat(40),
     '',
     missingSummary(report),
-    `Checked: ${timestamp}`,
+    `Checked at: ${timestamp}`,
     '',
-    'Route  | Expected | Tracking | Missing | Duration Not Reporting (min)',
+    'Route  | Expected | Sending   | Missing | Missing for (min)',
     '-------+----------+----------+---------+---------',
   ];
 
@@ -525,8 +519,8 @@ function buildPlainText(report) {
     `TOTAL  | ${String(report.totalExpected).padStart(8)} | ${String(report.totalTracking).padStart(8)} | ${String(report.totalMissing).padStart(7)} |${monitoringNote}`
   );
   lines.push('');
-  lines.push('Note: Some variance is normal (vehicles between trips, operator changes).');
-  lines.push('Persistent gaps may indicate GPS equipment issues.');
+  lines.push('Note: Some change is normal when buses are between trips or drivers change.');
+  lines.push('Repeated gaps may mean GPS equipment needs attention.');
 
   return lines.join('\n');
 }

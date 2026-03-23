@@ -292,9 +292,12 @@ function summarizeRouteIssues(rows, limit = 8) {
   const routeDetails = rows
     .filter((row) => row.missing > 0)
     .slice(0, limit)
-    .map((row) => `Route ${row.routeId}: expected ${row.expected}, tracking ${row.tracking}, missing ${row.missing}`);
+    .map((row) => {
+      const noun = row.missing === 1 ? 'bus' : 'buses';
+      return `Route ${row.routeId}: ${row.missing} ${noun} missing, ${row.tracking} reporting out of ${row.expected} expected`;
+    });
 
-  return routeDetails.length ? routeDetails.join('; ') : 'No route detail available.';
+  return routeDetails.length ? routeDetails.join('; ') : 'No route details available.';
 }
 
 function getFeedAlertContext(vehicleFeed, tripUpdatesMeta, now, staleAfterMin) {
@@ -320,7 +323,7 @@ function getFeedAlertContext(vehicleFeed, tripUpdatesMeta, now, staleAfterMin) {
       tripUpdatesUrl: GTFS_RT_TRIP_UPDATES_URL,
       tripUpdatesTimestamp: tripUpdatesMeta.header_timestamp,
       tripUpdatesAgeMin,
-      details: 'Trip updates are current, but the vehicle positions feed is stale.',
+      details: 'Trip updates are current, but live bus locations are old.',
     };
   }
 
@@ -328,7 +331,7 @@ function getFeedAlertContext(vehicleFeed, tripUpdatesMeta, now, staleAfterMin) {
     kind: 'vehicle_feed_stale',
     code: 'VEHICLE_FEED_STALE',
     ...shared,
-    details: 'The vehicle positions feed header timestamp is older than the allowed freshness window.',
+    details: 'The live bus locations feed is older than the allowed freshness limit.',
   };
 }
 
@@ -385,8 +388,8 @@ async function sendRecoveryAlerts(emailConfig, issueState, activeIssueCodes, che
       lastSuccessAt: checkedAt,
       previousCode: code,
       details: previous && previous.summary
-        ? `Previously active issue cleared: ${code}. ${previous.summary}`
-        : `Previously active issue cleared: ${code}.`,
+        ? `A previously reported issue has cleared. ${previous.summary}`
+        : 'A previously reported issue has cleared.',
     });
     delete active[code];
   }
@@ -416,7 +419,7 @@ async function main() {
         checkedAt: now,
         lastSuccessAt: watchdogAlert.lastSuccessAt,
         maxAgeMin: WATCHDOG_MAX_AGE_MIN,
-        details: `No successful monitor run in ${watchdogAlert.ageMinutes} minutes.`,
+        details: `No successful monitor check in ${watchdogAlert.ageMinutes} minutes.`,
       });
       heartbeat.alertedDown = true;
       writeJsonFile(HEARTBEAT_FILE, heartbeat);
@@ -447,7 +450,7 @@ async function main() {
       try {
         await sendTestAlert({ ...emailConfig, recipient: testRecipient }, {
           checkedAt: now,
-          details: `TEST_ALERT_EVERY_RUN is enabled for this Railway monitor service (recipient: ${testRecipient}).`,
+          details: `Scheduled test mode is on for this monitor service (recipient: ${testRecipient}).`,
         });
       } catch (err) {
         console.warn('[monitor] Test email failed:', err.message || err);
@@ -485,7 +488,7 @@ async function main() {
         feedUrl: GTFS_RT_VEHICLES_URL,
         httpStatus: err && err.status ? err.status : 'unknown',
         errorMessage: errorText,
-        details: 'Vehicle positions feed request failed before the monitor could evaluate active buses.',
+        details: 'The live bus locations feed could not be loaded before the monitor checked the buses.',
       });
       saveIssueState(issueState);
       await pingHeartbeat();
@@ -606,7 +609,7 @@ async function main() {
         severity: 'Critical',
         checkedAt: now,
         errorMessage: errorText,
-        details: 'Monitor run failed before completion.',
+        details: 'The monitor stopped before it finished.',
       });
       saveIssueState(issueState);
     } catch (alertErr) {

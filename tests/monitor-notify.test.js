@@ -32,31 +32,31 @@ describe('escapeHtml', () => {
 describe('buildAlertSubject', () => {
   test('uses singular "bus" for 1 missing', () => {
     const subject = buildAlertSubject({ totalMissing: 1, totalExpected: 10 });
-    expect(subject).toBe('Barrie Transit GPS Alert: 1/10 bus not tracking');
+    expect(subject).toBe('Barrie Transit GPS Alert: 1 bus out of 10 is not sending live updates');
   });
 
   test('uses plural "buses" for multiple missing', () => {
     const subject = buildAlertSubject({ totalMissing: 3, totalExpected: 10 });
-    expect(subject).toBe('Barrie Transit GPS Alert: 3/10 buses not tracking');
+    expect(subject).toBe('Barrie Transit GPS Alert: 3 buses out of 10 are not sending live updates');
   });
 });
 
 describe('buildSystemSubject', () => {
   test('returns stale subject for down', () => {
     expect(buildSystemSubject({ kind: 'down' })).toBe(
-      'Barrie Transit GPS Alert: Reporting pipeline stale'
+      'Barrie Transit GPS Alert: Monitoring is overdue'
     );
   });
 
   test('returns vehicle feed stale subject', () => {
     expect(buildSystemSubject({ kind: 'vehicle_feed_stale' })).toBe(
-      'Barrie Transit GPS Alert: Vehicle positions feed stale'
+      'Barrie Transit GPS Alert: Live bus locations are out of date'
     );
   });
 
   test('returns recovered subject', () => {
     expect(buildSystemSubject({ kind: 'recovered' })).toBe(
-      'Barrie Transit GPS Alert: Monitor reporting recovered'
+      'Barrie Transit GPS Alert: Monitoring is back to normal'
     );
   });
 });
@@ -64,12 +64,12 @@ describe('buildSystemSubject', () => {
 describe('missingSummary', () => {
   test('singular when 1 bus missing', () => {
     const result = missingSummary({ totalMissing: 1, totalExpected: 8 });
-    expect(result).toBe('1 of 8 expected bus is not reporting GPS data');
+    expect(result).toBe('1 bus out of 8 is not sending live updates');
   });
 
   test('plural when multiple buses missing', () => {
     const result = missingSummary({ totalMissing: 4, totalExpected: 12 });
-    expect(result).toBe('4 of 12 expected buses are not reporting GPS data');
+    expect(result).toBe('4 buses out of 12 are not sending live updates');
   });
 });
 
@@ -95,7 +95,7 @@ describe('buildHtml', () => {
 
   test('contains missing summary', () => {
     const html = buildHtml(sampleReport);
-    expect(html).toContain('2 of 5 expected buses are not reporting GPS data');
+    expect(html).toContain('2 buses out of 5 are not sending live updates');
   });
 
   test('uses the GPS alert heading', () => {
@@ -114,12 +114,12 @@ describe('buildPlainText', () => {
 
   test('contains missing summary', () => {
     const text = buildPlainText(sampleReport);
-    expect(text).toContain('2 of 5 expected buses are not reporting GPS data');
+    expect(text).toContain('2 buses out of 5 are not sending live updates');
   });
 
   test('contains disclaimer', () => {
     const text = buildPlainText(sampleReport);
-    expect(text).toContain('Some variance is normal');
+    expect(text).toContain('Some change is normal when buses are between trips or drivers change.');
   });
 });
 
@@ -136,7 +136,7 @@ describe('buildSystemMessage', () => {
       details: 'Vehicle positions feed stopped updating.',
     });
     expect(subject).toContain('Barrie Transit GPS Alert');
-    expect(text).toContain('Alert code: VEHICLE_FEED_STALE');
-    expect(text).toContain('Feed age: 789 minutes');
+    expect(text).toContain('Alert ID: VEHICLE_FEED_STALE');
+    expect(text).toContain('How old it is: 789 minutes');
   });
 });
