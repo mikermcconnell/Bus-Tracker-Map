@@ -16,14 +16,14 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
 
       - name: Restore monitor cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: monitor/cache
           key: monitor-cache-${{ github.run_id }}
@@ -51,7 +51,7 @@ jobs:
 
       - name: Save monitor cache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: monitor/cache
           key: monitor-cache-${{ github.run_id }}
