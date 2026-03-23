@@ -35,7 +35,7 @@ describe('monitor feed helpers', () => {
     expect(result).toEqual(expect.objectContaining({
       code: 'VEHICLE_FEED_OUT_OF_SYNC',
       kind: 'vehicle_feed_out_of_sync',
-      details: 'Trip updates are current, but live bus locations are old.',
+      details: 'The vehicle positions feed is stale while the trip updates feed remains current.',
     }));
   });
 

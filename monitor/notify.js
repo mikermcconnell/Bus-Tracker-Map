@@ -110,25 +110,34 @@ function formatMinutes(value) {
   return `${numeric} minute${numeric === 1 ? '' : 's'}`;
 }
 
+function buildTaggedSubject(code, summary) {
+  const normalizedCode = code || 'GENERAL_ALERT';
+  if (!summary) return `Barrie Transit GPS Alert | ${normalizedCode}`;
+  return `Barrie Transit GPS Alert | ${normalizedCode} | ${summary}`;
+}
+
 function buildSystemSubject(payload) {
   switch (payload.kind) {
     case 'recovered':
-      return 'Barrie Transit GPS Alert: Monitoring restored';
+      return buildTaggedSubject(payload.code || 'SYSTEM_RECOVERED', 'Monitoring restored');
     case 'vehicle_feed_stale':
-      return 'Barrie Transit GPS Alert: Live location data delayed';
+      return buildTaggedSubject(payload.code || 'VEHICLE_FEED_STALE', 'Live vehicle location feed delayed');
     case 'vehicle_feed_unreachable':
-      return 'Barrie Transit GPS Alert: Live location data unavailable';
+      return buildTaggedSubject(payload.code || 'VEHICLE_FEED_UNREACHABLE', 'Live vehicle location feed unavailable');
     case 'vehicle_feed_out_of_sync':
-      return 'Barrie Transit GPS Alert: Trip updates current, live GPS delayed';
+      return buildTaggedSubject(
+        payload.code || 'VEHICLE_FEED_OUT_OF_SYNC',
+        'Trip updates current, live vehicle locations delayed'
+      );
     case 'all_buses_not_tracking':
-      return 'Barrie Transit GPS Alert: Fleet-wide GPS reporting gap';
+      return buildTaggedSubject(payload.code || 'ALL_BUSES_NOT_TRACKING', 'Fleet-wide GPS reporting gap');
     case 'runtime_failure':
-      return 'Barrie Transit GPS Alert: Monitor check did not complete';
+      return buildTaggedSubject(payload.code || 'MONITOR_RUNTIME_FAILURE', 'Monitor check did not complete');
     case 'issue_recovered':
-      return 'Barrie Transit GPS Alert: Issue resolved';
+      return buildTaggedSubject(payload.code || 'SYSTEM_RECOVERED', 'Issue resolved');
     case 'down':
     default:
-      return 'Barrie Transit GPS Alert: Monitoring check overdue';
+      return buildTaggedSubject(payload.code || 'MONITOR_WATCHDOG_DOWN', 'Monitoring check overdue');
   }
 }
 
@@ -177,14 +186,16 @@ function buildSystemDescriptor(payload) {
           ['Alert ID', payload.code || 'VEHICLE_FEED_OUT_OF_SYNC'],
           ['Checked at', checkedAt],
           ['Summary', 'Trip updates are current, but live bus location data is delayed.'],
+          ['What is going wrong', 'The vehicle positions feed is stale even though the trip updates feed is still refreshing. This points to a failure in the live GPS publishing process, not a full GTFS outage.'],
           ['Live feed link', payload.feedUrl || 'unknown'],
           ['Live feed time', formatIsoTimestamp(payload.feedTimestamp)],
           ['How old it is', formatMinutes(payload.feedAgeMin)],
           ['Trip updates link', payload.tripUpdatesUrl || 'unknown'],
           ['Trip updates time', formatIsoTimestamp(payload.tripUpdatesTimestamp)],
           ['Trip updates age', formatMinutes(payload.tripUpdatesAgeMin)],
-          ['Operational impact', 'GPS outage emails may be incorrect because trip updates are current while location data is delayed.'],
-          ['Recommended action', 'Review the process that publishes live bus locations rather than the full GTFS environment.'],
+          ['Operational impact', 'Public maps and any GPS-based alerts may show incorrect bus locations. Staff may still see current trip activity, which can make the location issue easy to miss.'],
+          ['Likely cause', 'The AVL or GPS source may not be reaching the vehicle position publisher, or the process that exports GTFS vehicle positions may be stalled, disconnected, or failed.'],
+          ['Recommended action', 'Check whether fresh AVL or GPS data is reaching the publisher, review the logs or status of the process that creates GTFS_VehiclePositions.pb, restart that process if needed, and confirm the vehicle feed timestamp begins advancing again.'],
           ['More details', payload.details || '—'],
         ],
       };
@@ -337,7 +348,7 @@ async function sendTestAlert(config, payload) {
   const details = payload.details || 'The scheduled test check completed successfully.';
   const timestamp = formatAlertTimestamp(checkedAt);
 
-  const subject = 'Barrie Transit GPS Alert Test: Scheduled check';
+  const subject = buildTaggedSubject('TEST', 'Scheduled check');
   const html = `
 <!DOCTYPE html>
 <html>
@@ -377,8 +388,7 @@ async function sendTestAlert(config, payload) {
 }
 
 function buildAlertSubject(report) {
-  const verb = report.totalMissing === 1 ? 'is' : 'are';
-  return `Barrie Transit GPS Alert: ${report.totalMissing} of ${report.totalExpected} expected buses ${verb} not reporting live GPS`;
+  return buildTaggedSubject('BUSES_NOT_REPORTING', missingSummary(report));
 }
 
 function missingSummary(report) {
@@ -530,6 +540,7 @@ module.exports = {
   buildAlertSubject,
   buildSystemSubject,
   buildSystemMessage,
+  buildTaggedSubject,
   formatAlertTimestamp,
   formatIsoTimestamp,
   escapeHtml,

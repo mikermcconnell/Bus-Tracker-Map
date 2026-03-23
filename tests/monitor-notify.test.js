@@ -4,6 +4,7 @@ import notifyModule from '../monitor/notify.js';
 const {
   escapeHtml,
   buildAlertSubject,
+  buildTaggedSubject,
   buildSystemSubject,
   buildSystemMessage,
   missingSummary,
@@ -32,31 +33,39 @@ describe('escapeHtml', () => {
 describe('buildAlertSubject', () => {
   test('uses singular "bus" for 1 missing', () => {
     const subject = buildAlertSubject({ totalMissing: 1, totalExpected: 10 });
-    expect(subject).toBe('Barrie Transit GPS Alert: 1 of 10 expected buses is not reporting live GPS');
+    expect(subject).toBe('Barrie Transit GPS Alert | BUSES_NOT_REPORTING | 1 of 10 expected buses is not reporting live GPS');
   });
 
   test('uses plural "buses" for multiple missing', () => {
     const subject = buildAlertSubject({ totalMissing: 3, totalExpected: 10 });
-    expect(subject).toBe('Barrie Transit GPS Alert: 3 of 10 expected buses are not reporting live GPS');
+    expect(subject).toBe('Barrie Transit GPS Alert | BUSES_NOT_REPORTING | 3 of 10 expected buses are not reporting live GPS');
+  });
+});
+
+describe('buildTaggedSubject', () => {
+  test('uses a stable tagged pattern for forwarding rules', () => {
+    expect(buildTaggedSubject('VEHICLE_FEED_OUT_OF_SYNC', 'Trip updates current, live vehicle locations delayed')).toBe(
+      'Barrie Transit GPS Alert | VEHICLE_FEED_OUT_OF_SYNC | Trip updates current, live vehicle locations delayed'
+    );
   });
 });
 
 describe('buildSystemSubject', () => {
   test('returns stale subject for down', () => {
     expect(buildSystemSubject({ kind: 'down' })).toBe(
-      'Barrie Transit GPS Alert: Monitoring check overdue'
+      'Barrie Transit GPS Alert | MONITOR_WATCHDOG_DOWN | Monitoring check overdue'
     );
   });
 
   test('returns vehicle feed stale subject', () => {
-    expect(buildSystemSubject({ kind: 'vehicle_feed_stale' })).toBe(
-      'Barrie Transit GPS Alert: Live location data delayed'
+    expect(buildSystemSubject({ kind: 'vehicle_feed_stale', code: 'VEHICLE_FEED_STALE' })).toBe(
+      'Barrie Transit GPS Alert | VEHICLE_FEED_STALE | Live vehicle location feed delayed'
     );
   });
 
   test('returns recovered subject', () => {
-    expect(buildSystemSubject({ kind: 'recovered' })).toBe(
-      'Barrie Transit GPS Alert: Monitoring restored'
+    expect(buildSystemSubject({ kind: 'recovered', code: 'SYSTEM_RECOVERED' })).toBe(
+      'Barrie Transit GPS Alert | SYSTEM_RECOVERED | Monitoring restored'
     );
   });
 });
@@ -138,5 +147,27 @@ describe('buildSystemMessage', () => {
     expect(subject).toContain('Barrie Transit GPS Alert');
     expect(text).toContain('Alert ID: VEHICLE_FEED_STALE');
     expect(text).toContain('How old it is: 789 minutes');
+  });
+
+  test('uses actionable wording for out-of-sync alerts', () => {
+    const { subject, text } = buildSystemMessage({
+      kind: 'vehicle_feed_out_of_sync',
+      code: 'VEHICLE_FEED_OUT_OF_SYNC',
+      checkedAt: new Date('2026-03-23T18:21:00Z'),
+      feedUrl: 'https://example.com/GTFS_VehiclePositions.pb',
+      feedTimestamp: 1774225732,
+      feedAgeMin: 1073,
+      tripUpdatesUrl: 'https://example.com/GTFS_TripUpdates.pb',
+      tripUpdatesTimestamp: 1774290062,
+      tripUpdatesAgeMin: 0,
+      details: 'The vehicle positions feed is stale while the trip updates feed remains current.',
+    });
+
+    expect(subject).toBe(
+      'Barrie Transit GPS Alert | VEHICLE_FEED_OUT_OF_SYNC | Trip updates current, live vehicle locations delayed'
+    );
+    expect(text).toContain('What is going wrong: The vehicle positions feed is stale even though the trip updates feed is still refreshing.');
+    expect(text).toContain('Likely cause: The AVL or GPS source may not be reaching the vehicle position publisher');
+    expect(text).toContain('Recommended action: Check whether fresh AVL or GPS data is reaching the publisher');
   });
 });

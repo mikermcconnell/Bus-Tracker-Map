@@ -323,7 +323,7 @@ function getFeedAlertContext(vehicleFeed, tripUpdatesMeta, now, staleAfterMin) {
       tripUpdatesUrl: GTFS_RT_TRIP_UPDATES_URL,
       tripUpdatesTimestamp: tripUpdatesMeta.header_timestamp,
       tripUpdatesAgeMin,
-      details: 'Trip updates are current, but live bus locations are old.',
+      details: 'The vehicle positions feed is stale while the trip updates feed remains current.',
     };
   }
 
