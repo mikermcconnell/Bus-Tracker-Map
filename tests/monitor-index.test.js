@@ -2,10 +2,54 @@ import { describe, expect, test } from 'vitest';
 import monitorModule from '../monitor/index.js';
 
 const {
+  deriveTripUpdatesUrl,
+  getFeedAgeMinutes,
+  getFeedAlertContext,
   normalizeMissingSinceEntry,
   buildRouteReport,
   getWatchdogAlertDetails,
 } = monitorModule;
+
+describe('monitor feed helpers', () => {
+  test('derives the trip updates URL from the vehicle positions URL', () => {
+    expect(deriveTripUpdatesUrl('https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb')).toBe(
+      'https://www.myridebarrie.ca/gtfs/GTFS_TripUpdates.pb'
+    );
+  });
+
+  test('calculates feed age in minutes', () => {
+    const nowMs = Date.parse('2026-03-23T13:40:00Z');
+    expect(getFeedAgeMinutes(1774225732, nowMs)).toBe(791);
+  });
+
+  test('flags out-of-sync feeds when trip updates are fresh but vehicle positions are stale', () => {
+    const now = new Date('2026-03-23T13:40:00Z');
+    const result = getFeedAlertContext({
+      feed_timestamp: 1774225732,
+      feed_last_modified: 'Mon, 23 Mar 2026 00:30:26 GMT',
+    }, {
+      header_timestamp: 1774273200,
+    }, now, 15);
+
+    expect(result).toEqual(expect.objectContaining({
+      code: 'VEHICLE_FEED_OUT_OF_SYNC',
+      kind: 'vehicle_feed_out_of_sync',
+    }));
+  });
+
+  test('flags stale vehicle feed when no fresh trip updates signal exists', () => {
+    const now = new Date('2026-03-23T13:40:00Z');
+    const result = getFeedAlertContext({
+      feed_timestamp: 1774225732,
+      feed_last_modified: 'Mon, 23 Mar 2026 00:30:26 GMT',
+    }, null, now, 15);
+
+    expect(result).toEqual(expect.objectContaining({
+      code: 'VEHICLE_FEED_STALE',
+      kind: 'vehicle_feed_stale',
+    }));
+  });
+});
 
 describe('monitor missing-state normalization', () => {
   test('supports legacy numeric state entries', () => {

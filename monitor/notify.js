@@ -79,6 +79,237 @@ async function sendMail(config, message) {
   return info;
 }
 
+function formatAlertTimestamp(value) {
+  if (!value) return 'unknown';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('en-CA', {
+    timeZone: 'America/Toronto',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  });
+}
+
+function formatIsoTimestamp(value) {
+  if (!value && value !== 0) return 'unknown';
+  const date = value instanceof Date
+    ? value
+    : new Date(typeof value === 'number' ? value * 1000 : value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toISOString();
+}
+
+function formatMinutes(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 'unknown';
+  return `${numeric} minute${numeric === 1 ? '' : 's'}`;
+}
+
+function buildSystemSubject(payload) {
+  switch (payload.kind) {
+    case 'recovered':
+      return 'Barrie Transit GPS Alert: Monitor reporting recovered';
+    case 'vehicle_feed_stale':
+      return 'Barrie Transit GPS Alert: Vehicle positions feed stale';
+    case 'vehicle_feed_unreachable':
+      return 'Barrie Transit GPS Alert: Vehicle positions feed unreachable';
+    case 'vehicle_feed_out_of_sync':
+      return 'Barrie Transit GPS Alert: GTFS feeds out of sync';
+    case 'all_buses_not_tracking':
+      return 'Barrie Transit GPS Alert: All expected buses not tracking';
+    case 'runtime_failure':
+      return 'Barrie Transit GPS Alert: Monitor run failed';
+    case 'issue_recovered':
+      return 'Barrie Transit GPS Alert: Service restored';
+    case 'down':
+    default:
+      return 'Barrie Transit GPS Alert: Reporting pipeline stale';
+  }
+}
+
+function buildSystemDescriptor(payload) {
+  const severity = payload.severity || (payload.kind === 'issue_recovered' || payload.kind === 'recovered' ? 'Info' : 'Critical');
+  const checkedAt = formatAlertTimestamp(payload.checkedAt || new Date());
+
+  switch (payload.kind) {
+    case 'vehicle_feed_stale':
+      return {
+        banner: '#7F1D1D',
+        title: 'BARRIE TRANSIT GPS ALERT',
+        rows: [
+          ['Alert code', payload.code || 'VEHICLE_FEED_STALE'],
+          ['Severity', severity],
+          ['Checked', checkedAt],
+          ['Issue', 'The GTFS vehicle positions feed is stale and appears to have stopped updating.'],
+          ['Feed URL', payload.feedUrl || 'unknown'],
+          ['Feed timestamp', formatIsoTimestamp(payload.feedTimestamp)],
+          ['Feed age', formatMinutes(payload.feedAgeMin)],
+          ['Last-Modified', payload.lastModified || 'unknown'],
+          ['Impact', 'Bus not-tracking alerts may be false positives because live vehicle timestamps are outdated.'],
+          ['Suggested focus', 'Check the AVL/GPS source, the vehicle positions export job, and the publishing process for the vehicle positions feed.'],
+          ['Details', payload.details || '—'],
+        ],
+      };
+    case 'vehicle_feed_unreachable':
+      return {
+        banner: '#7F1D1D',
+        title: 'BARRIE TRANSIT GPS ALERT',
+        rows: [
+          ['Alert code', payload.code || 'VEHICLE_FEED_UNREACHABLE'],
+          ['Severity', severity],
+          ['Checked', checkedAt],
+          ['Issue', 'The monitor could not reach the GTFS vehicle positions feed.'],
+          ['Feed URL', payload.feedUrl || 'unknown'],
+          ['HTTP status', payload.httpStatus || 'unknown'],
+          ['Error', payload.errorMessage || 'unknown'],
+          ['Impact', 'The monitor cannot verify current bus locations, so tracking alerts may be incomplete or unavailable.'],
+          ['Suggested focus', 'Check feed availability, IIS or server status, DNS or network access, SSL, and upstream publishing services.'],
+          ['Details', payload.details || '—'],
+        ],
+      };
+    case 'vehicle_feed_out_of_sync':
+      return {
+        banner: '#7F1D1D',
+        title: 'BARRIE TRANSIT GPS ALERT',
+        rows: [
+          ['Alert code', payload.code || 'VEHICLE_FEED_OUT_OF_SYNC'],
+          ['Severity', severity],
+          ['Checked', checkedAt],
+          ['Issue', 'GTFS trip updates appear current, but GTFS vehicle positions appear stale.'],
+          ['Vehicle feed URL', payload.feedUrl || 'unknown'],
+          ['Vehicle feed timestamp', formatIsoTimestamp(payload.feedTimestamp)],
+          ['Vehicle feed age', formatMinutes(payload.feedAgeMin)],
+          ['Trip updates URL', payload.tripUpdatesUrl || 'unknown'],
+          ['Trip updates timestamp', formatIsoTimestamp(payload.tripUpdatesTimestamp)],
+          ['Trip updates age', formatMinutes(payload.tripUpdatesAgeMin)],
+          ['Impact', 'Bus alert emails may report false GPS outages even though other GTFS real-time services are active.'],
+          ['Suggested focus', 'Check the vehicle positions publishing pipeline specifically rather than the full GTFS environment.'],
+          ['Details', payload.details || '—'],
+        ],
+      };
+    case 'all_buses_not_tracking':
+      return {
+        banner: '#92400E',
+        title: 'BARRIE TRANSIT GPS ALERT',
+        rows: [
+          ['Alert code', payload.code || 'ALL_BUSES_NOT_TRACKING'],
+          ['Severity', severity],
+          ['Checked', checkedAt],
+          ['Issue', 'No expected buses are reporting current GPS data.'],
+          ['Expected buses', String(payload.expectedCount ?? 'unknown')],
+          ['Tracking buses', String(payload.trackingCount ?? 'unknown')],
+          ['Missing buses', String(payload.missingCount ?? 'unknown')],
+          ['Impact', 'This may indicate a major fleet-wide GPS reporting issue.'],
+          ['Suggested focus', 'Confirm the vehicle positions feed is healthy first. If the feed is healthy, check onboard GPS reporting, AVL gateway services, and fleet communications.'],
+          ['Details', payload.details || '—'],
+        ],
+      };
+    case 'runtime_failure':
+      return {
+        banner: '#7F1D1D',
+        title: 'BARRIE TRANSIT GPS ALERT',
+        rows: [
+          ['Alert code', payload.code || 'MONITOR_RUNTIME_FAILURE'],
+          ['Severity', severity],
+          ['Checked', checkedAt],
+          ['Issue', 'The monitor encountered a fatal error and could not complete its run.'],
+          ['Error', payload.errorMessage || 'unknown'],
+          ['Impact', 'Monitoring may be incomplete or unreliable until the next successful run.'],
+          ['Suggested focus', 'Check recent application logs, environment configuration, feed parsing, and email delivery dependencies.'],
+          ['Details', payload.details || '—'],
+        ],
+      };
+    case 'issue_recovered':
+      return {
+        banner: '#166534',
+        title: 'BARRIE TRANSIT GPS ALERT',
+        rows: [
+          ['Alert code', payload.code || 'SYSTEM_RECOVERED'],
+          ['Severity', severity],
+          ['Checked', checkedAt],
+          ['Issue resolved', 'A previously reported monitoring issue has cleared.'],
+          ['Previous issue code', payload.previousCode || 'unknown'],
+          ['Last successful run', formatAlertTimestamp(payload.lastSuccessAt)],
+          ['Impact', 'Monitoring has resumed and alerts should now reflect current conditions.'],
+          ['Details', payload.details || '—'],
+        ],
+      };
+    case 'recovered':
+      return {
+        banner: '#166534',
+        title: 'BARRIE TRANSIT GPS ALERT',
+        rows: [
+          ['Alert code', payload.code || 'SYSTEM_RECOVERED'],
+          ['Severity', severity],
+          ['Checked', checkedAt],
+          ['Issue resolved', 'The bus monitoring report pipeline has recovered.'],
+          ['Last successful monitor run', formatAlertTimestamp(payload.lastSuccessAt)],
+          ['Watchdog max age', formatMinutes(payload.maxAgeMin)],
+          ['Details', payload.details || '—'],
+        ],
+      };
+    case 'down':
+    default:
+      return {
+        banner: '#7F1D1D',
+        title: 'BARRIE TRANSIT GPS ALERT',
+        rows: [
+          ['Alert code', payload.code || 'MONITOR_WATCHDOG_DOWN'],
+          ['Severity', severity],
+          ['Checked', checkedAt],
+          ['Issue', 'The monitor has not completed a successful run within the expected time window.'],
+          ['Last successful monitor run', formatAlertTimestamp(payload.lastSuccessAt)],
+          ['Threshold', formatMinutes(payload.maxAgeMin)],
+          ['Impact', 'The monitoring pipeline may be down or repeatedly failing.'],
+          ['Suggested focus', 'Check whether the scheduled job is still running, whether the process is crashing, and whether dependencies are blocking successful completion.'],
+          ['Details', payload.details || '—'],
+        ],
+      };
+  }
+}
+
+function buildSystemMessage(payload) {
+  const subject = buildSystemSubject(payload);
+  const descriptor = buildSystemDescriptor(payload);
+
+  const htmlRows = descriptor.rows
+    .map(([label, value]) => `
+      <tr>
+        <td style="padding:8px 12px;border:1px solid #D1D5DB;background:#F9FAFB;font-weight:bold;vertical-align:top;width:32%">${escapeHtml(label)}</td>
+        <td style="padding:8px 12px;border:1px solid #D1D5DB;vertical-align:top">${escapeHtml(String(value))}</td>
+      </tr>`)
+    .join('');
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333333">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;margin:0 auto">
+    <tr>
+      <td style="background:${descriptor.banner};padding:16px 20px">
+        <span style="color:#FFFFFF;font-size:18px;font-weight:bold;letter-spacing:0.5px">${descriptor.title}</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:20px">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${htmlRows}
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  const text = [subject, '', ...descriptor.rows.map(([label, value]) => `${label}: ${value}`)].join('\n');
+  return { subject, html, text };
+}
+
 /**
  * Send an HTML email alert showing missing buses per route.
  *
@@ -94,86 +325,11 @@ async function sendAlert(config, report) {
 }
 
 /**
- * Send a monitor-health email (watchdog) when the reporting pipeline is stale or recovers.
- *
- * @param {object} config — { smtpHost, smtpPort, smtpUser, smtpPass, recipient }
- * @param {object} payload — { kind: 'down'|'recovered', checkedAt, details, lastSuccessAt, maxAgeMin }
+ * Send a monitor-health or monitor-system email.
  */
 async function sendSystemAlert(config, payload) {
-  const timestamp = payload.checkedAt.toLocaleString('en-CA', {
-    timeZone: 'America/Toronto',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZoneName: 'short',
-  });
-
-  const lastSuccessText = payload.lastSuccessAt
-    ? payload.lastSuccessAt.toLocaleString('en-CA', {
-      timeZone: 'America/Toronto',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-      timeZoneName: 'short',
-    })
-    : 'unknown';
-
-  const isDown = payload.kind === 'down';
-  const statusLabel = isDown ? 'DOWN' : 'RECOVERED';
-  const subject = buildSystemSubject(payload);
-  const intro = isDown
-    ? 'The bus monitoring report pipeline appears stale.'
-    : 'The bus monitoring report pipeline has recovered.';
-
-  const html = `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333333">
-  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto">
-    <tr>
-      <td style="background:${isDown ? '#7F1D1D' : '#166534'};padding:16px 20px">
-        <span style="color:#FFFFFF;font-size:18px;font-weight:bold;letter-spacing:0.5px">BARRIE TRANSIT MONITOR HEALTH: ${statusLabel}</span>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:20px 20px 4px">
-        <span style="font-size:15px"><strong>${intro}</strong></span>
-      </td>
-    </tr>
-    <tr>
-      <td style="padding:0 20px 8px">Checked: ${timestamp}</td>
-    </tr>
-    <tr>
-      <td style="padding:0 20px 8px">Last successful monitor run: ${lastSuccessText}</td>
-    </tr>
-    <tr>
-      <td style="padding:0 20px 8px">Watchdog max age: ${payload.maxAgeMin} minutes</td>
-    </tr>
-    <tr>
-      <td style="padding:0 20px 20px">Details: ${escapeHtml(payload.details)}</td>
-    </tr>
-  </table>
-</body>
-</html>`;
-
-  const text = [
-    `BARRIE TRANSIT MONITOR HEALTH: ${statusLabel}`,
-    '',
-    intro,
-    `Checked: ${timestamp}`,
-    `Last successful monitor run: ${lastSuccessText}`,
-    `Watchdog max age: ${payload.maxAgeMin} minutes`,
-    `Details: ${payload.details}`,
-  ].join('\n');
-  const info = await sendMail(config, { subject, html, text });
-
+  const message = buildSystemMessage(payload);
+  const info = await sendMail(config, message);
   console.log('[notify] System email sent:', info.messageId);
   return info;
 }
@@ -187,18 +343,9 @@ async function sendSystemAlert(config, payload) {
 async function sendTestAlert(config, payload) {
   const checkedAt = payload.checkedAt || new Date();
   const details = payload.details || 'Scheduled monitor test run completed successfully.';
-  const timestamp = checkedAt.toLocaleString('en-CA', {
-    timeZone: 'America/Toronto',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZoneName: 'short',
-  });
+  const timestamp = formatAlertTimestamp(checkedAt);
 
-  const subject = 'Barrie Transit Monitor Test: Scheduled check';
+  const subject = 'Barrie Transit GPS Alert Test: Scheduled check';
   const html = `
 <!DOCTYPE html>
 <html>
@@ -207,7 +354,7 @@ async function sendTestAlert(config, payload) {
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto">
     <tr>
       <td style="background:#1F4E79;padding:16px 20px">
-        <span style="color:#FFFFFF;font-size:18px;font-weight:bold;letter-spacing:0.5px">BARRIE TRANSIT MONITOR TEST EMAIL</span>
+        <span style="color:#FFFFFF;font-size:18px;font-weight:bold;letter-spacing:0.5px">BARRIE TRANSIT GPS ALERT TEST</span>
       </td>
     </tr>
     <tr>
@@ -216,7 +363,7 @@ async function sendTestAlert(config, payload) {
       </td>
     </tr>
     <tr>
-      <td style="padding:0 20px 8px">Checked: ${timestamp}</td>
+      <td style="padding:0 20px 8px">Checked: ${escapeHtml(timestamp)}</td>
     </tr>
     <tr>
       <td style="padding:0 20px 20px">Details: ${escapeHtml(details)}</td>
@@ -225,7 +372,7 @@ async function sendTestAlert(config, payload) {
 </body>
 </html>`;
   const text = [
-    'BARRIE TRANSIT MONITOR TEST EMAIL',
+    'BARRIE TRANSIT GPS ALERT TEST',
     '',
     'This is a scheduled test email from the bus monitor.',
     `Checked: ${timestamp}`,
@@ -242,29 +389,13 @@ function buildAlertSubject(report) {
   return `Barrie Transit GPS Alert: ${report.totalMissing}/${report.totalExpected} ${noun} not tracking`;
 }
 
-function buildSystemSubject(payload) {
-  if (payload.kind === 'recovered') {
-    return 'Barrie Transit Monitor Health: Reporting recovered';
-  }
-  return 'Barrie Transit Monitor Health: Reporting pipeline stale';
-}
-
 function missingSummary(report) {
   const noun = report.totalMissing === 1 ? 'bus is' : 'buses are';
   return `${report.totalMissing} of ${report.totalExpected} expected ${noun} not reporting GPS data`;
 }
 
 function buildHtml(report) {
-  const timestamp = report.checkedAt.toLocaleString('en-CA', {
-    timeZone: 'America/Toronto',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZoneName: 'short',
-  });
+  const timestamp = formatAlertTimestamp(report.checkedAt);
 
   const tableRows = report.rows
     .map((row, i) => {
@@ -309,14 +440,11 @@ function buildHtml(report) {
 <head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333333">
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto">
-    <!-- Header banner -->
     <tr>
       <td style="background:#1F4E79;padding:16px 20px">
-        <span style="color:#FFFFFF;font-size:18px;font-weight:bold;letter-spacing:0.5px">BARRIE TRANSIT TRACKING ALERT</span>
+        <span style="color:#FFFFFF;font-size:18px;font-weight:bold;letter-spacing:0.5px">BARRIE TRANSIT GPS ALERT</span>
       </td>
     </tr>
-
-    <!-- Summary -->
     <tr>
       <td style="padding:20px 20px 4px">
         <span style="font-size:16px;color:#333333">&#9888; <strong>${missingSummary(report)}</strong></span>
@@ -324,11 +452,9 @@ function buildHtml(report) {
     </tr>
     <tr>
       <td style="padding:0 20px 20px">
-        <span style="font-size:12px;color:#888888">Checked: ${timestamp}</span>
+        <span style="font-size:12px;color:#888888">Checked: ${escapeHtml(timestamp)}</span>
       </td>
     </tr>
-
-    <!-- Data table -->
     <tr>
       <td style="padding:0 20px">
         <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
@@ -350,8 +476,6 @@ function buildHtml(report) {
         </table>
       </td>
     </tr>
-
-    <!-- Footer -->
     <tr>
       <td style="padding:20px">
         <hr style="border:none;border-top:1px solid #CCCCCC;margin:0 0 12px">
@@ -364,19 +488,10 @@ function buildHtml(report) {
 }
 
 function buildPlainText(report) {
-  const timestamp = report.checkedAt.toLocaleString('en-CA', {
-    timeZone: 'America/Toronto',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZoneName: 'short',
-  });
+  const timestamp = formatAlertTimestamp(report.checkedAt);
 
   const lines = [
-    'BARRIE TRANSIT TRACKING ALERT',
+    'BARRIE TRANSIT GPS ALERT',
     '='.repeat(40),
     '',
     missingSummary(report),
@@ -422,7 +537,9 @@ module.exports = {
   sendTestAlert,
   buildAlertSubject,
   buildSystemSubject,
-  // Exported for testing
+  buildSystemMessage,
+  formatAlertTimestamp,
+  formatIsoTimestamp,
   escapeHtml,
   missingSummary,
   buildHtml,

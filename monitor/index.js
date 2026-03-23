@@ -4,13 +4,14 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const fetch = require('node-fetch');
-const { fetchVehicles } = require('../server/vehicles');
+const { fetchVehicles, fetchGtfsRtFeedMeta } = require('../server/vehicles');
 const { getExpectedBuses } = require('./schedule');
 const { sendAlert, sendTestAlert, sendSystemAlert } = require('./notify');
 const { normalizeRouteId } = require('./routes');
 
 const GTFS_STATIC_URL = process.env.GTFS_STATIC_URL;
 const GTFS_RT_VEHICLES_URL = process.env.GTFS_RT_VEHICLES_URL;
+const GTFS_RT_TRIP_UPDATES_URL = process.env.GTFS_RT_TRIP_UPDATES_URL || deriveTripUpdatesUrl(GTFS_RT_VEHICLES_URL);
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_USER = process.env.SMTP_USER;
@@ -21,6 +22,7 @@ const ALERT_RECIPIENT = process.env.ALERT_RECIPIENT;
 const TEST_ALERT_RECIPIENT = process.env.TEST_ALERT_RECIPIENT;
 const SILENCE_THRESHOLD_MIN = parseInt(process.env.SILENCE_THRESHOLD_MIN || '5', 10);
 const ALERT_AFTER_MIN = parseInt(process.env.ALERT_AFTER_MIN || '20', 10);
+const FEED_STALE_AFTER_MIN = parseInt(process.env.FEED_STALE_AFTER_MIN || String(Math.max(SILENCE_THRESHOLD_MIN + 5, 15)), 10);
 const GTFS_CACHE_MAX_AGE_HOURS = parseInt(process.env.GTFS_CACHE_MAX_AGE_HOURS || '24', 10);
 const LAYOVER_GRACE_MIN = parseInt(process.env.LAYOVER_GRACE_MIN || '10', 10);
 const WATCHDOG_MAX_AGE_MIN = parseInt(process.env.WATCHDOG_MAX_AGE_MIN || '90', 10);
@@ -31,6 +33,7 @@ const HEARTBEAT_URL = process.env.HEARTBEAT_URL;
 const CACHE_DIR = path.join(__dirname, 'cache');
 const STATE_FILE = path.join(CACHE_DIR, 'state.json');
 const HEARTBEAT_FILE = path.join(CACHE_DIR, 'heartbeat.json');
+const ISSUE_STATE_FILE = path.join(CACHE_DIR, 'issue-state.json');
 
 function writeJsonFile(filePath, data) {
   const dir = path.dirname(filePath);
@@ -76,6 +79,60 @@ function saveHeartbeat(success) {
   writeJsonFile(HEARTBEAT_FILE, next);
 }
 
+function normalizeIssueState(raw) {
+  const active = raw && raw.active && typeof raw.active === 'object' ? raw.active : {};
+  return { active };
+}
+
+function loadIssueState() {
+  try {
+    if (fs.existsSync(ISSUE_STATE_FILE)) {
+      return normalizeIssueState(JSON.parse(fs.readFileSync(ISSUE_STATE_FILE, 'utf8')));
+    }
+  } catch (err) {
+    console.warn('[monitor] Could not read issue state file:', err.message);
+  }
+  return { active: {} };
+}
+
+function saveIssueState(state) {
+  writeJsonFile(ISSUE_STATE_FILE, normalizeIssueState(state));
+}
+
+function buildEmailConfig() {
+  return {
+    smtpHost: SMTP_HOST,
+    smtpPort: SMTP_PORT,
+    smtpUser: SMTP_USER,
+    smtpPass: SMTP_PASS,
+    recipient: ALERT_RECIPIENT,
+    smtpForceIpv4: SMTP_FORCE_IPV4,
+    resendApiKey: RESEND_API_KEY,
+    resendFromEmail: RESEND_FROM_EMAIL,
+  };
+}
+
+function deriveTripUpdatesUrl(vehicleUrl) {
+  if (!vehicleUrl) return null;
+  const [baseUrl, queryString] = String(vehicleUrl).split('?');
+  if (!/VehiclePositions\.pb$/i.test(baseUrl)) return null;
+  const nextBase = baseUrl.replace(/VehiclePositions\.pb$/i, 'TripUpdates.pb');
+  return queryString ? `${nextBase}?${queryString}` : nextBase;
+}
+
+function getFeedAgeMinutes(timestampSeconds, nowMs) {
+  const numeric = Number(timestampSeconds);
+  if (!Number.isFinite(numeric)) return null;
+  const ageMs = nowMs - (numeric * 1000);
+  return Math.max(0, Math.round(ageMs / 60000));
+}
+
+function formatErrorText(err) {
+  if (!err) return 'Unknown error';
+  if (err.code && err.message) return `${err.code}: ${err.message}`;
+  return err.message || String(err);
+}
+
 async function pingHeartbeat() {
   if (!HEARTBEAT_URL) return;
   try {
@@ -93,6 +150,8 @@ async function saveSuccessHeartbeat(emailConfig) {
     try {
       await sendSystemAlert(emailConfig, {
         kind: 'recovered',
+        code: 'SYSTEM_RECOVERED',
+        severity: 'Info',
         checkedAt: new Date(),
         lastSuccessAt: prev.lastSuccessAt ? new Date(prev.lastSuccessAt) : null,
         maxAgeMin: WATCHDOG_MAX_AGE_MIN,
@@ -228,25 +287,122 @@ function getWatchdogAlertDetails(heartbeat, now, maxAgeMin) {
   };
 }
 
+function summarizeRouteIssues(rows, limit = 8) {
+  const routeDetails = rows
+    .filter((row) => row.missing > 0)
+    .slice(0, limit)
+    .map((row) => `Route ${row.routeId}: expected ${row.expected}, tracking ${row.tracking}, missing ${row.missing}`);
+
+  return routeDetails.length ? routeDetails.join('; ') : 'No route detail available.';
+}
+
+function getFeedAlertContext(vehicleFeed, tripUpdatesMeta, now, staleAfterMin) {
+  const nowMs = now.getTime();
+  const feedAgeMin = getFeedAgeMinutes(vehicleFeed && vehicleFeed.feed_timestamp, nowMs);
+  if (feedAgeMin !== null && feedAgeMin <= staleAfterMin) return null;
+
+  const shared = {
+    severity: 'Critical',
+    checkedAt: now,
+    feedUrl: GTFS_RT_VEHICLES_URL,
+    feedTimestamp: vehicleFeed && vehicleFeed.feed_timestamp,
+    feedAgeMin,
+    lastModified: vehicleFeed && vehicleFeed.feed_last_modified,
+  };
+
+  const tripUpdatesAgeMin = getFeedAgeMinutes(tripUpdatesMeta && tripUpdatesMeta.header_timestamp, nowMs);
+  if (tripUpdatesMeta && tripUpdatesAgeMin !== null && tripUpdatesAgeMin <= staleAfterMin) {
+    return {
+      kind: 'vehicle_feed_out_of_sync',
+      code: 'VEHICLE_FEED_OUT_OF_SYNC',
+      ...shared,
+      tripUpdatesUrl: GTFS_RT_TRIP_UPDATES_URL,
+      tripUpdatesTimestamp: tripUpdatesMeta.header_timestamp,
+      tripUpdatesAgeMin,
+      details: 'Trip updates are current, but the vehicle positions feed is stale.',
+    };
+  }
+
+  return {
+    kind: 'vehicle_feed_stale',
+    code: 'VEHICLE_FEED_STALE',
+    ...shared,
+    details: 'The vehicle positions feed header timestamp is older than the allowed freshness window.',
+  };
+}
+
+function recordIssueState(issueState, payload) {
+  const active = issueState.active || {};
+  const existing = active[payload.code] || null;
+  const checkedIso = payload.checkedAt.toISOString();
+
+  active[payload.code] = {
+    code: payload.code,
+    kind: payload.kind,
+    summary: payload.details || '',
+    firstDetectedAt: existing && existing.firstDetectedAt ? existing.firstDetectedAt : checkedIso,
+    lastDetectedAt: checkedIso,
+    lastSentAt: existing && existing.lastSentAt ? existing.lastSentAt : null,
+  };
+
+  issueState.active = active;
+  return existing;
+}
+
+async function triggerIssueAlert(emailConfig, issueState, activeIssueCodes, payload) {
+  activeIssueCodes.add(payload.code);
+  const previous = recordIssueState(issueState, payload);
+  if (previous && previous.lastSentAt) return false;
+  await sendSystemAlert(emailConfig, payload);
+  issueState.active[payload.code].lastSentAt = payload.checkedAt.toISOString();
+  return true;
+}
+
+async function sendRecoveryAlerts(emailConfig, issueState, activeIssueCodes, checkedAt) {
+  const active = issueState.active || {};
+  const codes = Object.keys(active);
+
+  for (const code of codes) {
+    if (activeIssueCodes.has(code)) continue;
+    if (code === 'MONITOR_WATCHDOG_DOWN') continue;
+
+    const previous = active[code];
+    await sendSystemAlert(emailConfig, {
+      kind: 'issue_recovered',
+      code: 'SYSTEM_RECOVERED',
+      severity: 'Info',
+      checkedAt,
+      lastSuccessAt: checkedAt,
+      previousCode: code,
+      details: previous && previous.summary
+        ? `Previously active issue cleared: ${code}. ${previous.summary}`
+        : `Previously active issue cleared: ${code}.`,
+    });
+    delete active[code];
+  }
+
+  issueState.active = active;
+}
+
 async function main() {
   const now = new Date();
   const timeStr = now.toLocaleTimeString('en-CA', { timeZone: 'America/Toronto', hour12: false });
+  const emailConfig = buildEmailConfig();
+  const issueState = loadIssueState();
+  const activeIssueCodes = new Set();
+
   console.log(`[monitor] Starting check at ${timeStr}`);
 
-  // Watchdog: check if previous runs have been failing
   const heartbeat = loadHeartbeat();
   const watchdogAlert = getWatchdogAlertDetails(heartbeat, now, WATCHDOG_MAX_AGE_MIN);
   if (watchdogAlert) {
     console.warn('[monitor] Watchdog: last success was %d min ago (threshold: %d min). Sending DOWN alert.',
       watchdogAlert.ageMinutes, WATCHDOG_MAX_AGE_MIN);
     try {
-      const watchdogEmailConfig = {
-        smtpHost: SMTP_HOST, smtpPort: SMTP_PORT, smtpUser: SMTP_USER, smtpPass: SMTP_PASS,
-        recipient: ALERT_RECIPIENT, smtpForceIpv4: SMTP_FORCE_IPV4,
-        resendApiKey: RESEND_API_KEY, resendFromEmail: RESEND_FROM_EMAIL,
-      };
-      await sendSystemAlert(watchdogEmailConfig, {
+      await sendSystemAlert(emailConfig, {
         kind: 'down',
+        code: 'MONITOR_WATCHDOG_DOWN',
+        severity: 'Critical',
         checkedAt: now,
         lastSuccessAt: watchdogAlert.lastSuccessAt,
         maxAgeMin: WATCHDOG_MAX_AGE_MIN,
@@ -261,7 +417,6 @@ async function main() {
 
   saveHeartbeat(false);
 
-  // Validate required env vars
   const required = { GTFS_STATIC_URL, GTFS_RT_VEHICLES_URL, ALERT_RECIPIENT };
   const missing = Object.entries(required).filter(([, v]) => !v).map(([k]) => k);
   const hasSmtp = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS);
@@ -276,17 +431,6 @@ async function main() {
   }
 
   try {
-    const emailConfig = {
-      smtpHost: SMTP_HOST,
-      smtpPort: SMTP_PORT,
-      smtpUser: SMTP_USER,
-      smtpPass: SMTP_PASS,
-      recipient: ALERT_RECIPIENT,
-      smtpForceIpv4: SMTP_FORCE_IPV4,
-      resendApiKey: RESEND_API_KEY,
-      resendFromEmail: RESEND_FROM_EMAIL,
-    };
-
     if (TEST_ALERT_EVERY_RUN) {
       const testRecipient = TEST_ALERT_RECIPIENT || ALERT_RECIPIENT;
       console.log('[monitor] TEST_ALERT_EVERY_RUN enabled. Sending scheduled test email.');
@@ -300,7 +444,6 @@ async function main() {
       }
     }
 
-    // 1. Get expected buses from GTFS static schedule
     const expected = await getExpectedBuses(
       GTFS_STATIC_URL,
       CACHE_DIR,
@@ -310,27 +453,64 @@ async function main() {
 
     if (expected.totalExpected === 0) {
       console.log('[monitor] No buses expected at this time. Exiting.');
-      saveState({}); // Clear stale durations so they don't carry into next day
+      saveState({});
+      saveIssueState(issueState);
       await saveSuccessHeartbeat(emailConfig);
       process.exit(0);
     }
 
     console.log('[monitor] Expected: %d buses across %d routes', expected.totalExpected, expected.byRoute.size);
 
-    // 2. Fetch GTFS-RT vehicle positions
-    const { vehicles } = await fetchVehicles(GTFS_RT_VEHICLES_URL);
+    let vehicleData;
+    try {
+      vehicleData = await fetchVehicles(GTFS_RT_VEHICLES_URL);
+    } catch (err) {
+      const errorText = formatErrorText(err);
+      console.error('[monitor] Vehicle positions fetch failed:', errorText);
+      await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, {
+        kind: 'vehicle_feed_unreachable',
+        code: 'VEHICLE_FEED_UNREACHABLE',
+        severity: 'Critical',
+        checkedAt: now,
+        feedUrl: GTFS_RT_VEHICLES_URL,
+        httpStatus: err && err.status ? err.status : 'unknown',
+        errorMessage: errorText,
+        details: 'Vehicle positions feed request failed before the monitor could evaluate active buses.',
+      });
+      saveIssueState(issueState);
+      await pingHeartbeat();
+      process.exit(1);
+    }
 
-    // 3. Filter to vehicles reporting within threshold
+    const candidateFeedIssue = getFeedAlertContext(vehicleData, null, now, FEED_STALE_AFTER_MIN);
+    if (candidateFeedIssue) {
+      let tripUpdatesMeta = null;
+      if (GTFS_RT_TRIP_UPDATES_URL) {
+        try {
+          tripUpdatesMeta = await fetchGtfsRtFeedMeta(GTFS_RT_TRIP_UPDATES_URL);
+        } catch (err) {
+          console.warn('[monitor] Trip updates metadata check failed:', formatErrorText(err));
+        }
+      }
+
+      const feedIssue = getFeedAlertContext(vehicleData, tripUpdatesMeta, now, FEED_STALE_AFTER_MIN) || candidateFeedIssue;
+      await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, feedIssue);
+      saveState({});
+      saveIssueState(issueState);
+      await saveSuccessHeartbeat(emailConfig);
+      process.exit(0);
+    }
+
+    const vehicles = vehicleData.vehicles || [];
     const thresholdSecs = SILENCE_THRESHOLD_MIN * 60;
     const nowEpoch = Math.floor(now.getTime() / 1000);
 
     const activeVehicles = vehicles.filter((v) => {
-      if (!v.route_id) return false; // Between trips
+      if (!v.route_id) return false;
       if (!v.last_reported) return false;
       return (nowEpoch - v.last_reported) <= thresholdSecs;
     });
 
-    // 4. Group tracking vehicles by route
     const trackingByRoute = new Map();
     for (const v of activeVehicles) {
       const routeId = normalizeRouteId(v.route_id);
@@ -342,11 +522,8 @@ async function main() {
     const totalTracking = activeVehicles.length;
     console.log('[monitor] Tracking: %d vehicles with recent GPS', totalTracking);
 
-    // 5. Load persistent state for duration tracking
     const prevState = loadState();
     const nowMs = now.getTime();
-
-    // 6. Compare expected vs actual per route
     const alertThresholdMs = ALERT_AFTER_MIN * 60 * 1000;
     const { rows, newState, totalMissing, totalMonitoring } = buildRouteReport(
       expected.byRoute,
@@ -356,25 +533,43 @@ async function main() {
       alertThresholdMs
     );
 
-    // Save state (only routes currently missing are kept)
     saveState(newState);
 
-    // 7. Decide whether to alert
     if (totalMissing === 0 && totalMonitoring === 0) {
       console.log('[monitor] All expected buses are tracking. No alert needed.');
+      await sendRecoveryAlerts(emailConfig, issueState, activeIssueCodes, now);
+      saveIssueState(issueState);
       await saveSuccessHeartbeat(emailConfig);
       process.exit(0);
     }
 
     if (totalMissing === 0) {
       console.log('[monitor] %d buses monitoring (under %d min threshold). No alert.', totalMonitoring, ALERT_AFTER_MIN);
+      await sendRecoveryAlerts(emailConfig, issueState, activeIssueCodes, now);
+      saveIssueState(issueState);
+      await saveSuccessHeartbeat(emailConfig);
+      process.exit(0);
+    }
+
+    if (expected.totalExpected > 0 && totalMissing === expected.totalExpected) {
+      console.log('[monitor] All expected buses are not tracking. Sending system alert.');
+      await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, {
+        kind: 'all_buses_not_tracking',
+        code: 'ALL_BUSES_NOT_TRACKING',
+        severity: 'Critical',
+        checkedAt: now,
+        expectedCount: expected.totalExpected,
+        trackingCount: totalTracking,
+        missingCount: totalMissing,
+        details: summarizeRouteIssues(rows),
+      });
+      saveIssueState(issueState);
       await saveSuccessHeartbeat(emailConfig);
       process.exit(0);
     }
 
     console.log('[monitor] Missing: %d buses (%d+ min). Sending alert...', totalMissing, ALERT_AFTER_MIN);
 
-    // 8. Send email
     const report = {
       rows,
       totalExpected: expected.totalExpected,
@@ -384,16 +579,29 @@ async function main() {
       checkedAt: now,
     };
 
+    await sendRecoveryAlerts(emailConfig, issueState, activeIssueCodes, now);
+    saveIssueState(issueState);
     await sendAlert(emailConfig, report);
 
     console.log('[monitor] Alert sent. Done.');
     await saveSuccessHeartbeat(emailConfig);
     process.exit(0);
   } catch (err) {
-    const errorText = err && err.code ? `${err.code}: ${err.message || err}` : (err && err.message) || err;
+    const errorText = formatErrorText(err);
     console.error('[monitor] Fatal error:', errorText);
-    // Still ping heartbeat so healthchecks.io knows the cron ran.
-    // Monitor email alerts handle actual failures separately.
+    try {
+      await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, {
+        kind: 'runtime_failure',
+        code: 'MONITOR_RUNTIME_FAILURE',
+        severity: 'Critical',
+        checkedAt: now,
+        errorMessage: errorText,
+        details: 'Monitor run failed before completion.',
+      });
+      saveIssueState(issueState);
+    } catch (alertErr) {
+      console.error('[monitor] Runtime failure email failed:', formatErrorText(alertErr));
+    }
     await pingHeartbeat();
     process.exit(1);
   }
@@ -409,10 +617,18 @@ module.exports = {
   saveState,
   loadHeartbeat,
   saveHeartbeat,
+  loadIssueState,
+  saveIssueState,
+  buildEmailConfig,
+  deriveTripUpdatesUrl,
+  getFeedAgeMinutes,
+  getFeedAlertContext,
+  formatErrorText,
   formatDuration,
   normalizeMissingSinceEntry,
   sortRouteIds,
   summarizeMissingDuration,
+  summarizeRouteIssues,
   buildRouteReport,
   getWatchdogAlertDetails,
 };

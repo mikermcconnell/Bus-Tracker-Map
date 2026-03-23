@@ -30,6 +30,11 @@ jobs:
         env:
           GTFS_STATIC_URL: https://www.myridebarrie.ca/gtfs/google_transit.zip
           GTFS_RT_VEHICLES_URL: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+          GTFS_RT_TRIP_UPDATES_URL: https://www.myridebarrie.ca/gtfs/GTFS_TripUpdates.pb
+          SILENCE_THRESHOLD_MIN: 5
+          ALERT_AFTER_MIN: 20
+          FEED_STALE_AFTER_MIN: 15
+          WATCHDOG_MAX_AGE_MIN: 90
           ALERT_RECIPIENT: ${{ secrets.ALERT_RECIPIENT }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_USER: ${{ secrets.SMTP_USER }}

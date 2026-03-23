@@ -5,6 +5,7 @@ const {
   escapeHtml,
   buildAlertSubject,
   buildSystemSubject,
+  buildSystemMessage,
   missingSummary,
   buildHtml,
   buildPlainText,
@@ -43,13 +44,19 @@ describe('buildAlertSubject', () => {
 describe('buildSystemSubject', () => {
   test('returns stale subject for down', () => {
     expect(buildSystemSubject({ kind: 'down' })).toBe(
-      'Barrie Transit Monitor Health: Reporting pipeline stale'
+      'Barrie Transit GPS Alert: Reporting pipeline stale'
+    );
+  });
+
+  test('returns vehicle feed stale subject', () => {
+    expect(buildSystemSubject({ kind: 'vehicle_feed_stale' })).toBe(
+      'Barrie Transit GPS Alert: Vehicle positions feed stale'
     );
   });
 
   test('returns recovered subject', () => {
     expect(buildSystemSubject({ kind: 'recovered' })).toBe(
-      'Barrie Transit Monitor Health: Reporting recovered'
+      'Barrie Transit GPS Alert: Monitor reporting recovered'
     );
   });
 });
@@ -91,18 +98,16 @@ describe('buildHtml', () => {
     expect(html).toContain('2 of 5 expected buses are not reporting GPS data');
   });
 
-  test('shows total row', () => {
+  test('uses the GPS alert heading', () => {
     const html = buildHtml(sampleReport);
-    expect(html).toContain('>5<');
-    expect(html).toContain('>3<');
-    expect(html).toContain('>2<');
+    expect(html).toContain('BARRIE TRANSIT GPS ALERT');
   });
 });
 
 describe('buildPlainText', () => {
   test('contains header and route data', () => {
     const text = buildPlainText(sampleReport);
-    expect(text).toContain('BARRIE TRANSIT TRACKING ALERT');
+    expect(text).toContain('BARRIE TRANSIT GPS ALERT');
     expect(text).toContain('TOTAL');
     expect(text).toContain('25 min');
   });
@@ -115,5 +120,23 @@ describe('buildPlainText', () => {
   test('contains disclaimer', () => {
     const text = buildPlainText(sampleReport);
     expect(text).toContain('Some variance is normal');
+  });
+});
+
+describe('buildSystemMessage', () => {
+  test('includes GPS Alert text in system subjects', () => {
+    const { subject, text } = buildSystemMessage({
+      kind: 'vehicle_feed_stale',
+      code: 'VEHICLE_FEED_STALE',
+      checkedAt: new Date('2026-03-23T13:40:00Z'),
+      feedUrl: 'https://example.com/GTFS_VehiclePositions.pb',
+      feedTimestamp: 1774225732,
+      feedAgeMin: 789,
+      lastModified: 'Mon, 23 Mar 2026 00:30:26 GMT',
+      details: 'Vehicle positions feed stopped updating.',
+    });
+    expect(subject).toContain('Barrie Transit GPS Alert');
+    expect(text).toContain('Alert code: VEHICLE_FEED_STALE');
+    expect(text).toContain('Feed age: 789 minutes');
   });
 });
