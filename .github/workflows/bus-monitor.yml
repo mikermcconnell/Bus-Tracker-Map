@@ -39,6 +39,7 @@ jobs:
           SILENCE_THRESHOLD_MIN: 5
           ALERT_AFTER_MIN: 20
           FEED_STALE_AFTER_MIN: 15
+          ISSUE_RESEND_MIN: 30
           WATCHDOG_MAX_AGE_MIN: 90
           ALERT_RECIPIENT: ${{ secrets.ALERT_RECIPIENT }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}

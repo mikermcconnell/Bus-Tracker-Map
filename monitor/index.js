@@ -23,6 +23,7 @@ const TEST_ALERT_RECIPIENT = process.env.TEST_ALERT_RECIPIENT;
 const SILENCE_THRESHOLD_MIN = parseInt(process.env.SILENCE_THRESHOLD_MIN || '5', 10);
 const ALERT_AFTER_MIN = parseInt(process.env.ALERT_AFTER_MIN || '20', 10);
 const FEED_STALE_AFTER_MIN = parseInt(process.env.FEED_STALE_AFTER_MIN || String(Math.max(SILENCE_THRESHOLD_MIN + 5, 15)), 10);
+const ISSUE_RESEND_MIN = parseInt(process.env.ISSUE_RESEND_MIN || '30', 10);
 const GTFS_CACHE_MAX_AGE_HOURS = parseInt(process.env.GTFS_CACHE_MAX_AGE_HOURS || '24', 10);
 const LAYOVER_GRACE_MIN = parseInt(process.env.LAYOVER_GRACE_MIN || '10', 10);
 const WATCHDOG_MAX_AGE_MIN = parseInt(process.env.WATCHDOG_MAX_AGE_MIN || '90', 10);
@@ -349,10 +350,19 @@ function recordIssueState(issueState, payload) {
   return existing;
 }
 
+function shouldSendIssueAlert(previous, checkedAt, resendMinutes) {
+  if (!previous || !previous.lastSentAt) return true;
+  const lastSentAt = new Date(previous.lastSentAt);
+  if (Number.isNaN(lastSentAt.getTime())) return true;
+  const resendMs = Math.max(0, Number(resendMinutes) || 0) * 60 * 1000;
+  if (resendMs === 0) return true;
+  return (checkedAt.getTime() - lastSentAt.getTime()) >= resendMs;
+}
+
 async function triggerIssueAlert(emailConfig, issueState, activeIssueCodes, payload) {
   activeIssueCodes.add(payload.code);
   const previous = recordIssueState(issueState, payload);
-  if (previous && previous.lastSentAt) return false;
+  if (!shouldSendIssueAlert(previous, payload.checkedAt, ISSUE_RESEND_MIN)) return false;
   await sendSystemAlert(emailConfig, payload);
   issueState.active[payload.code].lastSentAt = payload.checkedAt.toISOString();
   return true;
@@ -623,6 +633,7 @@ module.exports = {
   deriveTripUpdatesUrl,
   getFeedAgeMinutes,
   getFeedAlertContext,
+  shouldSendIssueAlert,
   formatErrorText,
   formatDuration,
   normalizeMissingSinceEntry,

@@ -5,6 +5,7 @@ const {
   deriveTripUpdatesUrl,
   getFeedAgeMinutes,
   getFeedAlertContext,
+  shouldSendIssueAlert,
   normalizeMissingSinceEntry,
   buildRouteReport,
   getWatchdogAlertDetails,
@@ -48,6 +49,17 @@ describe('monitor feed helpers', () => {
       code: 'VEHICLE_FEED_STALE',
       kind: 'vehicle_feed_stale',
     }));
+  });
+
+  test('resends active issues after the resend interval', () => {
+    const checkedAt = new Date('2026-03-23T14:30:00Z');
+    expect(shouldSendIssueAlert(null, checkedAt, 30)).toBe(true);
+    expect(shouldSendIssueAlert({
+      lastSentAt: '2026-03-23T14:10:00Z',
+    }, checkedAt, 30)).toBe(false);
+    expect(shouldSendIssueAlert({
+      lastSentAt: '2026-03-23T14:00:00Z',
+    }, checkedAt, 30)).toBe(true);
   });
 });
 
