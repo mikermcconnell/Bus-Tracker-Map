@@ -32,31 +32,31 @@ describe('escapeHtml', () => {
 describe('buildAlertSubject', () => {
   test('uses singular "bus" for 1 missing', () => {
     const subject = buildAlertSubject({ totalMissing: 1, totalExpected: 10 });
-    expect(subject).toBe('Barrie Transit GPS Alert: 1 bus out of 10 is not sending live updates');
+    expect(subject).toBe('Barrie Transit GPS Alert: 1 of 10 expected buses is not reporting live GPS');
   });
 
   test('uses plural "buses" for multiple missing', () => {
     const subject = buildAlertSubject({ totalMissing: 3, totalExpected: 10 });
-    expect(subject).toBe('Barrie Transit GPS Alert: 3 buses out of 10 are not sending live updates');
+    expect(subject).toBe('Barrie Transit GPS Alert: 3 of 10 expected buses are not reporting live GPS');
   });
 });
 
 describe('buildSystemSubject', () => {
   test('returns stale subject for down', () => {
     expect(buildSystemSubject({ kind: 'down' })).toBe(
-      'Barrie Transit GPS Alert: Monitoring is overdue'
+      'Barrie Transit GPS Alert: Monitoring check overdue'
     );
   });
 
   test('returns vehicle feed stale subject', () => {
     expect(buildSystemSubject({ kind: 'vehicle_feed_stale' })).toBe(
-      'Barrie Transit GPS Alert: Live bus locations are out of date'
+      'Barrie Transit GPS Alert: Live location data delayed'
     );
   });
 
   test('returns recovered subject', () => {
     expect(buildSystemSubject({ kind: 'recovered' })).toBe(
-      'Barrie Transit GPS Alert: Monitoring is back to normal'
+      'Barrie Transit GPS Alert: Monitoring restored'
     );
   });
 });
@@ -64,12 +64,12 @@ describe('buildSystemSubject', () => {
 describe('missingSummary', () => {
   test('singular when 1 bus missing', () => {
     const result = missingSummary({ totalMissing: 1, totalExpected: 8 });
-    expect(result).toBe('1 bus out of 8 is not sending live updates');
+    expect(result).toBe('1 of 8 expected buses is not reporting live GPS');
   });
 
   test('plural when multiple buses missing', () => {
     const result = missingSummary({ totalMissing: 4, totalExpected: 12 });
-    expect(result).toBe('4 buses out of 12 are not sending live updates');
+    expect(result).toBe('4 of 12 expected buses are not reporting live GPS');
   });
 });
 
@@ -95,7 +95,7 @@ describe('buildHtml', () => {
 
   test('contains missing summary', () => {
     const html = buildHtml(sampleReport);
-    expect(html).toContain('2 buses out of 5 are not sending live updates');
+    expect(html).toContain('2 of 5 expected buses are not reporting live GPS');
   });
 
   test('uses the GPS alert heading', () => {
@@ -114,12 +114,12 @@ describe('buildPlainText', () => {
 
   test('contains missing summary', () => {
     const text = buildPlainText(sampleReport);
-    expect(text).toContain('2 buses out of 5 are not sending live updates');
+    expect(text).toContain('2 of 5 expected buses are not reporting live GPS');
   });
 
   test('contains disclaimer', () => {
     const text = buildPlainText(sampleReport);
-    expect(text).toContain('Some change is normal when buses are between trips or drivers change.');
+    expect(text).toContain('Short gaps can occur between trips or during operator changes.');
   });
 });
 

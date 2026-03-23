@@ -113,22 +113,22 @@ function formatMinutes(value) {
 function buildSystemSubject(payload) {
   switch (payload.kind) {
     case 'recovered':
-      return 'Barrie Transit GPS Alert: Monitoring is back to normal';
+      return 'Barrie Transit GPS Alert: Monitoring restored';
     case 'vehicle_feed_stale':
-      return 'Barrie Transit GPS Alert: Live bus locations are out of date';
+      return 'Barrie Transit GPS Alert: Live location data delayed';
     case 'vehicle_feed_unreachable':
-      return 'Barrie Transit GPS Alert: Live bus locations feed is unavailable';
+      return 'Barrie Transit GPS Alert: Live location data unavailable';
     case 'vehicle_feed_out_of_sync':
-      return 'Barrie Transit GPS Alert: Live bus locations and trip updates do not match';
+      return 'Barrie Transit GPS Alert: Trip updates current, live GPS delayed';
     case 'all_buses_not_tracking':
-      return 'Barrie Transit GPS Alert: No buses are reporting GPS';
+      return 'Barrie Transit GPS Alert: Fleet-wide GPS reporting gap';
     case 'runtime_failure':
-      return 'Barrie Transit GPS Alert: Monitor could not finish its check';
+      return 'Barrie Transit GPS Alert: Monitor check did not complete';
     case 'issue_recovered':
-      return 'Barrie Transit GPS Alert: Problem cleared';
+      return 'Barrie Transit GPS Alert: Issue resolved';
     case 'down':
     default:
-      return 'Barrie Transit GPS Alert: Monitoring is overdue';
+      return 'Barrie Transit GPS Alert: Monitoring check overdue';
   }
 }
 
@@ -143,13 +143,13 @@ function buildSystemDescriptor(payload) {
         rows: [
           ['Alert ID', payload.code || 'VEHICLE_FEED_STALE'],
           ['Checked at', checkedAt],
-          ['What happened', 'The live bus locations feed is old and does not look like it is updating.'],
+          ['Summary', 'Live bus location data appears outdated and may no longer be updating.'],
           ['Live feed link', payload.feedUrl || 'unknown'],
           ['Live feed time', formatIsoTimestamp(payload.feedTimestamp)],
           ['How old it is', formatMinutes(payload.feedAgeMin)],
           ['Last changed', payload.lastModified || 'unknown'],
-          ['What this affects', 'Map views and email alerts may show old bus locations. Some GPS outage alerts may be wrong.'],
-          ['What to check', 'Check the GPS source, the job that exports live bus locations, and the process that publishes that feed.'],
+          ['Operational impact', 'Map views and alert emails may show outdated bus locations. Some GPS outage alerts may be incorrect.'],
+          ['Recommended action', 'Review the GPS source, the export job for live bus locations, and the publishing process for that feed.'],
           ['More details', payload.details || '—'],
         ],
       };
@@ -160,12 +160,12 @@ function buildSystemDescriptor(payload) {
         rows: [
           ['Alert ID', payload.code || 'VEHICLE_FEED_UNREACHABLE'],
           ['Checked at', checkedAt],
-          ['What happened', 'The monitor could not reach the live bus locations feed.'],
+          ['Summary', 'The monitor could not reach the live bus location feed.'],
           ['Live feed link', payload.feedUrl || 'unknown'],
           ['Response code', payload.httpStatus || 'unknown'],
           ['Error message', payload.errorMessage || 'unknown'],
-          ['What this affects', 'The monitor cannot confirm where buses are, so GPS alerts may be missing or incomplete.'],
-          ['What to check', 'Check the feed, the server, network access, SSL, and the service that publishes the live updates.'],
+          ['Operational impact', 'The monitor cannot confirm current bus locations, so GPS alerts may be missing or incomplete.'],
+          ['Recommended action', 'Review the feed, server status, network access, SSL, and the service that publishes live location data.'],
           ['More details', payload.details || '—'],
         ],
       };
@@ -176,15 +176,15 @@ function buildSystemDescriptor(payload) {
         rows: [
           ['Alert ID', payload.code || 'VEHICLE_FEED_OUT_OF_SYNC'],
           ['Checked at', checkedAt],
-          ['What happened', 'Live bus locations are old, but trip updates are current.'],
+          ['Summary', 'Trip updates are current, but live bus location data is delayed.'],
           ['Live feed link', payload.feedUrl || 'unknown'],
           ['Live feed time', formatIsoTimestamp(payload.feedTimestamp)],
           ['How old it is', formatMinutes(payload.feedAgeMin)],
           ['Trip updates link', payload.tripUpdatesUrl || 'unknown'],
           ['Trip updates time', formatIsoTimestamp(payload.tripUpdatesTimestamp)],
           ['Trip updates age', formatMinutes(payload.tripUpdatesAgeMin)],
-          ['What this affects', 'GPS outage emails may be wrong because trip updates are current but bus location data is old.'],
-          ['What to check', 'Check the process that publishes live bus locations, not the full GTFS setup.'],
+          ['Operational impact', 'GPS outage emails may be incorrect because trip updates are current while location data is delayed.'],
+          ['Recommended action', 'Review the process that publishes live bus locations rather than the full GTFS environment.'],
           ['More details', payload.details || '—'],
         ],
       };
@@ -195,12 +195,12 @@ function buildSystemDescriptor(payload) {
         rows: [
           ['Alert ID', payload.code || 'ALL_BUSES_NOT_TRACKING'],
           ['Checked at', checkedAt],
-          ['What happened', 'No expected buses are sending current GPS data.'],
+          ['Summary', 'No expected buses are currently reporting GPS data.'],
           ['Expected buses', String(payload.expectedCount ?? 'unknown')],
           ['Buses reporting', String(payload.trackingCount ?? 'unknown')],
           ['Buses missing', String(payload.missingCount ?? 'unknown')],
-          ['What this affects', 'This affects all expected buses and may point to a system-wide GPS problem.'],
-          ['What to check', 'Check the live bus locations feed first. If that is working, check the bus GPS units, the data gateway, and bus communications.'],
+          ['Operational impact', 'This affects all expected buses and may indicate a fleet-wide GPS reporting issue.'],
+          ['Recommended action', 'Confirm the live location feed is healthy. If it is, review bus GPS units, the data gateway, and vehicle communications.'],
           ['More details', payload.details || '—'],
         ],
       };
@@ -211,10 +211,10 @@ function buildSystemDescriptor(payload) {
         rows: [
           ['Alert ID', payload.code || 'MONITOR_RUNTIME_FAILURE'],
           ['Checked at', checkedAt],
-          ['What happened', 'The monitor hit an error and could not finish.'],
+          ['Summary', 'The monitor encountered an error and did not complete its check.'],
           ['Error message', payload.errorMessage || 'unknown'],
-          ['What this affects', 'This check did not finish, so some problems may not be caught until the next run.'],
-          ['What to check', 'Check recent logs, settings, feed reading, and email delivery.'],
+          ['Operational impact', 'This check did not complete, so some issues may not be identified until the next successful run.'],
+          ['Recommended action', 'Review recent logs, configuration, feed processing, and email delivery.'],
           ['More details', payload.details || '—'],
         ],
       };
@@ -225,10 +225,10 @@ function buildSystemDescriptor(payload) {
         rows: [
           ['Alert ID', payload.code || 'SYSTEM_RECOVERED'],
           ['Checked at', checkedAt],
-          ['What happened', 'A previously reported issue has cleared.'],
+          ['Summary', 'A previously reported issue has cleared.'],
           ['Previous issue', payload.previousCode || 'unknown'],
           ['Last good check', formatAlertTimestamp(payload.lastSuccessAt)],
-          ['What this affects', 'Monitoring is working again and alerts should now match current conditions.'],
+          ['Operational impact', 'Monitoring is working again and alerts should now reflect current conditions.'],
           ['More details', payload.details || '—'],
         ],
       };
@@ -239,10 +239,10 @@ function buildSystemDescriptor(payload) {
         rows: [
           ['Alert ID', payload.code || 'SYSTEM_RECOVERED'],
           ['Checked at', checkedAt],
-          ['What happened', 'The bus monitoring report is back to normal.'],
+          ['Summary', 'The bus monitoring process is back to normal.'],
           ['Last good check', formatAlertTimestamp(payload.lastSuccessAt)],
           ['Allowed delay', formatMinutes(payload.maxAgeMin)],
-          ['What this affects', 'The monitoring report is working again.'],
+          ['Operational impact', 'The monitoring report is working again.'],
           ['More details', payload.details || '—'],
         ],
       };
@@ -254,11 +254,11 @@ function buildSystemDescriptor(payload) {
         rows: [
           ['Alert ID', payload.code || 'MONITOR_WATCHDOG_DOWN'],
           ['Checked at', checkedAt],
-          ['What happened', 'The monitor has not finished a successful check in the expected time.'],
+          ['Summary', 'The monitor has not completed a successful check within the expected time window.'],
           ['Last good check', formatAlertTimestamp(payload.lastSuccessAt)],
           ['Allowed delay', formatMinutes(payload.maxAgeMin)],
-          ['What this affects', 'The monitor may miss problems until it starts running successfully again.'],
-          ['What to check', 'Check whether the scheduled job is still running, whether it is crashing, or whether another service is blocking it.'],
+          ['Operational impact', 'The monitor may miss issues until it resumes successful runs.'],
+          ['Recommended action', 'Confirm the scheduled job is still running and review any crashes or dependency failures.'],
           ['More details', payload.details || '—'],
         ],
       };
@@ -377,15 +377,13 @@ async function sendTestAlert(config, payload) {
 }
 
 function buildAlertSubject(report) {
-  const noun = report.totalMissing === 1 ? 'bus' : 'buses';
   const verb = report.totalMissing === 1 ? 'is' : 'are';
-  return `Barrie Transit GPS Alert: ${report.totalMissing} ${noun} out of ${report.totalExpected} ${verb} not sending live updates`;
+  return `Barrie Transit GPS Alert: ${report.totalMissing} of ${report.totalExpected} expected buses ${verb} not reporting live GPS`;
 }
 
 function missingSummary(report) {
-  const noun = report.totalMissing === 1 ? 'bus' : 'buses';
   const verb = report.totalMissing === 1 ? 'is' : 'are';
-  return `${report.totalMissing} ${noun} out of ${report.totalExpected} ${verb} not sending live updates`;
+  return `${report.totalMissing} of ${report.totalExpected} expected buses ${verb} not reporting live GPS`;
 }
 
 function buildHtml(report) {
@@ -405,13 +403,13 @@ function buildHtml(report) {
         ? (isMonitoring ? 'color:#B45309;font-weight:bold' : 'color:#C00000;font-weight:bold')
         : 'color:#333333';
       const missingText = monitoringMissing > 0 && confirmedMissing > 0
-        ? `${row.missing} <span style="font-size:11px;font-weight:normal">(${confirmedMissing} confirmed, ${monitoringMissing} monitoring)</span>`
+        ? `${row.missing} <span style="font-size:11px;font-weight:normal">(${confirmedMissing} confirmed, ${monitoringMissing} being monitored)</span>`
         : String(row.missing);
       let durationText = row.duration || '—';
       let durationStyle = 'color:#333333';
       if (row.duration && row.duration !== '0 min') {
         if (isMonitoring) {
-          durationText = `${row.duration} <span style="font-size:11px;font-weight:normal">(monitoring)</span>`;
+          durationText = `${row.duration} <span style="font-size:11px;font-weight:normal">(being monitored)</span>`;
           durationStyle = 'color:#B45309;font-weight:bold';
         } else {
           durationStyle = 'color:#C00000;font-weight:bold';
@@ -455,9 +453,9 @@ function buildHtml(report) {
           <tr style="background:#1F4E79">
             <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Route</th>
             <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Expected</th>
-            <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Sending updates</th>
-            <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Missing</th>
-            <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Missing for</th>
+            <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Reporting GPS</th>
+            <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Not reporting</th>
+            <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Duration</th>
           </tr>
           ${tableRows}
           <tr style="background:#FFFFFF;font-weight:bold">
@@ -465,7 +463,7 @@ function buildHtml(report) {
             <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center">${report.totalExpected}</td>
             <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center">${report.totalTracking}</td>
             <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center;color:#C00000">${report.totalMissing}</td>
-            <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center">${report.totalMonitoring > 0 ? `<span style="font-size:11px;color:#B45309;font-weight:normal">+${report.totalMonitoring} monitoring</span>` : ''}</td>
+            <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center">${report.totalMonitoring > 0 ? `<span style="font-size:11px;color:#B45309;font-weight:normal">+${report.totalMonitoring} being monitored</span>` : ''}</td>
           </tr>
         </table>
       </td>
@@ -473,7 +471,7 @@ function buildHtml(report) {
     <tr>
       <td style="padding:20px">
         <hr style="border:none;border-top:1px solid #CCCCCC;margin:0 0 12px">
-        <span style="font-size:12px;color:#666666">Note: Some change is normal when buses are between trips or drivers change. Repeated gaps may mean GPS equipment needs attention.</span>
+        <span style="font-size:12px;color:#666666">Note: Short gaps can occur between trips or during operator changes. Repeated gaps may indicate a GPS equipment issue.</span>
       </td>
     </tr>
   </table>
@@ -491,7 +489,7 @@ function buildPlainText(report) {
     missingSummary(report),
     `Checked at: ${timestamp}`,
     '',
-    'Route  | Expected | Sending   | Missing | Missing for (min)',
+    'Route  | Expected | Reporting | Missing | Duration (min)',
     '-------+----------+----------+---------+---------',
   ];
 
@@ -504,23 +502,23 @@ function buildPlainText(report) {
       : Math.max(0, row.missing - confirmedMissing);
     const isMonitoring = row.missing > 0 && confirmedMissing === 0;
     const missingText = monitoringMissing > 0 && confirmedMissing > 0
-      ? `${row.missing} (${confirmedMissing} confirmed, ${monitoringMissing} monitoring)`
+      ? `${row.missing} (${confirmedMissing} confirmed, ${monitoringMissing} being monitored)`
       : String(row.missing);
     let dur = row.duration || '—';
-    if (isMonitoring && row.duration) dur = `${row.duration} (monitoring)`;
+    if (isMonitoring && row.duration) dur = `${row.duration} (being monitored)`;
     lines.push(
       `${String(row.routeId).padEnd(6)} | ${String(row.expected).padStart(8)} | ${String(row.tracking).padStart(8)} | ${missingText.padStart(7)} | ${dur}`
     );
   }
 
   lines.push('-------+----------+----------+---------+---------');
-  const monitoringNote = report.totalMonitoring > 0 ? ` (+${report.totalMonitoring} monitoring)` : '';
+  const monitoringNote = report.totalMonitoring > 0 ? ` (+${report.totalMonitoring} being monitored)` : '';
   lines.push(
     `TOTAL  | ${String(report.totalExpected).padStart(8)} | ${String(report.totalTracking).padStart(8)} | ${String(report.totalMissing).padStart(7)} |${monitoringNote}`
   );
   lines.push('');
-  lines.push('Note: Some change is normal when buses are between trips or drivers change.');
-  lines.push('Repeated gaps may mean GPS equipment needs attention.');
+  lines.push('Note: Short gaps can occur between trips or during operator changes.');
+  lines.push('Repeated gaps may indicate a GPS equipment issue.');
 
   return lines.join('\n');
 }
