@@ -53,7 +53,7 @@ describe('buildTaggedSubject', () => {
 describe('buildSystemSubject', () => {
   test('returns stale subject for down', () => {
     expect(buildSystemSubject({ kind: 'down' })).toBe(
-      'Barrie Transit GPS Alert | MONITOR_WATCHDOG_DOWN | Monitoring check overdue'
+      'Barrie Transit Watchdog Alert | MONITOR_WATCHDOG_DOWN | Monitoring check overdue'
     );
   });
 
@@ -65,7 +65,7 @@ describe('buildSystemSubject', () => {
 
   test('returns recovered subject', () => {
     expect(buildSystemSubject({ kind: 'recovered', code: 'SYSTEM_RECOVERED' })).toBe(
-      'Barrie Transit GPS Alert | SYSTEM_RECOVERED | Monitoring restored'
+      'Barrie Transit Watchdog Alert | SYSTEM_RECOVERED | Monitoring restored'
     );
   });
 });

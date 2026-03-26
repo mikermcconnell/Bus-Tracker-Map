@@ -116,10 +116,16 @@ function buildTaggedSubject(code, summary) {
   return `Barrie Transit GPS Alert | ${normalizedCode} | ${summary}`;
 }
 
+function buildMonitorSubject(code, summary) {
+  const normalizedCode = code || 'MONITOR_NOTICE';
+  if (!summary) return `Barrie Transit Watchdog Alert | ${normalizedCode}`;
+  return `Barrie Transit Watchdog Alert | ${normalizedCode} | ${summary}`;
+}
+
 function buildSystemSubject(payload) {
   switch (payload.kind) {
     case 'recovered':
-      return buildTaggedSubject(payload.code || 'SYSTEM_RECOVERED', 'Monitoring restored');
+      return buildMonitorSubject(payload.code || 'SYSTEM_RECOVERED', 'Monitoring restored');
     case 'vehicle_feed_stale':
       return buildTaggedSubject(payload.code || 'VEHICLE_FEED_STALE', 'Live vehicle location feed delayed');
     case 'vehicle_feed_unreachable':
@@ -137,7 +143,7 @@ function buildSystemSubject(payload) {
       return buildTaggedSubject(payload.code || 'SYSTEM_RECOVERED', 'Issue resolved');
     case 'down':
     default:
-      return buildTaggedSubject(payload.code || 'MONITOR_WATCHDOG_DOWN', 'Monitoring check overdue');
+      return buildMonitorSubject(payload.code || 'MONITOR_WATCHDOG_DOWN', 'Monitoring check overdue');
   }
 }
 
@@ -541,6 +547,7 @@ module.exports = {
   buildSystemSubject,
   buildSystemMessage,
   buildTaggedSubject,
+  buildMonitorSubject,
   formatAlertTimestamp,
   formatIsoTimestamp,
   escapeHtml,
