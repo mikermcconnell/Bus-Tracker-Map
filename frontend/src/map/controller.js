@@ -107,25 +107,28 @@ export function createMapController({ dataClient, ui }) {
 
 
   var MAJOR_ROAD_LABEL_MIN_ZOOM = 12;
-  var MAJOR_ROAD_LABEL_REPEAT_DISTANCE_METERS = 1400;
-  var MAJOR_ROAD_LABEL_MIN_LENGTH_FOR_REPEAT = 900;
-  var MAJOR_ROAD_LABEL_MAX_COUNT = 5;
-  var MAJOR_ROAD_LABEL_MIN_SPACING_METERS = 600;
+  var MAJOR_ROAD_LABEL_REPEAT_DISTANCE_METERS = 2200;
+  var MAJOR_ROAD_LABEL_MIN_LENGTH_FOR_REPEAT = 1600;
+  var MAJOR_ROAD_LABEL_MAX_COUNT = 2;
+  var MAJOR_ROAD_LABEL_MIN_SPACING_METERS = 900;
   var MAJOR_ROAD_LABEL_MANUAL_LIMITS = {
-    'BAYFIELD STREET': 2,
-    'BIG BAY POINT ROAD': 1,
-    'MAPLEVIEW DRIVE EAST': 1,
-    'MAPLEVIEW DRIVE WEST': 1,
-    'HURONIA ROAD': 2,
-    'DUNLOP STREET EAST': 1,
-    'DUNLOP STREET WEST': 1,
-    'ESSA ROAD': 0,
-    'CUNDLES ROAD EAST': 1,
-    'DUCKWORTH STREET': 0,
-    'YONGE STREET': 2,
-    'LAKESHORE DRIVE': 0,
-    'LAKE SHORE ROAD': 0
-  };
+      'BAYFIELD STREET': 1,
+      'BIG BAY POINT ROAD': 1,
+      'MAPLEVIEW DRIVE EAST': 1,
+      'MAPLEVIEW DRIVE WEST': 1,
+      'HURONIA ROAD': 1,
+      'DUNLOP STREET EAST': 1,
+      'DUNLOP STREET WEST': 1,
+      'ESSA ROAD': 0,
+      'CUNDLES ROAD EAST': 1,
+      'DUCKWORTH STREET': 0,
+      'YONGE STREET': 1,
+      'ST. VINCENT STREET': 1,
+      'ANNE STREET': 1,
+      'BRADFORD STREET': 1,
+      'LAKESHORE DRIVE': 0,
+      'LAKE SHORE ROAD': 0
+    };
   var MAJOR_ROAD_LABEL_MANUAL_ANCHORS = {
     'YONGE STREET': [
       { lat: 44.3699307, lng: -79.668287 }
@@ -790,15 +793,9 @@ export function createMapController({ dataClient, ui }) {
         }
       }
     }
-    if (roadKey === 'YONGE STREET' && totalLength > 0) {
-      var customDistance = totalLength > 4000 ? 4000 : totalLength * 0.95;
-      if (customDistance <= 0) {
-        customDistance = totalLength * 0.5;
-      }
-      var customPoint = locatePointAlongLines(lineLatLngs, customDistance);
-      if (customPoint) {
-        anchors.push({ lat: customPoint.lat, lng: customPoint.lng, bearing: customPoint.bearing });
-      }
+    var manualLimit = resolveMajorRoadLabelManualLimit(roadName);
+    if (manualAnchors.length && manualLimit === 1) {
+      return filterMajorRoadAnchors(manualAnchors);
     }
     var desiredCount = computeMajorRoadLabelCount(totalLength, roadName);
     if (desiredCount <= 0) {

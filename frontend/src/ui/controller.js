@@ -291,8 +291,12 @@ export function createUiController() {
     legendEl.appendChild(routesSection);
 
     const routesTitle = document.createElement('div');
-    routesTitle.className = 'legend-section-title';
-    routesTitle.textContent = 'BATT Routes';
+    routesTitle.className = 'legend-section-title legend-section-title--terminal';
+    routesTitle.setAttribute('aria-label', 'Barrie Allandale Transit Terminal');
+    routesTitle.innerHTML = [
+      '<span class="legend-section-title__line">Barrie Allandale</span>',
+      '<span class="legend-section-title__line">Transit Terminal</span>'
+    ].join('');
     routesSection.appendChild(routesTitle);
 
     const routeList = document.createElement('div');

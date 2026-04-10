@@ -21,11 +21,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Start everything
   mapController.initialize();
-
-  setTimeout(() => {
-    const col = document.querySelector('.map-overlay-column--right');
-    console.log('DEBUG: map-overlay-column--right innerHTML:', col ? col.innerHTML : 'NOT FOUND');
-  }, 2000);
 });
 
 function setupDebugPanel() {
