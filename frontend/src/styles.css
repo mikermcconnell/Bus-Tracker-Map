@@ -1095,6 +1095,7 @@ body {
 .town-image-container {
   width: 100%;
   max-width: 300px;
+  aspect-ratio: 1365 / 922;
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: rgba(255, 255, 255, 0.24);
@@ -1112,8 +1113,9 @@ body {
 
 .town-image {
   width: 100%;
-  height: auto;
+  height: 100%;
   display: block;
+  object-fit: cover;
 }
 
 .weather-overlay {

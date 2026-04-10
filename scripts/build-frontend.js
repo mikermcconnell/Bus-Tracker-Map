@@ -107,10 +107,15 @@ function copyPlatformMapAssets() {
 }
 
 function copyWeatherAssets() {
-  const source = path.join(srcDir, 'assets', 'town-winter.png');
-  if (!fs.existsSync(source)) return;
-  const dest = path.join(assetsDir, 'town-winter.png');
-  fs.copyFileSync(source, dest);
+  const weatherAssetsDir = path.join(srcDir, 'assets');
+  const weatherAssets = ['town-winter.png', 'town-summer-clean.png'];
+  if (!fs.existsSync(weatherAssetsDir)) return;
+
+  for (const entry of weatherAssets) {
+    const source = path.join(weatherAssetsDir, entry);
+    if (!fs.existsSync(source)) continue;
+    fs.copyFileSync(source, path.join(assetsDir, entry));
+  }
 }
 
 async function buildJs(entry) {
