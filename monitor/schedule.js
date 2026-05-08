@@ -9,6 +9,17 @@ const { normalizeRouteId } = require('./routes');
 const DEFAULT_MONITOR_TIMEZONE = 'America/Toronto';
 const formatterCache = new Map();
 
+function validateGtfsZip(zip) {
+  for (const entry of zip.getEntries()) {
+    if (entry.isDirectory) continue;
+    try {
+      zip.readFile(entry);
+    } catch (err) {
+      throw new Error(`Unreadable entry ${entry.entryName}: ${err.message}`);
+    }
+  }
+}
+
 /**
  * Download GTFS ZIP with disk cache. Falls back to stale cache on failure.
  */
@@ -19,13 +30,34 @@ async function loadGtfsZip(gtfsUrl, cachePath, maxAgeHours = 24) {
     fs.mkdirSync(cachePath, { recursive: true });
   }
 
+  const openZipBuffer = (buffer, source) => {
+    try {
+      const zip = new AdmZip(buffer);
+      zip.getEntries();
+      validateGtfsZip(zip);
+      return zip;
+    } catch (err) {
+      throw new Error(`Invalid GTFS ZIP from ${source}: ${err.message}`);
+    }
+  };
+
+  const openZipFile = (filePath, source) => {
+    const buffer = fs.readFileSync(filePath);
+    return openZipBuffer(buffer, source);
+  };
+
   // Check if cache is fresh enough
   if (fs.existsSync(cacheFile)) {
     const stat = fs.statSync(cacheFile);
     const ageMs = Date.now() - stat.mtimeMs;
     if (ageMs < maxAgeHours * 60 * 60 * 1000) {
       console.log('[schedule] Using cached GTFS ZIP (age: %dh)', Math.round(ageMs / 3600000));
-      return new AdmZip(cacheFile);
+      try {
+        return openZipFile(cacheFile, 'cache');
+      } catch (err) {
+        console.warn('[schedule] Cached GTFS ZIP is invalid, refreshing:', err.message);
+        fs.unlinkSync(cacheFile);
+      }
     }
   }
 
@@ -35,14 +67,20 @@ async function loadGtfsZip(gtfsUrl, cachePath, maxAgeHours = 24) {
     const res = await fetch(gtfsUrl, { timeout: 30_000 });
     if (!res.ok) throw new Error('GTFS download failed: ' + res.status);
     const buffer = await res.buffer();
+    const zip = openZipBuffer(buffer, gtfsUrl);
     fs.writeFileSync(cacheFile, buffer);
     console.log('[schedule] Cached GTFS ZIP (%d KB)', Math.round(buffer.length / 1024));
-    return new AdmZip(cacheFile);
+    return zip;
   } catch (err) {
     // Fall back to stale cache
     if (fs.existsSync(cacheFile)) {
-      console.warn('[schedule] Download failed, using stale cache:', err.message);
-      return new AdmZip(cacheFile);
+      try {
+        const staleZip = openZipFile(cacheFile, 'stale cache');
+        console.warn('[schedule] Download failed, using stale cache:', err.message);
+        return staleZip;
+      } catch (cacheErr) {
+        console.warn('[schedule] Stale GTFS cache is also invalid:', cacheErr.message);
+      }
     }
     throw err;
   }
