@@ -93,6 +93,26 @@ const sampleReport = {
   checkedAt: new Date('2026-02-25T15:00:00Z'),
 };
 
+const mixedThresholdReport = {
+  rows: [
+    {
+      routeId: '8',
+      expected: 3,
+      tracking: 1,
+      missing: 2,
+      duration: '25 min oldest (+1 monitoring)',
+      confirmed: true,
+      confirmedMissing: 1,
+      monitoringMissing: 1,
+    },
+  ],
+  totalExpected: 3,
+  totalTracking: 1,
+  totalMissing: 1,
+  totalMonitoring: 1,
+  checkedAt: new Date('2026-02-25T15:00:00Z'),
+};
+
 describe('buildHtml', () => {
   test('contains route data in table', () => {
     const html = buildHtml(sampleReport);
@@ -111,6 +131,16 @@ describe('buildHtml', () => {
     const html = buildHtml(sampleReport);
     expect(html).toContain('BARRIE TRANSIT GPS ALERT');
   });
+
+  test('does not show monitoring state in the email table', () => {
+    const html = buildHtml(mixedThresholdReport);
+    expect(html).toContain('1 of 3 expected buses is not reporting live GPS');
+    expect(html).toContain('25 min');
+    expect(html).not.toContain('being monitored');
+    expect(html).not.toContain('monitoring');
+    expect(html).not.toContain('confirmed');
+    expect(html).not.toContain('+1');
+  });
 });
 
 describe('buildPlainText', () => {
@@ -126,9 +156,21 @@ describe('buildPlainText', () => {
     expect(text).toContain('2 of 5 expected buses are not reporting live GPS');
   });
 
-  test('contains disclaimer', () => {
+  test('contains alert explanation', () => {
     const text = buildPlainText(sampleReport);
-    expect(text).toContain('Short gaps can occur between trips or during operator changes.');
+    expect(text).toContain('How this alert works');
+    expect(text).toContain('The monitor checks the live bus GPS feed every 10 minutes during service hours.');
+    expect(text).toContain('2 consecutive pings, about 20 minutes');
+  });
+
+  test('plain text only reports confirmed missing buses', () => {
+    const text = buildPlainText(mixedThresholdReport);
+    expect(text).toContain('1 of 3 expected buses is not reporting live GPS');
+    expect(text).toContain('25 min');
+    expect(text).not.toContain('being monitored');
+    expect(text).not.toContain('monitoring');
+    expect(text).not.toContain('confirmed');
+    expect(text).not.toContain('+1');
   });
 });
 

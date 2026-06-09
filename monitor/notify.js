@@ -402,34 +402,38 @@ function missingSummary(report) {
   return `${report.totalMissing} of ${report.totalExpected} expected buses ${verb} not reporting live GPS`;
 }
 
+function alertMissingCount(row) {
+  if (Number.isFinite(Number(row.confirmedMissing))) {
+    return Number(row.confirmedMissing);
+  }
+  if (Object.prototype.hasOwnProperty.call(row, 'confirmed')) {
+    return row.confirmed ? Number(row.missing) || 0 : 0;
+  }
+  return Number(row.missing) || 0;
+}
+
+function alertDuration(row, missingCount) {
+  if (missingCount <= 0 || !row.duration) return '—';
+  return String(row.duration)
+    .replace(/\s+oldest\s+\(\+\d+\s+monitoring\)/i, '')
+    .replace(/\s+\(being monitored\)/i, '');
+}
+
 function buildHtml(report) {
   const timestamp = formatAlertTimestamp(report.checkedAt);
 
   const tableRows = report.rows
     .map((row, i) => {
       const bg = i % 2 === 0 ? '#FFFFFF' : '#F2F2F2';
-      const confirmedMissing = Number.isFinite(Number(row.confirmedMissing))
-        ? Number(row.confirmedMissing)
-        : (row.confirmed ? row.missing : 0);
-      const monitoringMissing = Number.isFinite(Number(row.monitoringMissing))
-        ? Number(row.monitoringMissing)
-        : Math.max(0, row.missing - confirmedMissing);
-      const isMonitoring = row.missing > 0 && confirmedMissing === 0;
-      const missingStyle = row.missing > 0
-        ? (isMonitoring ? 'color:#B45309;font-weight:bold' : 'color:#C00000;font-weight:bold')
+      const confirmedMissing = alertMissingCount(row);
+      const missingStyle = confirmedMissing > 0
+        ? 'color:#C00000;font-weight:bold'
         : 'color:#333333';
-      const missingText = monitoringMissing > 0 && confirmedMissing > 0
-        ? `${row.missing} <span style="font-size:11px;font-weight:normal">(${confirmedMissing} confirmed, ${monitoringMissing} being monitored)</span>`
-        : String(row.missing);
-      let durationText = row.duration || '—';
+      const missingText = String(confirmedMissing);
+      const durationText = alertDuration(row, confirmedMissing);
       let durationStyle = 'color:#333333';
-      if (row.duration && row.duration !== '0 min') {
-        if (isMonitoring) {
-          durationText = `${row.duration} <span style="font-size:11px;font-weight:normal">(being monitored)</span>`;
-          durationStyle = 'color:#B45309;font-weight:bold';
-        } else {
-          durationStyle = 'color:#C00000;font-weight:bold';
-        }
+      if (confirmedMissing > 0 && durationText !== '—' && durationText !== '0 min') {
+        durationStyle = 'color:#C00000;font-weight:bold';
       }
       return `
       <tr style="background:${bg}">
@@ -479,7 +483,7 @@ function buildHtml(report) {
             <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center">${report.totalExpected}</td>
             <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center">${report.totalTracking}</td>
             <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center;color:#C00000">${report.totalMissing}</td>
-            <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center">${report.totalMonitoring > 0 ? `<span style="font-size:11px;color:#B45309;font-weight:normal">+${report.totalMonitoring} being monitored</span>` : ''}</td>
+            <td style="padding:8px 12px;border:1px solid #CCCCCC;text-align:center"></td>
           </tr>
         </table>
       </td>
@@ -487,7 +491,7 @@ function buildHtml(report) {
     <tr>
       <td style="padding:20px">
         <hr style="border:none;border-top:1px solid #CCCCCC;margin:0 0 12px">
-        <span style="font-size:12px;color:#666666">Note: Short gaps can occur between trips or during operator changes. Repeated gaps may indicate a GPS equipment issue.</span>
+        <span style="font-size:12px;color:#666666"><strong>How this alert works</strong><br>The monitor checks the live bus GPS feed every 10 minutes during service hours. Each check, or ping, compares buses expected to be in service with buses reporting live GPS. An email alert is only created after the same issue appears in 2 consecutive pings, about 20 minutes, to avoid false alarms.</span>
       </td>
     </tr>
   </table>
@@ -510,31 +514,20 @@ function buildPlainText(report) {
   ];
 
   for (const row of report.rows) {
-    const confirmedMissing = Number.isFinite(Number(row.confirmedMissing))
-      ? Number(row.confirmedMissing)
-      : (row.confirmed ? row.missing : 0);
-    const monitoringMissing = Number.isFinite(Number(row.monitoringMissing))
-      ? Number(row.monitoringMissing)
-      : Math.max(0, row.missing - confirmedMissing);
-    const isMonitoring = row.missing > 0 && confirmedMissing === 0;
-    const missingText = monitoringMissing > 0 && confirmedMissing > 0
-      ? `${row.missing} (${confirmedMissing} confirmed, ${monitoringMissing} being monitored)`
-      : String(row.missing);
-    let dur = row.duration || '—';
-    if (isMonitoring && row.duration) dur = `${row.duration} (being monitored)`;
+    const missingText = String(alertMissingCount(row));
+    const dur = alertDuration(row, Number(missingText));
     lines.push(
       `${String(row.routeId).padEnd(6)} | ${String(row.expected).padStart(8)} | ${String(row.tracking).padStart(8)} | ${missingText.padStart(7)} | ${dur}`
     );
   }
 
   lines.push('-------+----------+----------+---------+---------');
-  const monitoringNote = report.totalMonitoring > 0 ? ` (+${report.totalMonitoring} being monitored)` : '';
   lines.push(
-    `TOTAL  | ${String(report.totalExpected).padStart(8)} | ${String(report.totalTracking).padStart(8)} | ${String(report.totalMissing).padStart(7)} |${monitoringNote}`
+    `TOTAL  | ${String(report.totalExpected).padStart(8)} | ${String(report.totalTracking).padStart(8)} | ${String(report.totalMissing).padStart(7)} |`
   );
   lines.push('');
-  lines.push('Note: Short gaps can occur between trips or during operator changes.');
-  lines.push('Repeated gaps may indicate a GPS equipment issue.');
+  lines.push('How this alert works');
+  lines.push('The monitor checks the live bus GPS feed every 10 minutes during service hours. Each check, or ping, compares buses expected to be in service with buses reporting live GPS. An email alert is only created after the same issue appears in 2 consecutive pings, about 20 minutes, to avoid false alarms.');
 
   return lines.join('\n');
 }
