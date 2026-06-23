@@ -1,0 +1,49 @@
+name: Bus Monitor Daily Check-In
+
+on:
+  schedule:
+    # Daily around mid-morning in Barrie/Toronto.
+    - cron: "15 14 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  daily-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - run: npm ci
+
+      - name: Send daily monitor check-in
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MONITOR_WORKFLOW_FILE: bus-monitor.yml
+          GTFS_STATIC_URL: https://www.myridebarrie.ca/gtfs/google_transit.zip
+          GTFS_RT_VEHICLES_URL: https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb
+          GTFS_RT_TRIP_UPDATES_URL: https://www.myridebarrie.ca/gtfs/GTFS_TripUpdates.pb
+          SILENCE_THRESHOLD_MIN: 5
+          FEED_STALE_AFTER_MIN: 15
+          GTFS_CACHE_MAX_AGE_HOURS: 6
+          ALERT_RECIPIENT: ${{ secrets.ALERT_RECIPIENT }}
+          HEALTH_CHECK_RECIPIENT: ${{ secrets.HEALTH_CHECK_RECIPIENT }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
+        run: node monitor/health-check.js

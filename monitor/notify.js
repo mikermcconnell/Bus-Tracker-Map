@@ -147,6 +147,11 @@ function buildSystemSubject(payload) {
   }
 }
 
+function buildHealthCheckSubject(payload) {
+  const status = payload && payload.status === 'ok' ? 'Working' : 'Attention needed';
+  return `Barrie Transit Monitor Daily Check-In | ${status}`;
+}
+
 function buildSystemDescriptor(payload) {
   const checkedAt = formatAlertTimestamp(payload.checkedAt || new Date());
 
@@ -282,6 +287,63 @@ function buildSystemDescriptor(payload) {
   }
 }
 
+function normalizeHealthRows(payload) {
+  if (!payload || !Array.isArray(payload.rows)) return [];
+  return payload.rows
+    .filter((row) => Array.isArray(row) && row.length >= 2)
+    .map(([label, value]) => [String(label), value === null || value === undefined ? 'unknown' : String(value)]);
+}
+
+function buildHealthCheckMessage(payload) {
+  const subject = buildHealthCheckSubject(payload);
+  const checkedAt = formatAlertTimestamp(payload && payload.checkedAt ? payload.checkedAt : new Date());
+  const isOk = payload && payload.status === 'ok';
+  const banner = isOk ? '#166534' : '#92400E';
+  const summary = payload && payload.summary
+    ? payload.summary
+    : isOk
+      ? 'The scheduled monitor check is working.'
+      : 'The scheduled monitor check needs attention.';
+  const rows = [
+    ['Status', isOk ? 'Working' : 'Attention needed'],
+    ['Checked at', checkedAt],
+    ['Summary', summary],
+    ...normalizeHealthRows(payload),
+  ];
+
+  const htmlRows = rows
+    .map(([label, value]) => `
+      <tr>
+        <td style="padding:8px 12px;border:1px solid #D1D5DB;background:#F9FAFB;font-weight:bold;vertical-align:top;width:34%">${escapeHtml(label)}</td>
+        <td style="padding:8px 12px;border:1px solid #D1D5DB;vertical-align:top">${escapeHtml(String(value))}</td>
+      </tr>`)
+    .join('');
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#333333">
+  <table width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;margin:0 auto">
+    <tr>
+      <td style="background:${banner};padding:16px 20px">
+        <span style="color:#FFFFFF;font-size:18px;font-weight:bold;letter-spacing:0.5px">BARRIE TRANSIT MONITOR DAILY CHECK-IN</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:20px">
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">${htmlRows}
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  const text = [subject, '', ...rows.map(([label, value]) => `${label}: ${value}`)].join('\n');
+  return { subject, html, text };
+}
+
 function buildSystemMessage(payload) {
   const subject = buildSystemSubject(payload);
   const descriptor = buildSystemDescriptor(payload);
@@ -340,6 +402,13 @@ async function sendSystemAlert(config, payload) {
   const message = buildSystemMessage(payload);
   const info = await sendMail(config, message);
   console.log('[notify] System email sent:', info.messageId);
+  return info;
+}
+
+async function sendHealthCheck(config, payload) {
+  const message = buildHealthCheckMessage(payload);
+  const info = await sendMail(config, message);
+  console.log('[notify] Health check email sent:', info.messageId);
   return info;
 }
 
@@ -535,10 +604,13 @@ function buildPlainText(report) {
 module.exports = {
   sendAlert,
   sendSystemAlert,
+  sendHealthCheck,
   sendTestAlert,
   buildAlertSubject,
   buildSystemSubject,
   buildSystemMessage,
+  buildHealthCheckSubject,
+  buildHealthCheckMessage,
   buildTaggedSubject,
   buildMonitorSubject,
   formatAlertTimestamp,

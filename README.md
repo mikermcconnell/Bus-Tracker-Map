@@ -93,4 +93,5 @@ barrie-bus/
 - Populate `ALLOWED_ORIGINS` with the canonical production origins (e.g. `https://kiosk.example.com`) when exposing the API publicly; requests from other origins will be rejected with HTTP 403.
 - Use `npm run build` during CI/CD to generate both the frontend bundle and GeoJSON caches before deploying static artifacts.
 - The Express API honours `CACHE_DIR` (advanced) allowing alternate cache storage paths in containerized or test environments.
+- A separate GitHub Actions workflow, **Bus Monitor Daily Check-In**, sends one daily health email with the subject `Barrie Transit Monitor Daily Check-In | ...`. It checks whether the primary monitor workflow is active, reports the last run result, and includes live feed health. If GitHub reports the workflow as `disabled_manually`, the daily email calls that out; GitHub does not expose who clicked disable to the workflow, so use the GitHub audit log for the exact actor.
 # Bus-Tracker-Map

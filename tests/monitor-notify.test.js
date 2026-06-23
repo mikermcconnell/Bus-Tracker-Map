@@ -7,6 +7,8 @@ const {
   buildTaggedSubject,
   buildSystemSubject,
   buildSystemMessage,
+  buildHealthCheckSubject,
+  buildHealthCheckMessage,
   missingSummary,
   buildHtml,
   buildPlainText,
@@ -67,6 +69,33 @@ describe('buildSystemSubject', () => {
     expect(buildSystemSubject({ kind: 'recovered', code: 'SYSTEM_RECOVERED' })).toBe(
       'Barrie Transit Watchdog Alert | SYSTEM_RECOVERED | Monitoring restored'
     );
+  });
+});
+
+describe('buildHealthCheckMessage', () => {
+  test('uses a subject that does not match GPS alert rules', () => {
+    const subject = buildHealthCheckSubject({ status: 'ok' });
+
+    expect(subject).toBe('Barrie Transit Monitor Daily Check-In | Working');
+    expect(subject).not.toContain('Barrie Transit GPS Alert');
+  });
+
+  test('calls out disabled workflow state in the daily check-in body', () => {
+    const { subject, text, html } = buildHealthCheckMessage({
+      status: 'attention',
+      checkedAt: new Date('2026-06-23T14:15:00Z'),
+      summary: 'The primary Bus Monitor workflow is disabled_manually.',
+      rows: [
+        ['Workflow state', 'disabled_manually'],
+        ['Disable reason visible here', 'GitHub reports this workflow was manually disabled.'],
+      ],
+    });
+
+    expect(subject).toBe('Barrie Transit Monitor Daily Check-In | Attention needed');
+    expect(text).toContain('Workflow state: disabled_manually');
+    expect(text).toContain('GitHub reports this workflow was manually disabled.');
+    expect(html).toContain('BARRIE TRANSIT MONITOR DAILY CHECK-IN');
+    expect(subject).not.toContain('Barrie Transit GPS Alert');
   });
 });
 
