@@ -1,8 +1,6 @@
-name: Bus Monitor
+name: Bus Monitor Manual Backup
 
 on:
-  schedule:
-    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 env:
@@ -41,6 +39,7 @@ jobs:
           FEED_STALE_AFTER_MIN: 15
           ISSUE_RESEND_MIN: 30
           WATCHDOG_MAX_AGE_MIN: 90
+          GTFS_CACHE_MAX_AGE_HOURS: 6
           ALERT_RECIPIENT: ${{ secrets.ALERT_RECIPIENT }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
