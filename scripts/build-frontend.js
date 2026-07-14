@@ -47,6 +47,13 @@ const entryPoints = [
     cssPath: path.join(srcDir, 'platform-map', 'styles.css'),
     templatePath: path.join(srcDir, 'platform-map', 'index.html'),
     outputHtml: 'platform.map.html'
+  },
+  {
+    key: 'notices',
+    entryPath: path.join(srcDir, 'notices', 'main.js'),
+    cssPath: path.join(srcDir, 'notices', 'styles.css'),
+    templatePath: path.join(srcDir, 'notices', 'index.html'),
+    outputHtml: 'notices.html'
   }
 ];
 

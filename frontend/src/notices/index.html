@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Barrie Transit Service Notices</title>
+  <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#071b2f">
+  <meta name="app-build-id" content="%BUILD_ID%">
+  <link rel="stylesheet" href="%APP_CSS%">
+</head>
+<body>
+  <main id="notice-app" class="notice-app" aria-live="polite">
+    <section id="notice-stage" class="notice-stage" aria-label="Current service notice">
+      <img id="notice-image-a" class="notice-image notice-image--visible" alt="">
+      <img id="notice-image-b" class="notice-image" alt="">
+    </section>
+
+    <section id="holding-screen" class="holding-screen" hidden>
+      <div class="holding-mark" aria-hidden="true">BT</div>
+      <h1 id="holding-title">Loading service notices</h1>
+      <p id="holding-message">Please wait…</p>
+    </section>
+
+    <footer id="notice-footer" class="notice-footer">
+      <div class="notice-label">SERVICE NOTICE</div>
+      <div id="notice-title" class="notice-title">Loading service notices…</div>
+      <div id="notice-page" class="notice-page"></div>
+      <div id="stale-status" class="stale-status" hidden>Update delayed</div>
+    </footer>
+
+    <div id="fullscreen-hint" class="fullscreen-hint" hidden>Press OK for full screen</div>
+  </main>
+  <script src="%APP_JS%"></script>
+</body>
+</html>

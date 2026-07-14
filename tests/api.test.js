@@ -4,13 +4,20 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+const mockNoticeService = {
+  getManifest: vi.fn(),
+  getPageImage: vi.fn(),
+};
+
 const serverModulePath = path.resolve(__dirname, '../server/server.js');
 
 async function initApp(extraEnv = {}) {
   vi.resetModules();
   Object.assign(process.env, extraEnv);
   const mod = await import(serverModulePath);
-  return mod.default || mod;
+  const app = mod.default || mod;
+  app.locals.noticeService = mockNoticeService;
+  return app;
 }
 
 function writeJson(filePath, data) {
@@ -25,6 +32,15 @@ describe('API smoke tests', () => {
     process.env.CACHE_DIR = cacheDir;
     process.env.GTFS_RT_VEHICLES_URL = '';
     process.env.LOG_LEVEL = 'info';
+    mockNoticeService.getManifest.mockReset();
+    mockNoticeService.getPageImage.mockReset();
+    mockNoticeService.getManifest.mockResolvedValue({
+      status: 'fresh',
+      checked_at: '2026-07-14T17:00:00.000Z',
+      refresh_after_ms: 600000,
+      slides: [],
+    });
+    mockNoticeService.getPageImage.mockResolvedValue(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
 
     writeJson(path.join(cacheDir, 'routes.geojson'), {
       type: 'FeatureCollection',
@@ -106,5 +122,50 @@ describe('API smoke tests', () => {
     const res = await request(app).get('/api/vehicles.json');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ vehicles: [] });
+  });
+
+
+  test('returns the service notice manifest without browser caching', async () => {
+    const app = await initApp();
+    const res = await request(app).get('/api/notices');
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-cache');
+    expect(res.body).toEqual(expect.objectContaining({
+      status: 'fresh',
+      refresh_after_ms: 600000,
+    }));
+  });
+
+  test('serves versioned notice pages as long-lived JPEGs', async () => {
+    const app = await initApp();
+    const res = await request(app).get('/api/notices/pages/document-1/1.jpg');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('image/jpeg');
+    expect(res.headers['cache-control']).toContain('immutable');
+    expect(mockNoticeService.getPageImage).toHaveBeenCalledWith('document-1', '1');
+  });
+
+  test('rejects query-string cache busting on rendered notice pages', async () => {
+    const app = await initApp();
+    const res = await request(app).get('/api/notices/pages/document-1/1.jpg?random=1');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('NOTICE_IMAGE_QUERY_NOT_ALLOWED');
+    expect(mockNoticeService.getPageImage).not.toHaveBeenCalled();
+  });
+
+  test('returns a retryable notice error without exposing upstream details', async () => {
+    mockNoticeService.getManifest.mockRejectedValue({
+      statusCode: 503,
+      code: 'NOTICES_UNAVAILABLE',
+      message: 'private upstream detail',
+    });
+    const app = await initApp();
+    const res = await request(app).get('/api/notices');
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({
+      status: 'unavailable',
+      error: 'NOTICES_UNAVAILABLE',
+      retry_after_ms: 60000,
+    });
   });
 });

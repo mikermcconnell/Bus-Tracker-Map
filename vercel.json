@@ -4,10 +4,23 @@
   "framework": null,
   "functions": {
     "api/index.js": {
-      "includeFiles": "cache/**"
+      "includeFiles": "{cache/**,node_modules/pdfjs-dist/**,node_modules/@napi-rs/{canvas,canvas-linux-x64-gnu,canvas-linux-x64-musl}/**}"
     }
   },
   "headers": [
+    {
+      "source": "/notices",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self' data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
     {
       "source": "/styles.css",
       "headers": [
@@ -26,6 +39,10 @@
     {
       "source": "/platform.map",
       "destination": "/platform.map.html"
+    },
+    {
+      "source": "/notices",
+      "destination": "/notices.html"
     },
     {
       "source": "/api/(.*)",

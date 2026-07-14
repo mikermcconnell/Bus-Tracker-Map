@@ -3,7 +3,7 @@
 A single-page Leaflet app that shows Barrie Transit routes, stops, and live vehicle positions. It is tuned for a limited Smart TV browser, so everything stays lightweight and simple.
 
 ## Requirements
-- Node.js 18 or newer
+- Node.js 22
 - Internet access (needed to download GTFS data and map tiles)
 
 ## 1. Configure environment variables
@@ -53,6 +53,17 @@ Open [http://localhost:3000](http://localhost:3000) in a browser (or on the Smar
 - When buses stack at the same location (for example the downtown terminal), the icon consolidates into a combined pill that lists every route present, keeping the map readable.
 - A banner if the realtime feed is temporarily unavailable (existing markers remain in place).
 
+## Service notice TV display
+
+Open [http://localhost:3000/notices](http://localhost:3000/notices) locally or `/notices` on the production site.
+
+- The display checks MyRide every 10 minutes and cycles through every page of each active PDF notice.
+- Each page remains visible for 20 seconds. Use the left/right remote or keyboard buttons to move manually, Space to pause, and Enter/OK to request browser full screen.
+- PDF pages are converted to lightweight JPEGs on the server so older Smart TV browsers do not need PDF support.
+- If MyRide is temporarily unavailable, the last successful playlist continues and an update warning appears after 30 minutes.
+- Notices without PDFs are intentionally excluded. When no PDF notices are active, the display shows a holding screen and continues checking.
+
+For the terminal TV, disable its sleep/screensaver setting and bookmark the production `/notices` address. Some built-in TV browsers cannot reopen a page automatically or permanently hide their toolbar; use a kiosk-capable external player if the on-device test shows either limitation.
 ## Useful scripts
 - `npm run build` - bundle the frontend and rebuild GeoJSON caches.
 - `npm run build:data` - regenerate the cached GeoJSON from the latest GTFS ZIP.

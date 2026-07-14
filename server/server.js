@@ -4,6 +4,7 @@ const fs = require('fs');
 const express = require('express');
 require('dotenv').config();
 const { fetchVehicles } = require('./vehicles');
+const { noticeService } = require('./notices');
 
 function normalizeBasePath(input) {
   if (!input) return '/';
@@ -112,6 +113,7 @@ function maybeSetupLiveReload(app) {
   console.log('Live reload watching ' + frontendDir);
 }
 const app = express();
+app.locals.noticeService = noticeService;
 
 maybeSetupLiveReload(app);
 const PORT = process.env.PORT || 3007;
@@ -148,7 +150,11 @@ const apiRouter = express.Router();
 router.use(express.static(FRONTEND_DIR, {
   extensions: ['html'],
   setHeaders(res, servedPath) {
-    res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
+    if (path.basename(servedPath) === 'notices.html') {
+      res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';");
+    } else {
+      res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
+    }
     if (servedPath.endsWith('.html')) {
       res.setHeader('Cache-Control', 'no-cache');
     } else if (hashedAssetPattern.test(path.basename(servedPath))) {
@@ -180,6 +186,40 @@ apiRouter.get('/config', (req, res) => {
       : `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`,
     rt_feed_configured: Boolean(RT_URL),
   });
+});
+
+
+apiRouter.get('/notices', async (req, res) => {
+  try {
+    const manifest = await req.app.locals.noticeService.getManifest();
+    res.setHeader('Cache-Control', 'no-cache');
+    res.json(manifest);
+  } catch (err) {
+    const statusCode = Number(err && err.statusCode) || 500;
+    res.status(statusCode).json({
+      status: 'unavailable',
+      error: err && err.code ? err.code : 'NOTICE_ERROR',
+      retry_after_ms: 60000,
+    });
+  }
+});
+
+apiRouter.get('/notices/pages/:documentId/:page.jpg', async (req, res) => {
+  try {
+    if (req.query && Object.keys(req.query).length) {
+      return res.status(400).json({ error: 'NOTICE_IMAGE_QUERY_NOT_ALLOWED' });
+    }
+    const image = await req.app.locals.noticeService.getPageImage(req.params.documentId, req.params.page);
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=2592000, immutable');
+    res.send(image);
+  } catch (err) {
+    const statusCode = Number(err && err.statusCode) || 500;
+    res.status(statusCode).json({
+      error: err && err.code ? err.code : 'NOTICE_IMAGE_ERROR',
+    });
+  }
 });
 
 apiRouter.get('/vehicles.json', async (req, res) => {
@@ -232,6 +272,14 @@ router.get('/platform.map', (req, res, next) => {
   if (!fs.existsSync(platformPath)) return next();
   res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
   res.sendFile(platformPath);
+});
+
+router.get('/notices', (req, res, next) => {
+  const noticesPath = path.join(FRONTEND_DIR, 'notices.html');
+  if (!fs.existsSync(noticesPath)) return next();
+  res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';");
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(noticesPath);
 });
 
 router.get('*', (req, res, next) => {
