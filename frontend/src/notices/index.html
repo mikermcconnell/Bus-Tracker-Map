@@ -26,8 +26,12 @@
         <div>
           <div class="playlist-eyebrow">NOW SHOWING</div>
           <h2>Service updates</h2>
+          <div id="playlist-count" class="playlist-count">0 pages in this cycle</div>
         </div>
-        <div id="playlist-count" class="playlist-count">0 pages</div>
+        <div class="playlist-clock" aria-hidden="true">
+          <strong id="playlist-countdown-value">--</strong>
+          <span id="playlist-countdown-label">SEC LEFT</span>
+        </div>
       </header>
 
       <div id="playlist-groups" class="playlist-groups">
@@ -50,6 +54,7 @@
     </aside>
 
     <footer id="notice-footer" class="notice-footer">
+      <div class="notice-progress" aria-hidden="true"><span id="notice-progress-bar"></span></div>
       <div class="notice-label">SERVICE NOTICE</div>
       <div id="notice-title" class="notice-title">Loading service notices…</div>
       <div id="notice-page" class="notice-page"></div>

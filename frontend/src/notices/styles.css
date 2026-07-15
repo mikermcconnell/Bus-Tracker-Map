@@ -7,10 +7,10 @@
   --muted: #b7c8d8;
   --warning: #ffd166;
   --success: #73d2a6;
-  --footer-height: 60px;
-  --footer-height: clamp(52px, 6.2vh, 68px);
-  --playlist-width: 350px;
-  --playlist-width: clamp(310px, 23vw, 430px);
+  --footer-height: 82px;
+  --footer-height: clamp(76px, 8vh, 92px);
+  --playlist-width: 480px;
+  --playlist-width: clamp(420px, 27vw, 540px);
 }
 
 *,
@@ -48,7 +48,7 @@ body {
 .notice-stage {
   position: absolute;
   top: 0;
-  right: 350px;
+  right: 480px;
   bottom: 60px;
   left: 0;
   inset: 0 var(--playlist-width) var(--footer-height) 0;
@@ -56,8 +56,8 @@ body {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  padding: 12px 20px;
-  padding: clamp(8px, 1.2vh, 16px) clamp(10px, 1.2vw, 24px);
+  padding: 22px 28px;
+  padding: clamp(18px, 2.2vh, 28px) clamp(22px, 1.8vw, 36px);
 }
 
 .notice-stage[hidden] {
@@ -69,10 +69,10 @@ body {
   left: 50%;
   top: 50%;
   display: block;
-  max-width: calc(100% - 40px);
-  max-width: calc(100% - clamp(20px, 2.4vw, 48px));
-  max-height: calc(100% - 24px);
-  max-height: calc(100% - clamp(16px, 2.4vh, 32px));
+  max-width: calc(100% - 56px);
+  max-width: calc(100% - clamp(44px, 3.6vw, 72px));
+  max-height: calc(100% - 44px);
+  max-height: calc(100% - clamp(36px, 4.4vh, 56px));
   width: auto;
   height: auto;
   object-fit: contain;
@@ -91,17 +91,17 @@ body {
 .notice-footer {
   position: absolute;
   left: 0;
-  right: 350px;
+  right: 480px;
   right: var(--playlist-width);
   bottom: 0;
   height: 60px;
   height: var(--footer-height);
   display: flex;
   align-items: center;
-  gap: 20px;
-  gap: clamp(12px, 1.5vw, 28px);
-  padding: 0 32px;
-  padding: 0 clamp(18px, 2.3vw, 44px);
+  gap: 24px;
+  gap: clamp(18px, 1.7vw, 32px);
+  padding: 5px 34px 0;
+  padding: 5px clamp(28px, 2.2vw, 44px) 0;
   background: #071b2f;
   background: var(--navy-900);
   border-top: 1px solid rgba(255, 255, 255, 0.13);
@@ -122,8 +122,8 @@ body {
   flex: 0 0 auto;
   color: #62b5e5;
   color: var(--blue-400);
-  font-size: 18px;
-  font-size: clamp(12px, 1.15vw, 21px);
+  font-size: 19px;
+  font-size: clamp(17px, 1.15vw, 22px);
   font-weight: 800;
   letter-spacing: 0.12em;
   white-space: nowrap;
@@ -135,8 +135,8 @@ body {
   overflow: hidden;
   color: #ffffff;
   color: var(--white);
-  font-size: 25px;
-  font-size: clamp(17px, 1.55vw, 29px);
+  font-size: 30px;
+  font-size: clamp(25px, 1.75vw, 34px);
   font-weight: 650;
   line-height: 1.15;
   text-overflow: ellipsis;
@@ -147,8 +147,8 @@ body {
 .notice-countdown,
 .stale-status {
   flex: 0 0 auto;
-  font-size: 18px;
-  font-size: clamp(14px, 1.15vw, 21px);
+  font-size: 21px;
+  font-size: clamp(18px, 1.22vw, 24px);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -159,13 +159,31 @@ body {
 }
 
 .notice-countdown {
-  min-width: 118px;
-  padding: 7px 12px;
-  border-radius: 8px;
+  min-width: 145px;
+  padding: 9px 15px;
+  border-radius: 10px;
   color: var(--navy-950);
   background: var(--blue-400);
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+.notice-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.notice-progress span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--blue-400);
+  transition: width 250ms linear;
 }
 
 .notice-playlist {
@@ -174,7 +192,7 @@ body {
   right: 0;
   bottom: 0;
   z-index: 5;
-  width: 350px;
+  width: 480px;
   width: var(--playlist-width);
   display: flex;
   flex-direction: column;
@@ -188,17 +206,17 @@ body {
 .playlist-header {
   flex: 0 0 auto;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: clamp(18px, 2.2vh, 28px) clamp(18px, 1.6vw, 28px);
+  gap: 22px;
+  padding: clamp(24px, 2.8vh, 34px) clamp(24px, 1.8vw, 36px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .playlist-eyebrow {
-  margin-bottom: 5px;
+  margin-bottom: 7px;
   color: var(--blue-400);
-  font-size: clamp(10px, 0.72vw, 13px);
+  font-size: clamp(13px, 0.78vw, 15px);
   font-weight: 800;
   letter-spacing: 0.14em;
 }
@@ -209,50 +227,80 @@ body {
 }
 
 .playlist-header h2 {
-  font-size: clamp(22px, 1.65vw, 31px);
+  font-size: clamp(28px, 1.9vw, 38px);
   line-height: 1.05;
 }
 
 .playlist-count {
   flex: 0 0 auto;
-  color: var(--muted);
-  font-size: clamp(12px, 0.9vw, 16px);
+  margin-top: 8px;
+  color: #c9d7e2;
+  font-size: clamp(14px, 0.9vw, 17px);
   font-weight: 700;
   white-space: nowrap;
+}
+
+.playlist-clock {
+  flex: 0 0 auto;
+  width: clamp(92px, 5.7vw, 112px);
+  min-height: 82px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: 2px solid rgba(98, 181, 229, 0.55);
+  border-radius: 12px;
+  background: rgba(98, 181, 229, 0.13);
+  color: var(--white);
+  font-variant-numeric: tabular-nums;
+}
+
+.playlist-clock strong {
+  font-size: clamp(34px, 2.5vw, 48px);
+  line-height: 0.9;
+}
+
+.playlist-clock span {
+  margin-top: 8px;
+  color: var(--blue-400);
+  font-size: clamp(10px, 0.68vw, 13px);
+  font-weight: 900;
+  letter-spacing: 0.09em;
 }
 
 .playlist-groups {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 14px clamp(12px, 1vw, 18px) 24px;
+  padding: 20px clamp(16px, 1.15vw, 23px) 32px;
   scrollbar-width: thin;
   scrollbar-color: rgba(98, 181, 229, 0.45) transparent;
 }
 
 .playlist-group + .playlist-group {
-  margin-top: 18px;
+  margin-top: 24px;
 }
 
 .playlist-group-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 7px 8px;
-  color: var(--muted);
+  padding: 0 7px 11px;
+  color: #d8e3eb;
 }
 
 .playlist-group-heading h3 {
-  font-size: clamp(13px, 0.95vw, 17px);
+  font-size: clamp(17px, 1.08vw, 21px);
   letter-spacing: 0.02em;
 }
 
 .playlist-group-heading span {
-  min-width: 25px;
-  padding: 2px 7px;
+  min-width: 31px;
+  padding: 3px 9px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.09);
   text-align: center;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 800;
 }
 
@@ -265,13 +313,14 @@ body {
 .playlist-item {
   position: relative;
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  gap: 9px;
+  grid-template-columns: 31px minmax(0, 1fr) auto;
+  gap: 12px;
   align-items: start;
-  margin-bottom: 6px;
-  padding: 10px 10px 10px 9px;
+  min-height: 68px;
+  margin-bottom: 9px;
+  padding: 12px 13px 12px 11px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 9px;
   color: var(--muted);
   background: rgba(255, 255, 255, 0.035);
   transition: opacity 180ms ease, border-color 180ms ease, background 180ms ease;
@@ -281,13 +330,13 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 29px;
+  height: 29px;
   margin-top: 1px;
   border-radius: 50%;
   color: var(--navy-950);
   background: #70879b;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 900;
 }
 
@@ -299,25 +348,25 @@ body {
   display: -webkit-box;
   overflow: hidden;
   color: #eaf2f8;
-  font-size: clamp(12px, 0.83vw, 15px);
+  font-size: clamp(16px, 1vw, 19px);
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.22;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
 .playlist-meta {
   display: block;
-  margin-top: 4px;
-  color: #91a9bc;
-  font-size: clamp(10px, 0.68vw, 12px);
+  margin-top: 6px;
+  color: #b8cad8;
+  font-size: clamp(13px, 0.76vw, 15px);
   font-weight: 650;
 }
 
 .playlist-state {
   margin-top: 2px;
   color: #91a9bc;
-  font-size: 10px;
+  font-size: clamp(10px, 0.68vw, 13px);
   font-weight: 900;
   letter-spacing: 0.07em;
   text-align: right;
@@ -351,7 +400,7 @@ body {
 }
 
 .playlist-item--past {
-  opacity: 0.5;
+  opacity: 0.72;
 }
 
 .playlist-item--past .playlist-index {
@@ -375,7 +424,7 @@ body {
 .holding-screen {
   position: absolute;
   top: 0;
-  right: 350px;
+  right: 480px;
   bottom: 60px;
   left: 0;
   inset: 0 var(--playlist-width) var(--footer-height) 0;
@@ -497,6 +546,11 @@ body {
   .notice-countdown {
     min-width: 88px;
     padding: 5px 8px;
+  }
+
+
+  .playlist-clock {
+    display: none;
   }
 }
 

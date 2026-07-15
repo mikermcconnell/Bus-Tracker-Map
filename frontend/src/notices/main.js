@@ -134,6 +134,9 @@ function createNoticePlayer(elements) {
     elements.title.textContent = title;
     elements.page.textContent = '';
     elements.countdown.textContent = '';
+    elements.playlistCountdownValue.textContent = '--';
+    elements.playlistCountdownLabel.textContent = 'SEC LEFT';
+    elements.progress.style.width = '0%';
     renderPlaylist();
   }
 
@@ -175,6 +178,11 @@ function createNoticePlayer(elements) {
       : Math.max(0, slideDeadline - Date.now());
     const seconds = Math.max(0, Math.ceil(remainingMs / 1000));
     elements.countdown.textContent = paused ? `${seconds}s · Paused` : `${seconds}s left`;
+    elements.playlistCountdownValue.textContent = String(seconds);
+    elements.playlistCountdownLabel.textContent = paused ? 'PAUSED' : 'SEC LEFT';
+    const totalDuration = getSlideDurationMs(slides[currentIndex]);
+    const progress = totalDuration > 0 ? Math.max(0, Math.min(100, (remainingMs / totalDuration) * 100)) : 0;
+    elements.progress.style.width = `${progress}%`;
   }
 
   function scheduleNext(durationMs) {
@@ -250,7 +258,7 @@ function createNoticePlayer(elements) {
 
     elements.stopClosuresCount.textContent = String(stopClosureCount);
     elements.detoursCount.textContent = String(detourCount);
-    elements.playlistCount.textContent = `${slides.length} ${slides.length === 1 ? 'page' : 'pages'}`;
+    elements.playlistCount.textContent = `${slides.length} ${slides.length === 1 ? 'page' : 'pages'} in this cycle`;
     if (activeItem && typeof activeItem.scrollIntoView === 'function') {
       try {
         activeItem.scrollIntoView({ block: 'nearest' });
@@ -501,9 +509,12 @@ function bootstrap() {
     title: document.getElementById('notice-title'),
     page: document.getElementById('notice-page'),
     countdown: document.getElementById('notice-countdown'),
+    progress: document.getElementById('notice-progress-bar'),
     stale: document.getElementById('stale-status'),
     fullscreenHint: document.getElementById('fullscreen-hint'),
     playlistCount: document.getElementById('playlist-count'),
+    playlistCountdownValue: document.getElementById('playlist-countdown-value'),
+    playlistCountdownLabel: document.getElementById('playlist-countdown-label'),
     stopClosuresCount: document.getElementById('stop-closures-count'),
     detoursCount: document.getElementById('detours-count'),
     stopClosuresList: document.getElementById('stop-closures-list'),
