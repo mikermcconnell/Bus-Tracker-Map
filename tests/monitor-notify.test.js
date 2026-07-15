@@ -9,6 +9,7 @@ const {
   buildSystemMessage,
   buildHealthCheckSubject,
   buildHealthCheckMessage,
+  formatIsoTimestamp,
   missingSummary,
   buildHtml,
   buildPlainText,
@@ -65,9 +66,24 @@ describe('buildSystemSubject', () => {
     );
   });
 
+  test('returns no recent GPS subject', () => {
+    expect(buildSystemSubject({ kind: 'no_recent_vehicle_gps', code: 'NO_RECENT_VEHICLE_GPS' })).toBe(
+      'Barrie Transit GPS Alert | NO_RECENT_VEHICLE_GPS | No expected buses have recent GPS'
+    );
+  });
+
   test('returns recovered subject', () => {
     expect(buildSystemSubject({ kind: 'recovered', code: 'SYSTEM_RECOVERED' })).toBe(
       'Barrie Transit Watchdog Alert | SYSTEM_RECOVERED | Monitoring restored'
+    );
+  });
+
+  test('returns service mismatch subject', () => {
+    expect(buildSystemSubject({
+      kind: 'possible_service_calendar_mismatch',
+      code: 'POSSIBLE_SERVICE_CALENDAR_MISMATCH',
+    })).toBe(
+      'Barrie Transit GPS Alert | POSSIBLE_SERVICE_CALENDAR_MISMATCH | Expected service may not match holiday or special-day service'
     );
   });
 });
@@ -84,7 +100,7 @@ describe('buildHealthCheckMessage', () => {
     const { subject, text, html } = buildHealthCheckMessage({
       status: 'attention',
       checkedAt: new Date('2026-06-23T14:15:00Z'),
-      summary: 'The primary Bus Monitor workflow is disabled_manually.',
+      summary: 'The GitHub manual backup workflow is disabled_manually.',
       rows: [
         ['Workflow state', 'disabled_manually'],
         ['Disable reason visible here', 'GitHub reports this workflow was manually disabled.'],
@@ -96,6 +112,16 @@ describe('buildHealthCheckMessage', () => {
     expect(text).toContain('GitHub reports this workflow was manually disabled.');
     expect(html).toContain('BARRIE TRANSIT MONITOR DAILY CHECK-IN');
     expect(subject).not.toContain('Barrie Transit GPS Alert');
+  });
+});
+
+describe('formatIsoTimestamp', () => {
+  test('formats feed timestamps in Toronto time for emails', () => {
+    const result = formatIsoTimestamp(Date.parse('2026-05-28T15:05:16Z') / 1000);
+
+    expect(result).toContain('11:05');
+    expect(result).toContain('EDT');
+    expect(result).not.toContain('T15:05:16.000Z');
   });
 });
 
@@ -240,5 +266,40 @@ describe('buildSystemMessage', () => {
     expect(text).toContain('What is going wrong: The vehicle positions feed is stale even though the trip updates feed is still refreshing.');
     expect(text).toContain('Likely cause: The AVL or GPS source may not be reaching the vehicle position publisher');
     expect(text).toContain('Recommended action: Check whether fresh AVL or GPS data is reaching the publisher');
+  });
+
+  test('describes holiday mismatch alerts in plain language', () => {
+    const { subject, text } = buildSystemMessage({
+      kind: 'possible_service_calendar_mismatch',
+      code: 'POSSIBLE_SERVICE_CALENDAR_MISMATCH',
+      checkedAt: new Date('2026-04-03T14:10:00Z'),
+      expectedCount: 31,
+      trackingCount: 0,
+      missingCount: 31,
+      details: 'The monitor expected 31 buses, but no buses reported live GPS.',
+    });
+
+    expect(subject).toContain('POSSIBLE_SERVICE_CALENDAR_MISMATCH');
+    expect(text).toContain('Summary: Expected service may not match the actual holiday or special-day service pattern.');
+    expect(text).toContain('Recommended action: Check whether today has holiday or special service');
+  });
+
+  test('describes no recent GPS alerts in plain language', () => {
+    const { subject, text } = buildSystemMessage({
+      kind: 'no_recent_vehicle_gps',
+      code: 'NO_RECENT_VEHICLE_GPS',
+      checkedAt: new Date('2026-05-28T15:30:00Z'),
+      expectedCount: 30,
+      trackingCount: 0,
+      vehicleCount: 31,
+      latestVehicleAgeMin: 10,
+      details: 'Buses are expected, but none have reported GPS within the recent window.',
+    });
+
+    expect(subject).toBe(
+      'Barrie Transit GPS Alert | NO_RECENT_VEHICLE_GPS | No expected buses have recent GPS'
+    );
+    expect(text).toContain('Summary: Buses are expected, but no buses have recent GPS updates.');
+    expect(text).toContain('Recommended action: Check the live GPS feed first');
   });
 });

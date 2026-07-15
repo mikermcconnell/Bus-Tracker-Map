@@ -124,6 +124,16 @@ describe('API smoke tests', () => {
     expect(res.body).toMatchObject({ vehicles: [] });
   });
 
+  test('returns holiday service status', async () => {
+    const app = await initApp();
+    const res = await request(app).get('/api/service-status?date=2026-07-01');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(expect.objectContaining({
+      date: '2026-07-01',
+      is_special_service: true,
+      message: 'Canada Day Service: Sunday Schedules',
+    }));
+  });
 
   test('returns the service notice manifest without browser caching', async () => {
     const app = await initApp();

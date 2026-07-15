@@ -27,6 +27,13 @@ const ISSUE_RESEND_MIN = parseInt(process.env.ISSUE_RESEND_MIN || '30', 10);
 const GTFS_CACHE_MAX_AGE_HOURS = parseInt(process.env.GTFS_CACHE_MAX_AGE_HOURS || '24', 10);
 const LAYOVER_GRACE_MIN = parseInt(process.env.LAYOVER_GRACE_MIN || '10', 10);
 const WATCHDOG_MAX_AGE_MIN = parseInt(process.env.WATCHDOG_MAX_AGE_MIN || '90', 10);
+const MAX_MISSING_STATE_AGE_MIN = parseInt(process.env.MAX_MISSING_STATE_AGE_MIN || '60', 10);
+const POSSIBLE_SERVICE_MISMATCH_MIN_EXPECTED = parseInt(process.env.POSSIBLE_SERVICE_MISMATCH_MIN_EXPECTED || '5', 10);
+const POSSIBLE_SERVICE_MISMATCH_MAX_TRACKING = parseInt(process.env.POSSIBLE_SERVICE_MISMATCH_MAX_TRACKING || '1', 10);
+const POSSIBLE_SERVICE_MISMATCH_MIN_RATIO = Math.max(
+  0,
+  Math.min(1, Number(process.env.POSSIBLE_SERVICE_MISMATCH_MIN_RATIO || '0.85'))
+);
 const SMTP_FORCE_IPV4 = /^(1|true|yes|on)$/i.test(String(process.env.SMTP_FORCE_IPV4 || 'true').trim());
 const TEST_ALERT_EVERY_RUN = /^(1|true|yes|on)$/i.test(String(process.env.TEST_ALERT_EVERY_RUN || '').trim());
 const HEARTBEAT_URL = process.env.HEARTBEAT_URL;
@@ -173,23 +180,36 @@ function formatDuration(ms) {
   return `${totalMin} min`;
 }
 
-function normalizeMissingSinceEntry(entry) {
+function normalizeMissingSinceEntry(entry, options = {}) {
+  const nowMs = Number(options.nowMs);
+  const maxAgeMs = Number(options.maxAgeMs);
+  const shouldKeep = (value) => {
+    if (!Number.isFinite(value)) return false;
+    if (!Number.isFinite(nowMs)) return true;
+    if (value > nowMs) return false;
+    if (Number.isFinite(maxAgeMs) && maxAgeMs >= 0 && (nowMs - value) > maxAgeMs) {
+      return false;
+    }
+    return true;
+  };
+
   if (Array.isArray(entry)) {
     return entry
       .filter((value) => value !== null && value !== undefined && value !== '')
       .map((value) => Number(value))
-      .filter((value) => Number.isFinite(value))
+      .filter(shouldKeep)
       .sort((a, b) => a - b);
   }
 
-  if (Number.isFinite(Number(entry))) {
-    return [Number(entry)];
+  const numericEntry = Number(entry);
+  if (Number.isFinite(numericEntry)) {
+    return shouldKeep(numericEntry) ? [numericEntry] : [];
   }
 
   if (entry && typeof entry === 'object' && Array.isArray(entry.missingSince)) {
     return entry.missingSince
       .map((value) => Number(value))
-      .filter((value) => Number.isFinite(value))
+      .filter(shouldKeep)
       .sort((a, b) => a - b);
   }
 
@@ -217,11 +237,14 @@ function summarizeMissingDuration(durationsMs, confirmedMissing, monitoringMissi
   return `${oldest} oldest (+${monitoringMissing} monitoring)`;
 }
 
-function buildRouteReport(expectedByRoute, trackingByRoute, prevState, nowMs, alertThresholdMs) {
+function buildRouteReport(expectedByRoute, trackingByRoute, prevState, nowMs, alertThresholdMs, options = {}) {
   const rows = [];
   const newState = {};
   let totalMissing = 0;
   let totalMonitoring = 0;
+  const maxMissingStateAgeMs = Number.isFinite(Number(options.maxMissingStateAgeMs))
+    ? Number(options.maxMissingStateAgeMs)
+    : Infinity;
 
   const allRoutes = new Set([...expectedByRoute.keys(), ...trackingByRoute.keys()]);
   const sortedRoutes = sortRouteIds(allRoutes);
@@ -237,7 +260,10 @@ function buildRouteReport(expectedByRoute, trackingByRoute, prevState, nowMs, al
     let monitoringMissing = 0;
 
     if (mis > 0) {
-      const priorMissingSince = normalizeMissingSinceEntry(prevState[routeId]);
+      const priorMissingSince = normalizeMissingSinceEntry(prevState[routeId], {
+        nowMs,
+        maxAgeMs: maxMissingStateAgeMs,
+      });
       const currentMissingSince = [];
       for (let i = 0; i < mis; i++) {
         currentMissingSince.push(priorMissingSince[i] || nowMs);
@@ -300,6 +326,33 @@ function summarizeRouteIssues(rows, limit = 8) {
   return routeDetails.length ? routeDetails.join('; ') : 'No route details available.';
 }
 
+function getPossibleServiceMismatchContext(expectedCount, trackingCount, rows) {
+  const safeExpected = Number(expectedCount) || 0;
+  const safeTracking = Number(trackingCount) || 0;
+
+  if (safeExpected < POSSIBLE_SERVICE_MISMATCH_MIN_EXPECTED) return null;
+  if (safeTracking > POSSIBLE_SERVICE_MISMATCH_MAX_TRACKING) return null;
+
+  const missingCount = Math.max(0, safeExpected - safeTracking);
+  const missingRatio = safeExpected > 0 ? (missingCount / safeExpected) : 0;
+  if (missingRatio < POSSIBLE_SERVICE_MISMATCH_MIN_RATIO) return null;
+
+  const percentMissing = Math.round(missingRatio * 100);
+  const trackingText = safeTracking === 0
+    ? 'no buses'
+    : `${safeTracking} bus${safeTracking === 1 ? '' : 'es'}`;
+
+  return {
+    kind: 'possible_service_calendar_mismatch',
+    code: 'POSSIBLE_SERVICE_CALENDAR_MISMATCH',
+    severity: 'Warning',
+    expectedCount: safeExpected,
+    trackingCount: safeTracking,
+    missingCount,
+    details: `The monitor expected ${safeExpected} buses, but only ${trackingText} reported live GPS (${percentMissing}% missing). This can happen on holidays or other special service days when GTFS static or the local override calendar is out of date. ${summarizeRouteIssues(rows)}`,
+  };
+}
+
 function getFeedAlertContext(vehicleFeed, tripUpdatesMeta, now, staleAfterMin) {
   const nowMs = now.getTime();
   const feedAgeMin = getFeedAgeMinutes(vehicleFeed && vehicleFeed.feed_timestamp, nowMs);
@@ -333,6 +386,52 @@ function getFeedAlertContext(vehicleFeed, tripUpdatesMeta, now, staleAfterMin) {
     ...shared,
     details: 'The live bus locations feed is older than the allowed freshness limit.',
   };
+}
+
+function getNoRecentGpsAlertContext(expectedCount, trackingCount, vehicles, now, thresholdSecs) {
+  const safeExpected = Number(expectedCount) || 0;
+  const safeTracking = Number(trackingCount) || 0;
+  if (safeExpected <= 0 || safeTracking > 0) return null;
+
+  const nowMs = now.getTime();
+  const timestamps = (Array.isArray(vehicles) ? vehicles : [])
+    .map((vehicle) => Number(vehicle && vehicle.last_reported))
+    .filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0);
+  const latestTimestamp = timestamps.length ? Math.max(...timestamps) : null;
+  const latestVehicleAgeMin = latestTimestamp === null ? null : getFeedAgeMinutes(latestTimestamp, nowMs);
+  const recentWindowMin = Math.max(1, Math.round((Number(thresholdSecs) || 0) / 60));
+
+  return {
+    kind: 'no_recent_vehicle_gps',
+    code: 'NO_RECENT_VEHICLE_GPS',
+    severity: 'Critical',
+    checkedAt: now,
+    expectedCount: safeExpected,
+    trackingCount: safeTracking,
+    vehicleCount: Array.isArray(vehicles) ? vehicles.length : 0,
+    latestVehicleAgeMin,
+    recentWindowMin,
+    details: `Buses are expected, but none have reported GPS within the last ${recentWindowMin} minutes. If today is a holiday or special-service day, confirm the service override calendar before treating this as a fleet-wide GPS outage.`,
+  };
+}
+
+function selectGpsAlertContext(options) {
+  const vehicleData = options.vehicleData || {};
+  const noRecentGpsIssue = getNoRecentGpsAlertContext(
+    options.expectedCount,
+    options.trackingCount,
+    vehicleData.vehicles || [],
+    options.now,
+    options.thresholdSecs
+  );
+  if (noRecentGpsIssue) return noRecentGpsIssue;
+
+  return getFeedAlertContext(
+    vehicleData,
+    options.tripUpdatesMeta || null,
+    options.now,
+    options.staleAfterMin
+  );
 }
 
 function recordIssueState(issueState, payload) {
@@ -495,25 +594,6 @@ async function main() {
       process.exit(1);
     }
 
-    const candidateFeedIssue = getFeedAlertContext(vehicleData, null, now, FEED_STALE_AFTER_MIN);
-    if (candidateFeedIssue) {
-      let tripUpdatesMeta = null;
-      if (GTFS_RT_TRIP_UPDATES_URL) {
-        try {
-          tripUpdatesMeta = await fetchGtfsRtFeedMeta(GTFS_RT_TRIP_UPDATES_URL);
-        } catch (err) {
-          console.warn('[monitor] Trip updates metadata check failed:', formatErrorText(err));
-        }
-      }
-
-      const feedIssue = getFeedAlertContext(vehicleData, tripUpdatesMeta, now, FEED_STALE_AFTER_MIN) || candidateFeedIssue;
-      await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, feedIssue);
-      saveState({});
-      saveIssueState(issueState);
-      await saveSuccessHeartbeat(emailConfig);
-      process.exit(0);
-    }
-
     const vehicles = vehicleData.vehicles || [];
     const thresholdSecs = SILENCE_THRESHOLD_MIN * 60;
     const nowEpoch = Math.floor(now.getTime() / 1000);
@@ -535,15 +615,53 @@ async function main() {
     const totalTracking = activeVehicles.length;
     console.log('[monitor] Tracking: %d vehicles with recent GPS', totalTracking);
 
+    const noRecentGpsIssue = getNoRecentGpsAlertContext(
+      expected.totalExpected,
+      totalTracking,
+      vehicles,
+      now,
+      thresholdSecs
+    );
+    if (noRecentGpsIssue) {
+      console.log('[monitor] No expected buses have recent GPS. Sending GPS-stalled alert.');
+      await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, noRecentGpsIssue);
+      saveState({});
+      saveIssueState(issueState);
+      await saveSuccessHeartbeat(emailConfig);
+      process.exit(0);
+    }
+
+    const candidateFeedIssue = getFeedAlertContext(vehicleData, null, now, FEED_STALE_AFTER_MIN);
+    if (candidateFeedIssue) {
+      let tripUpdatesMeta = null;
+      if (GTFS_RT_TRIP_UPDATES_URL) {
+        try {
+          tripUpdatesMeta = await fetchGtfsRtFeedMeta(GTFS_RT_TRIP_UPDATES_URL);
+        } catch (err) {
+          console.warn('[monitor] Trip updates metadata check failed:', formatErrorText(err));
+        }
+      }
+
+      const feedIssue = getFeedAlertContext(vehicleData, tripUpdatesMeta, now, FEED_STALE_AFTER_MIN) || candidateFeedIssue;
+      console.log('[monitor] GPS feed issue detected: %s. Sending system alert.', feedIssue.code);
+      await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, feedIssue);
+      saveState({});
+      saveIssueState(issueState);
+      await saveSuccessHeartbeat(emailConfig);
+      process.exit(0);
+    }
+
     const prevState = loadState();
     const nowMs = now.getTime();
     const alertThresholdMs = ALERT_AFTER_MIN * 60 * 1000;
+    const maxMissingStateAgeMs = Math.max(ALERT_AFTER_MIN, MAX_MISSING_STATE_AGE_MIN) * 60 * 1000;
     const { rows, newState, totalMissing, totalMonitoring } = buildRouteReport(
       expected.byRoute,
       trackingByRoute,
       prevState,
       nowMs,
-      alertThresholdMs
+      alertThresholdMs,
+      { maxMissingStateAgeMs }
     );
 
     saveState(newState);
@@ -559,6 +677,23 @@ async function main() {
     if (totalMissing === 0) {
       console.log('[monitor] %d buses monitoring (under %d min threshold). No alert.', totalMonitoring, ALERT_AFTER_MIN);
       await sendRecoveryAlerts(emailConfig, issueState, activeIssueCodes, now);
+      saveIssueState(issueState);
+      await saveSuccessHeartbeat(emailConfig);
+      process.exit(0);
+    }
+
+    const possibleServiceMismatch = getPossibleServiceMismatchContext(
+      expected.totalExpected,
+      totalTracking,
+      rows
+    );
+
+    if (possibleServiceMismatch) {
+      console.log('[monitor] Expected service looks inconsistent with live reporting. Sending softer mismatch alert.');
+      await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, {
+        ...possibleServiceMismatch,
+        checkedAt: now,
+      });
       saveIssueState(issueState);
       await saveSuccessHeartbeat(emailConfig);
       process.exit(0);
@@ -636,6 +771,8 @@ module.exports = {
   deriveTripUpdatesUrl,
   getFeedAgeMinutes,
   getFeedAlertContext,
+  getNoRecentGpsAlertContext,
+  selectGpsAlertContext,
   shouldSendIssueAlert,
   formatErrorText,
   formatDuration,
@@ -643,6 +780,7 @@ module.exports = {
   sortRouteIds,
   summarizeMissingDuration,
   summarizeRouteIssues,
+  getPossibleServiceMismatchContext,
   buildRouteReport,
   getWatchdogAlertDetails,
 };

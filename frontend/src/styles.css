@@ -229,6 +229,40 @@ body {
   border-left: 1px solid rgba(255, 255, 255, 0.26);
 }
 
+.service-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #0b3b5a;
+  background: #ffd166;
+  box-shadow:
+    0 0 0 3px rgba(255, 209, 102, 0.28),
+    0 8px 22px rgba(0, 0, 0, 0.24);
+}
+
+.service-status-pill[hidden] {
+  display: none !important;
+}
+
+.service-status-pill--no-service {
+  color: #ffffff;
+  background: #c1121f;
+  box-shadow:
+    0 0 0 3px rgba(193, 18, 31, 0.28),
+    0 8px 22px rgba(0, 0, 0, 0.24);
+}
+
+.service-status-pill--special {
+  color: #06283d;
+  background: linear-gradient(135deg, #ffe08a, #ffb703);
+}
+
 .map-title__right {
   display: flex;
   align-items: center;
@@ -1085,12 +1119,10 @@ body {
 }
 
 .service-notice__track {
-  --service-notice-gap: 80px;
   display: inline-flex;
   width: max-content;
-  gap: var(--service-notice-gap);
   align-items: center;
-  animation: service-notice-scroll 30s linear infinite;
+  animation: service-notice-scroll 32s linear infinite;
   will-change: transform;
   flex: 1;
 }
@@ -1101,8 +1133,8 @@ body {
 }
 
 @keyframes service-notice-scroll {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(calc(-50% - var(--service-notice-gap) / 2)); }
+  0% { transform: translateX(100vw); }
+  100% { transform: translateX(-100%); }
 }
 
 /* ── Weather widget ─────────────────────────────────────────── */

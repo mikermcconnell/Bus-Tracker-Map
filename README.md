@@ -58,12 +58,14 @@ Open [http://localhost:3000](http://localhost:3000) in a browser (or on the Smar
 Open [http://localhost:3000/notices](http://localhost:3000/notices) locally or `/notices` on the production site.
 
 - The display checks MyRide every 10 minutes and cycles through every page of each active PDF notice.
-- Each page remains visible for 20 seconds. Use the left/right remote or keyboard buttons to move manually, Space to pause, and Enter/OK to request browser full screen.
+- The right-side playlist groups stop closures separately from detours and marks the page that is showing, up next, or already shown in the current cycle.
+- Stop-closure pages remain visible for 10 seconds; detour and other service-change pages remain visible for 30 seconds. A live countdown appears beside the current page. Use the left/right remote or keyboard buttons to move manually, Space to pause, and Enter/OK to request browser full screen.
 - PDF pages are converted to lightweight JPEGs on the server so older Smart TV browsers do not need PDF support.
 - If MyRide is temporarily unavailable, the last successful playlist continues and an update warning appears after 30 minutes.
 - Notices without PDFs are intentionally excluded. When no PDF notices are active, the display shows a holding screen and continues checking.
 
 For the terminal TV, disable its sleep/screensaver setting and bookmark the production `/notices` address. Some built-in TV browsers cannot reopen a page automatically or permanently hide their toolbar; use a kiosk-capable external player if the on-device test shows either limitation.
+
 ## Useful scripts
 - `npm run build` - bundle the frontend and rebuild GeoJSON caches.
 - `npm run build:data` - regenerate the cached GeoJSON from the latest GTFS ZIP.
@@ -104,5 +106,19 @@ barrie-bus/
 - Populate `ALLOWED_ORIGINS` with the canonical production origins (e.g. `https://kiosk.example.com`) when exposing the API publicly; requests from other origins will be rejected with HTTP 403.
 - Use `npm run build` during CI/CD to generate both the frontend bundle and GeoJSON caches before deploying static artifacts.
 - The Express API honours `CACHE_DIR` (advanced) allowing alternate cache storage paths in containerized or test environments.
-- A separate GitHub Actions workflow, **Bus Monitor Daily Check-In**, sends one daily health email with the subject `Barrie Transit Monitor Daily Check-In | ...`. It checks whether the primary monitor workflow is active, reports the last run result, and includes live feed health. If GitHub reports the workflow as `disabled_manually`, the daily email calls that out; GitHub does not expose who clicked disable to the workflow, so use the GitHub audit log for the exact actor.
+- The bus monitor's scheduled production runner is Railway Cron (`railway.json`), which runs at `3,13,23,33,43,53 * * * *` UTC. The Railway service must use a persistent volume mounted at `/app/monitor/cache` so missing-bus state survives between runs.
+- `.github/workflows/bus-monitor.yml` is now a manual backup only. Do not re-enable its schedule unless Railway is disabled first, otherwise duplicate notification emails can be sent.
+- Railway variables required for the monitor service: `GTFS_STATIC_URL`, `GTFS_RT_VEHICLES_URL`, `GTFS_RT_TRIP_UPDATES_URL`, `ALERT_RECIPIENT`, either SMTP settings or Resend settings, and ideally `HEARTBEAT_URL`.
+- The monitor sends a dedicated `NO_RECENT_VEHICLE_GPS` alert when buses are expected but no buses have recent GPS updates. It exits quietly when the schedule says no buses are expected, including configured no-service holidays.
+- The monitor now ships with a local holiday/service override calendar in `monitor/service-overrides.json` for the current operating year. Update that file annually or whenever special service changes are approved.
+- The scheduled monitor job now refreshes GTFS static more aggressively (`GTFS_CACHE_MAX_AGE_HOURS=6`) to reduce stale service-calendar risk.
+- A separate GitHub Actions workflow, **Bus Monitor Daily Check-In**, sends one daily health email with the subject `Barrie Transit Monitor Daily Check-In | ...`. It checks whether the GitHub manual backup workflow is active, reports live feed health, and helps catch obvious backup-workflow problems. Railway run health should be watched with `HEARTBEAT_URL`.
+
+## Bus monitor holiday calendar maintenance
+- Update `monitor/service-overrides.json` when holiday service is approved for a new year or when Council/operations changes a special-service day.
+- Supported simple modes today are:
+  - `no_service`
+  - `sunday`
+- After updating the file, run `npm test` to confirm the holiday calendar and fallback logic still pass.
+- Keep the example file (`monitor/service-overrides.example.json`) in sync with the real file so the expected format stays obvious.
 # Bus-Tracker-Map

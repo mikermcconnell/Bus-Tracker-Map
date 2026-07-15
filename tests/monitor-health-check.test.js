@@ -33,7 +33,7 @@ describe('monitor health check helpers', () => {
     expect(getRecentVehicleCount(vehicles, now, 5)).toBe(1);
   });
 
-  test('summarizes a healthy scheduler and feed as ok', () => {
+  test('summarizes a healthy GitHub backup workflow and feed as ok', () => {
     const result = summarizeStatus({
       state: 'active',
       lastRun: { conclusion: 'success' },
@@ -42,10 +42,10 @@ describe('monitor health check helpers', () => {
     });
 
     expect(result.status).toBe('ok');
-    expect(result.summary).toContain('scheduler is active');
+    expect(result.summary).toContain('GitHub manual backup workflow is active');
   });
 
-  test('summarizes a manually disabled scheduler as attention', () => {
+  test('summarizes a manually disabled GitHub backup workflow as attention', () => {
     const result = summarizeStatus({
       state: 'disabled_manually',
       lastRun: { conclusion: 'success' },

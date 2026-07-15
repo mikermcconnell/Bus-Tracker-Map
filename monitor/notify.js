@@ -101,7 +101,7 @@ function formatIsoTimestamp(value) {
     ? value
     : new Date(typeof value === 'number' ? value * 1000 : value);
   if (Number.isNaN(date.getTime())) return String(value);
-  return date.toISOString();
+  return formatAlertTimestamp(date);
 }
 
 function formatMinutes(value) {
@@ -135,6 +135,16 @@ function buildSystemSubject(payload) {
         payload.code || 'VEHICLE_FEED_OUT_OF_SYNC',
         'Trip updates current, live vehicle locations delayed'
       );
+    case 'no_recent_vehicle_gps':
+      return buildTaggedSubject(
+        payload.code || 'NO_RECENT_VEHICLE_GPS',
+        'No expected buses have recent GPS'
+      );
+    case 'possible_service_calendar_mismatch':
+      return buildTaggedSubject(
+        payload.code || 'POSSIBLE_SERVICE_CALENDAR_MISMATCH',
+        'Expected service may not match holiday or special-day service'
+      );
     case 'all_buses_not_tracking':
       return buildTaggedSubject(payload.code || 'ALL_BUSES_NOT_TRACKING', 'Fleet-wide GPS reporting gap');
     case 'runtime_failure':
@@ -167,7 +177,7 @@ function buildSystemDescriptor(payload) {
           ['Live feed link', payload.feedUrl || 'unknown'],
           ['Live feed time', formatIsoTimestamp(payload.feedTimestamp)],
           ['How old it is', formatMinutes(payload.feedAgeMin)],
-          ['Last changed', payload.lastModified || 'unknown'],
+          ['Last changed', formatIsoTimestamp(payload.lastModified)],
           ['Operational impact', 'Map views and alert emails may show outdated bus locations. Some GPS outage alerts may be incorrect.'],
           ['Recommended action', 'Review the GPS source, the export job for live bus locations, and the publishing process for that feed.'],
           ['More details', payload.details || '—'],
@@ -210,6 +220,25 @@ function buildSystemDescriptor(payload) {
           ['More details', payload.details || '—'],
         ],
       };
+    case 'no_recent_vehicle_gps':
+      return {
+        banner: '#7F1D1D',
+        title: 'BARRIE TRANSIT GPS ALERT',
+        rows: [
+          ['Alert ID', payload.code || 'NO_RECENT_VEHICLE_GPS'],
+          ['Checked at', checkedAt],
+          ['Summary', 'Buses are expected, but no buses have recent GPS updates.'],
+          ['Expected buses', String(payload.expectedCount ?? 'unknown')],
+          ['Buses with recent GPS', String(payload.trackingCount ?? 'unknown')],
+          ['Vehicles in feed', String(payload.vehicleCount ?? 'unknown')],
+          ['Recent GPS window', formatMinutes(payload.recentWindowMin)],
+          ['Newest vehicle GPS age', formatMinutes(payload.latestVehicleAgeMin)],
+          ['Operational impact', 'Public maps and GPS-based alerts may show stale or incorrect bus locations.'],
+          ['Holiday/no-service safeguard', 'This alert is skipped when the schedule says no buses are expected, including configured no-service holidays such as Christmas Day.'],
+          ['Recommended action', 'Check the live GPS feed first. If today is a holiday or special-service day, confirm the override calendar is current before treating this as a fleet-wide GPS outage.'],
+          ['More details', payload.details || '—'],
+        ],
+      };
     case 'all_buses_not_tracking':
       return {
         banner: '#92400E',
@@ -223,6 +252,22 @@ function buildSystemDescriptor(payload) {
           ['Buses missing', String(payload.missingCount ?? 'unknown')],
           ['Operational impact', 'This affects all expected buses and may indicate a fleet-wide GPS reporting issue.'],
           ['Recommended action', 'Confirm the live location feed is healthy. If it is, review bus GPS units, the data gateway, and vehicle communications.'],
+          ['More details', payload.details || '—'],
+        ],
+      };
+    case 'possible_service_calendar_mismatch':
+      return {
+        banner: '#7C3AED',
+        title: 'BARRIE TRANSIT GPS ALERT',
+        rows: [
+          ['Alert ID', payload.code || 'POSSIBLE_SERVICE_CALENDAR_MISMATCH'],
+          ['Checked at', checkedAt],
+          ['Summary', 'Expected service may not match the actual holiday or special-day service pattern.'],
+          ['Expected buses', String(payload.expectedCount ?? 'unknown')],
+          ['Buses reporting', String(payload.trackingCount ?? 'unknown')],
+          ['Buses missing', String(payload.missingCount ?? 'unknown')],
+          ['Operational impact', 'This may be a real GPS issue, but it can also happen when a holiday or special-service day is missing from GTFS static or the local holiday override calendar.'],
+          ['Recommended action', 'Check whether today has holiday or special service, confirm the override calendar is current, then confirm the live location feed is healthy before treating this as a fleet-wide GPS outage.'],
           ['More details', payload.details || '—'],
         ],
       };

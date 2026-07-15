@@ -6,8 +6,11 @@
   --white: #ffffff;
   --muted: #b7c8d8;
   --warning: #ffd166;
+  --success: #73d2a6;
   --footer-height: 60px;
   --footer-height: clamp(52px, 6.2vh, 68px);
+  --playlist-width: 350px;
+  --playlist-width: clamp(310px, 23vw, 430px);
 }
 
 *,
@@ -45,10 +48,10 @@ body {
 .notice-stage {
   position: absolute;
   top: 0;
-  right: 0;
+  right: 350px;
   bottom: 60px;
   left: 0;
-  inset: 0 0 var(--footer-height);
+  inset: 0 var(--playlist-width) var(--footer-height) 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -88,7 +91,8 @@ body {
 .notice-footer {
   position: absolute;
   left: 0;
-  right: 0;
+  right: 350px;
+  right: var(--playlist-width);
   bottom: 0;
   height: 60px;
   height: var(--footer-height);
@@ -140,6 +144,7 @@ body {
 }
 
 .notice-page,
+.notice-countdown,
 .stale-status {
   flex: 0 0 auto;
   font-size: 18px;
@@ -151,6 +156,211 @@ body {
 .notice-page {
   color: #b7c8d8;
   color: var(--muted);
+}
+
+.notice-countdown {
+  min-width: 118px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  color: var(--navy-950);
+  background: var(--blue-400);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.notice-playlist {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  width: 350px;
+  width: var(--playlist-width);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #071b2f;
+  background: linear-gradient(180deg, #0b2946 0%, var(--navy-900) 18%, #061525 100%);
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: -14px 0 34px rgba(0, 0, 0, 0.24);
+}
+
+.playlist-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  padding: clamp(18px, 2.2vh, 28px) clamp(18px, 1.6vw, 28px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.playlist-eyebrow {
+  margin-bottom: 5px;
+  color: var(--blue-400);
+  font-size: clamp(10px, 0.72vw, 13px);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.playlist-header h2,
+.playlist-group-heading h3 {
+  margin: 0;
+}
+
+.playlist-header h2 {
+  font-size: clamp(22px, 1.65vw, 31px);
+  line-height: 1.05;
+}
+
+.playlist-count {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: clamp(12px, 0.9vw, 16px);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.playlist-groups {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 14px clamp(12px, 1vw, 18px) 24px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(98, 181, 229, 0.45) transparent;
+}
+
+.playlist-group + .playlist-group {
+  margin-top: 18px;
+}
+
+.playlist-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 7px 8px;
+  color: var(--muted);
+}
+
+.playlist-group-heading h3 {
+  font-size: clamp(13px, 0.95vw, 17px);
+  letter-spacing: 0.02em;
+}
+
+.playlist-group-heading span {
+  min-width: 25px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.playlist-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.playlist-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: start;
+  margin-bottom: 6px;
+  padding: 10px 10px 10px 9px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.035);
+  transition: opacity 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.playlist-index {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border-radius: 50%;
+  color: var(--navy-950);
+  background: #70879b;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.playlist-copy {
+  min-width: 0;
+}
+
+.playlist-title {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #eaf2f8;
+  font-size: clamp(12px, 0.83vw, 15px);
+  font-weight: 700;
+  line-height: 1.2;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.playlist-meta {
+  display: block;
+  margin-top: 4px;
+  color: #91a9bc;
+  font-size: clamp(10px, 0.68vw, 12px);
+  font-weight: 650;
+}
+
+.playlist-state {
+  margin-top: 2px;
+  color: #91a9bc;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.07em;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.playlist-item--current {
+  border-color: rgba(98, 181, 229, 0.72);
+  background: rgba(98, 181, 229, 0.17);
+  box-shadow: 0 0 0 1px rgba(98, 181, 229, 0.12), 0 7px 20px rgba(0, 0, 0, 0.18);
+}
+
+.playlist-item--current .playlist-index {
+  background: var(--blue-400);
+}
+
+.playlist-item--current .playlist-state {
+  color: var(--blue-400);
+}
+
+.playlist-item--next {
+  border-color: rgba(255, 209, 102, 0.25);
+}
+
+.playlist-item--next .playlist-index {
+  background: var(--warning);
+}
+
+.playlist-item--next .playlist-state {
+  color: var(--warning);
+}
+
+.playlist-item--past {
+  opacity: 0.5;
+}
+
+.playlist-item--past .playlist-index {
+  color: #ffffff;
+  background: #385067;
+}
+
+.playlist-item--past .playlist-state {
+  color: var(--success);
 }
 
 .stale-status {
@@ -165,10 +375,10 @@ body {
 .holding-screen {
   position: absolute;
   top: 0;
-  right: 0;
+  right: 350px;
   bottom: 60px;
   left: 0;
-  inset: 0 0 var(--footer-height);
+  inset: 0 var(--playlist-width) var(--footer-height) 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -244,6 +454,10 @@ body {
 }
 
 @media (max-width: 900px), (max-height: 520px) {
+  :root {
+    --playlist-width: 280px;
+  }
+
   .notice-label {
     display: none;
   }
@@ -255,6 +469,34 @@ body {
 
   .stale-status {
     padding: 4px 8px;
+  }
+
+  .playlist-header {
+    padding: 12px 14px;
+  }
+
+  .playlist-groups {
+    padding: 10px 8px 16px;
+  }
+
+  .playlist-item {
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 7px;
+    padding: 7px;
+  }
+
+  .playlist-index {
+    width: 19px;
+    height: 19px;
+  }
+
+  .playlist-state {
+    display: none;
+  }
+
+  .notice-countdown {
+    min-width: 88px;
+    padding: 5px 8px;
   }
 }
 

@@ -5,9 +5,12 @@ const {
   deriveTripUpdatesUrl,
   getFeedAgeMinutes,
   getFeedAlertContext,
+  getNoRecentGpsAlertContext,
+  selectGpsAlertContext,
   shouldSendIssueAlert,
   normalizeMissingSinceEntry,
   buildRouteReport,
+  getPossibleServiceMismatchContext,
   getWatchdogAlertDetails,
 } = monitorModule;
 
@@ -53,6 +56,58 @@ describe('monitor feed helpers', () => {
     }));
   });
 
+  test('flags no recent GPS only when buses are expected', () => {
+    const now = new Date('2026-05-28T15:30:00Z');
+    const staleVehicles = [
+      { id: 'bus-1', last_reported: Date.parse('2026-05-28T15:20:00Z') / 1000 },
+      { id: 'bus-2', last_reported: Date.parse('2026-05-28T15:19:00Z') / 1000 },
+    ];
+
+    expect(getNoRecentGpsAlertContext(30, 0, staleVehicles, now, 5 * 60)).toEqual(expect.objectContaining({
+      code: 'NO_RECENT_VEHICLE_GPS',
+      kind: 'no_recent_vehicle_gps',
+      expectedCount: 30,
+      trackingCount: 0,
+      latestVehicleAgeMin: 10,
+    }));
+
+    expect(getNoRecentGpsAlertContext(0, 0, staleVehicles, now, 5 * 60)).toBeNull();
+  });
+
+  test('does not flag no recent GPS when at least one expected bus has fresh GPS', () => {
+    const now = new Date('2026-05-28T15:30:00Z');
+    const vehicles = [
+      { id: 'bus-1', last_reported: Date.parse('2026-05-28T15:28:00Z') / 1000 },
+    ];
+
+    expect(getNoRecentGpsAlertContext(30, 1, vehicles, now, 5 * 60)).toBeNull();
+  });
+
+  test('prefers no recent GPS over stale feed when buses are expected', () => {
+    const now = new Date('2026-05-28T15:50:00Z');
+    const vehicleData = {
+      feed_timestamp: Date.parse('2026-05-28T15:05:00Z') / 1000,
+      vehicles: [
+        { id: 'bus-1', route_id: '1', last_reported: Date.parse('2026-05-28T15:05:00Z') / 1000 },
+      ],
+    };
+
+    const result = selectGpsAlertContext({
+      vehicleData,
+      tripUpdatesMeta: null,
+      expectedCount: 31,
+      trackingCount: 0,
+      now,
+      staleAfterMin: 15,
+      thresholdSecs: 5 * 60,
+    });
+
+    expect(result).toEqual(expect.objectContaining({
+      code: 'NO_RECENT_VEHICLE_GPS',
+      kind: 'no_recent_vehicle_gps',
+    }));
+  });
+
   test('resends active issues after the resend interval', () => {
     const checkedAt = new Date('2026-03-23T14:30:00Z');
     expect(shouldSendIssueAlert(null, checkedAt, 30)).toBe(true);
@@ -72,6 +127,18 @@ describe('monitor missing-state normalization', () => {
 
   test('supports array state entries and drops invalid values', () => {
     expect(normalizeMissingSinceEntry([300, '200', null, 'bad', 100])).toEqual([100, 200, 300]);
+  });
+
+  test('drops stale and future missing-state timestamps when bounds are provided', () => {
+    const nowMs = Date.UTC(2026, 4, 14, 19, 45, 0);
+    expect(normalizeMissingSinceEntry([
+      nowMs - (25 * 60 * 1000),
+      nowMs - (5 * 60 * 1000),
+      nowMs + (1 * 60 * 1000),
+    ], {
+      nowMs,
+      maxAgeMs: 20 * 60 * 1000,
+    })).toEqual([nowMs - (5 * 60 * 1000)]);
   });
 });
 
@@ -135,6 +202,58 @@ describe('monitor route report', () => {
       confirmedMissing: 1,
       monitoringMissing: 0,
     }));
+  });
+
+  test('resets impossible stale missing durations instead of reporting multi-day values', () => {
+    const nowMs = Date.UTC(2026, 4, 14, 19, 45, 0);
+    const expectedByRoute = new Map([['7', 2]]);
+    const trackingByRoute = new Map([['7', 1]]);
+    const prevState = {
+      '7': [nowMs - (50 * 24 * 60 * 60 * 1000)],
+    };
+
+    const result = buildRouteReport(
+      expectedByRoute,
+      trackingByRoute,
+      prevState,
+      nowMs,
+      20 * 60 * 1000,
+      { maxMissingStateAgeMs: 4 * 60 * 60 * 1000 }
+    );
+
+    expect(result.totalMissing).toBe(0);
+    expect(result.totalMonitoring).toBe(1);
+    expect(result.newState['7']).toEqual([nowMs]);
+    expect(result.rows[0]).toEqual(expect.objectContaining({
+      routeId: '7',
+      duration: '0 min',
+      confirmedMissing: 0,
+      monitoringMissing: 1,
+    }));
+  });
+});
+
+describe('possible service mismatch detection', () => {
+  test('flags near-empty live service as a possible calendar mismatch', () => {
+    const result = getPossibleServiceMismatchContext(12, 1, [
+      { routeId: '2', expected: 3, tracking: 0, missing: 3 },
+      { routeId: '8A', expected: 5, tracking: 1, missing: 4 },
+    ]);
+
+    expect(result).toEqual(expect.objectContaining({
+      code: 'POSSIBLE_SERVICE_CALENDAR_MISMATCH',
+      kind: 'possible_service_calendar_mismatch',
+      severity: 'Warning',
+      expectedCount: 12,
+      trackingCount: 1,
+      missingCount: 11,
+    }));
+    expect(result.details).toContain('holidays or other special service days');
+  });
+
+  test('does not flag mismatch when enough buses are still reporting', () => {
+    expect(getPossibleServiceMismatchContext(12, 4, [])).toBeNull();
+    expect(getPossibleServiceMismatchContext(4, 0, [])).toBeNull();
   });
 });
 

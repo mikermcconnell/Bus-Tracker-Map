@@ -1,4 +1,4 @@
-/* monitor/health-check.js — Daily monitor status email and scheduler diagnostics */
+/* monitor/health-check.js — Daily monitor status email and backup workflow diagnostics */
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
@@ -158,15 +158,15 @@ function summarizeStatus(workflowStatus, transitStatus, errors = []) {
   const problems = [...errors];
 
   if (!workflowStatus) {
-    problems.push('Could not check the GitHub Actions scheduler.');
+    problems.push('Could not check the GitHub manual backup workflow.');
   } else if (workflowStatus.state !== 'active') {
-    problems.push(`The primary Bus Monitor workflow is ${workflowStatus.state}.`);
+    problems.push(`The GitHub manual backup workflow is ${workflowStatus.state}.`);
   }
 
   if (!workflowStatus || !workflowStatus.lastRun) {
-    problems.push('No recent Bus Monitor workflow run was found.');
+    problems.push('No previous GitHub manual backup workflow run was found.');
   } else if (workflowStatus.lastRun.conclusion && workflowStatus.lastRun.conclusion !== 'success') {
-    problems.push(`The last Bus Monitor workflow run finished with ${workflowStatus.lastRun.conclusion}.`);
+    problems.push(`The last GitHub manual backup workflow run finished with ${workflowStatus.lastRun.conclusion}.`);
   }
 
   if (!transitStatus) {
@@ -179,7 +179,7 @@ function summarizeStatus(workflowStatus, transitStatus, errors = []) {
     status: problems.length ? 'attention' : 'ok',
     summary: problems.length
       ? problems.join(' ')
-      : 'The scheduler is active and the live transit feeds look current.',
+      : 'The GitHub manual backup workflow is active and the live transit feeds look current.',
   };
 }
 
@@ -187,7 +187,7 @@ function buildHealthRows(workflowStatus, transitStatus, errors = []) {
   const rows = [];
 
   if (workflowStatus) {
-    rows.push(['Primary workflow', `${workflowStatus.name || 'Bus Monitor'} (${workflowStatus.workflowFile})`]);
+    rows.push(['GitHub backup workflow', `${workflowStatus.name || 'Bus Monitor'} (${workflowStatus.workflowFile})`]);
     rows.push(['Workflow state', workflowStatus.state || 'unknown']);
     rows.push(['Workflow last updated', workflowStatus.updatedAt || 'unknown']);
     if (workflowStatus.lastRun) {
@@ -242,7 +242,7 @@ async function main() {
   let workflowStatus = null;
   try {
     workflowStatus = await getWorkflowStatus();
-    logEvent('monitor_scheduler_status', {
+    logEvent('monitor_backup_workflow_status', {
       state: workflowStatus.state,
       workflowUpdatedAt: workflowStatus.updatedAt,
       lastRunConclusion: workflowStatus.lastRun && workflowStatus.lastRun.conclusion,
@@ -250,8 +250,8 @@ async function main() {
     });
   } catch (err) {
     const message = err.message || String(err);
-    errors.push(`GitHub scheduler check failed: ${message}`);
-    logEvent('monitor_scheduler_status_failed', { error: message });
+    errors.push(`GitHub backup workflow check failed: ${message}`);
+    logEvent('monitor_backup_workflow_status_failed', { error: message });
   }
 
   let transitStatus = null;

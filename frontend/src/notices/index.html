@@ -21,10 +21,39 @@
       <p id="holding-message">Please wait…</p>
     </section>
 
+    <aside id="notice-playlist" class="notice-playlist" aria-label="Service notice playlist">
+      <header class="playlist-header">
+        <div>
+          <div class="playlist-eyebrow">NOW SHOWING</div>
+          <h2>Service updates</h2>
+        </div>
+        <div id="playlist-count" class="playlist-count">0 pages</div>
+      </header>
+
+      <div id="playlist-groups" class="playlist-groups">
+        <section class="playlist-group" aria-labelledby="stop-closures-heading">
+          <div class="playlist-group-heading">
+            <h3 id="stop-closures-heading">Stop closures</h3>
+            <span id="stop-closures-count">0</span>
+          </div>
+          <ol id="stop-closures-list" class="playlist-list"></ol>
+        </section>
+
+        <section class="playlist-group" aria-labelledby="detours-heading">
+          <div class="playlist-group-heading">
+            <h3 id="detours-heading">Detours &amp; service changes</h3>
+            <span id="detours-count">0</span>
+          </div>
+          <ol id="detours-list" class="playlist-list"></ol>
+        </section>
+      </div>
+    </aside>
+
     <footer id="notice-footer" class="notice-footer">
       <div class="notice-label">SERVICE NOTICE</div>
       <div id="notice-title" class="notice-title">Loading service notices…</div>
       <div id="notice-page" class="notice-page"></div>
+      <div id="notice-countdown" class="notice-countdown" aria-live="off"></div>
       <div id="stale-status" class="stale-status" hidden>Update delayed</div>
     </footer>
 

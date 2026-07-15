@@ -1,0 +1,22 @@
+{
+  "_maintenance": {
+    "checklist": [
+      "Update this file when the next year's holiday service is approved.",
+      "Keep only approved special-service days here.",
+      "Supported modes today: no_service, sunday.",
+      "After editing, run npm test.",
+      "Keep monitor/service-overrides.example.json in sync."
+    ]
+  },
+  "2026-01-01": { "label": "New Year's Day", "mode": "no_service" },
+  "2026-02-16": { "label": "Family Day", "mode": "sunday" },
+  "2026-04-03": { "label": "Good Friday", "mode": "no_service" },
+  "2026-04-05": { "label": "Easter Sunday", "mode": "no_service" },
+  "2026-05-18": { "label": "Victoria Day", "mode": "no_service" },
+  "2026-07-01": { "label": "Canada Day", "mode": "sunday" },
+  "2026-08-03": { "label": "Civic Holiday", "mode": "sunday" },
+  "2026-09-07": { "label": "Labour Day", "mode": "sunday" },
+  "2026-10-12": { "label": "Thanksgiving", "mode": "no_service" },
+  "2026-12-25": { "label": "Christmas Day", "mode": "no_service" },
+  "2026-12-26": { "label": "Boxing Day", "mode": "sunday" }
+}

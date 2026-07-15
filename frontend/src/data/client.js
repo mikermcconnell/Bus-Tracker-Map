@@ -87,6 +87,11 @@ export function createDataClient(options = {}) {
       return fetchJson(resolveUrl('/api/stops.geojson'));
     },
 
+    fetchServiceStatus(date) {
+      const suffix = date ? `?date=${encodeURIComponent(date)}` : '';
+      return fetchJson(resolveUrl(`/api/service-status${suffix}`), { cache: 'no-store' });
+    },
+
     fetchVehicles() {
       const cacheBust = Date.now().toString(36);
       return fetchJson(resolveUrl(`/api/vehicles.json?cb=${cacheBust}`), { cache: 'no-store' });

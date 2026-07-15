@@ -1,4 +1,5 @@
-const SLIDE_DURATION_MS = 20000;
+const STOP_CLOSURE_DURATION_MS = 10000;
+const DETOUR_DURATION_MS = 30000;
 const INITIAL_RETRY_MS = 60000;
 const DEFAULT_REFRESH_MS = 10 * 60 * 1000;
 const STALE_WARNING_MS = 30 * 60 * 1000;
@@ -50,6 +51,39 @@ function isValidManifest(value) {
   );
 }
 
+function classifySlide(slide) {
+  const title = String(slide && slide.title || '').toLowerCase();
+  const isStopClosure = /\bstop(?:s)?\b/.test(title) && (
+    /\bclos(?:e|ed|ure|ures|ing)\b/.test(title) ||
+    /\bstop\s+#?\d+\b/.test(title)
+  );
+  return isStopClosure ? 'stop-closure' : 'detour';
+}
+
+function getSlideDurationMs(slide) {
+  return classifySlide(slide) === 'stop-closure'
+    ? STOP_CLOSURE_DURATION_MS
+    : DETOUR_DURATION_MS;
+}
+
+function organizeSlides(nextSlides) {
+  const validSlides = nextSlides.filter((slide) => slide && slide.id && slide.image_url);
+  return validSlides
+    .map((slide, sourceIndex) => ({ ...slide, category: classifySlide(slide), sourceIndex }))
+    .sort((left, right) => {
+      if (left.category === right.category) return left.sourceIndex - right.sourceIndex;
+      return left.category === 'stop-closure' ? -1 : 1;
+    })
+    .map(({ sourceIndex, ...slide }) => slide);
+}
+
+function getPlaybackState(index, currentIndex, slideCount) {
+  if (index === currentIndex) return 'current';
+  if (slideCount > 1 && index === (currentIndex + 1) % slideCount) return 'next';
+  if (currentIndex >= 0 && index < currentIndex) return 'past';
+  return 'waiting';
+}
+
 function readStoredManifest() {
   try {
     const value = JSON.parse(window.localStorage.getItem(STORAGE_KEY));
@@ -74,6 +108,9 @@ function createNoticePlayer(elements) {
   let activeImage = elements.imageA;
   let standbyImage = elements.imageB;
   let slideTimer = null;
+  let countdownTimer = null;
+  let slideDeadline = 0;
+  let pausedRemainingMs = null;
   let refreshTimer = null;
   let hintTimer = null;
   let paused = false;
@@ -82,7 +119,10 @@ function createNoticePlayer(elements) {
 
   function clearSlideTimer() {
     if (slideTimer) window.clearTimeout(slideTimer);
+    if (countdownTimer) window.clearInterval(countdownTimer);
     slideTimer = null;
+    countdownTimer = null;
+    slideDeadline = 0;
   }
 
   function setHolding(title, message) {
@@ -93,6 +133,8 @@ function createNoticePlayer(elements) {
     elements.holdingMessage.textContent = message;
     elements.title.textContent = title;
     elements.page.textContent = '';
+    elements.countdown.textContent = '';
+    renderPlaylist();
   }
 
   function setStaleState() {
@@ -123,10 +165,99 @@ function createNoticePlayer(elements) {
     setStaleState();
   }
 
-  function scheduleNext() {
+  function updateCountdown() {
+    if (currentIndex < 0 || !slides[currentIndex]) {
+      elements.countdown.textContent = '';
+      return;
+    }
+    const remainingMs = paused && pausedRemainingMs !== null
+      ? pausedRemainingMs
+      : Math.max(0, slideDeadline - Date.now());
+    const seconds = Math.max(0, Math.ceil(remainingMs / 1000));
+    elements.countdown.textContent = paused ? `${seconds}s · Paused` : `${seconds}s left`;
+  }
+
+  function scheduleNext(durationMs) {
     clearSlideTimer();
+    if (currentIndex < 0 || !slides[currentIndex]) return;
+    const requestedDuration = Number(durationMs) || getSlideDurationMs(slides[currentIndex]);
+    pausedRemainingMs = requestedDuration;
+    slideDeadline = Date.now() + requestedDuration;
+    updateCountdown();
+    renderPlaylist();
     if (paused || document.hidden || slides.length < 2) return;
-    slideTimer = window.setTimeout(() => showRelative(1), SLIDE_DURATION_MS);
+    pausedRemainingMs = null;
+    slideTimer = window.setTimeout(() => showRelative(1), requestedDuration);
+    countdownTimer = window.setInterval(updateCountdown, 250);
+  }
+
+  function playlistItem(slide, index) {
+    const item = document.createElement('li');
+    const state = getPlaybackState(index, currentIndex, slides.length);
+    item.className = `playlist-item playlist-item--${state}`;
+    item.dataset.slideId = slide.id;
+
+    const number = document.createElement('span');
+    number.className = 'playlist-index';
+    number.textContent = String(index + 1);
+
+    const copy = document.createElement('div');
+    copy.className = 'playlist-copy';
+    const title = document.createElement('span');
+    title.className = 'playlist-title';
+    title.textContent = slide.title || 'Service notice';
+    const meta = document.createElement('span');
+    meta.className = 'playlist-meta';
+    const pageLabel = slide.page_count > 1 ? `Page ${slide.page} of ${slide.page_count}` : 'Page 1';
+    meta.textContent = `${pageLabel} · ${getSlideDurationMs(slide) / 1000} seconds`;
+    copy.appendChild(title);
+    copy.appendChild(meta);
+
+    const status = document.createElement('span');
+    status.className = 'playlist-state';
+    status.textContent = state === 'current'
+      ? 'SHOWING'
+      : state === 'next'
+        ? 'UP NEXT'
+        : state === 'past'
+          ? 'SHOWN'
+          : 'WAITING';
+
+    item.appendChild(number);
+    item.appendChild(copy);
+    item.appendChild(status);
+    return item;
+  }
+
+  function renderPlaylist() {
+    elements.stopClosuresList.textContent = '';
+    elements.detoursList.textContent = '';
+    let stopClosureCount = 0;
+    let detourCount = 0;
+    let activeItem = null;
+
+    slides.forEach((slide, index) => {
+      const item = playlistItem(slide, index);
+      if (slide.category === 'stop-closure') {
+        elements.stopClosuresList.appendChild(item);
+        stopClosureCount += 1;
+      } else {
+        elements.detoursList.appendChild(item);
+        detourCount += 1;
+      }
+      if (index === currentIndex) activeItem = item;
+    });
+
+    elements.stopClosuresCount.textContent = String(stopClosureCount);
+    elements.detoursCount.textContent = String(detourCount);
+    elements.playlistCount.textContent = `${slides.length} ${slides.length === 1 ? 'page' : 'pages'}`;
+    if (activeItem && typeof activeItem.scrollIntoView === 'function') {
+      try {
+        activeItem.scrollIntoView({ block: 'nearest' });
+      } catch (err) {
+        activeItem.scrollIntoView(false);
+      }
+    }
   }
 
   function preloadNext() {
@@ -158,8 +289,11 @@ function createNoticePlayer(elements) {
       elements.holding.hidden = true;
       updateFooter(slide);
       standbyImage.alt = slide.title || 'Service notice';
+      standbyImage.setAttribute('aria-hidden', 'false');
       standbyImage.classList.add('notice-image--visible');
       activeImage.classList.remove('notice-image--visible');
+      activeImage.alt = '';
+      activeImage.setAttribute('aria-hidden', 'true');
       const oldImage = activeImage;
       activeImage = standbyImage;
       standbyImage = oldImage;
@@ -212,7 +346,7 @@ function createNoticePlayer(elements) {
       ? slides[currentIndex].id
       : null;
     manifest = nextManifest;
-    slides = nextManifest.slides.filter((slide) => slide && slide.id && slide.image_url);
+    slides = organizeSlides(nextManifest.slides);
     failedSlideIds.clear();
     setStaleState();
 
@@ -274,11 +408,14 @@ function createNoticePlayer(elements) {
   function togglePause() {
     paused = !paused;
     if (paused) {
+      pausedRemainingMs = slideDeadline
+        ? Math.max(0, slideDeadline - Date.now())
+        : getSlideDurationMs(slides[currentIndex]);
       clearSlideTimer();
-      elements.page.textContent = `${elements.page.textContent} · Paused`;
+      updateCountdown();
     } else {
       if (currentIndex >= 0) updateFooter(slides[currentIndex]);
-      scheduleNext();
+      scheduleNext(pausedRemainingMs || getSlideDurationMs(slides[currentIndex]));
     }
   }
 
@@ -314,10 +451,13 @@ function createNoticePlayer(elements) {
 
   function handleVisibility() {
     if (document.hidden) {
+      pausedRemainingMs = slideDeadline
+        ? Math.max(0, slideDeadline - Date.now())
+        : pausedRemainingMs;
       clearSlideTimer();
       return;
     }
-    scheduleNext();
+    scheduleNext(pausedRemainingMs || (currentIndex >= 0 ? getSlideDurationMs(slides[currentIndex]) : 0));
     refreshManifest();
   }
 
@@ -360,8 +500,14 @@ function bootstrap() {
     holdingMessage: document.getElementById('holding-message'),
     title: document.getElementById('notice-title'),
     page: document.getElementById('notice-page'),
+    countdown: document.getElementById('notice-countdown'),
     stale: document.getElementById('stale-status'),
     fullscreenHint: document.getElementById('fullscreen-hint'),
+    playlistCount: document.getElementById('playlist-count'),
+    stopClosuresCount: document.getElementById('stop-closures-count'),
+    detoursCount: document.getElementById('detours-count'),
+    stopClosuresList: document.getElementById('stop-closures-list'),
+    detoursList: document.getElementById('detours-list'),
   });
   player.start();
   window.noticePlayer = player;
@@ -375,4 +521,11 @@ if (typeof document !== 'undefined') {
   }
 }
 
-export { createNoticePlayer, isValidManifest };
+export {
+  createNoticePlayer,
+  isValidManifest,
+  classifySlide,
+  getSlideDurationMs,
+  organizeSlides,
+  getPlaybackState,
+};

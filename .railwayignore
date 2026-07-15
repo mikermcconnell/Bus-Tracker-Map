@@ -1,0 +1,14 @@
+node_modules/
+.git/
+.env
+.env.*
+.vercel/
+.playwright-mcp/
+monitor/cache/
+monitor/logs/
+*.log
+*.jpg
+*.jpeg
+*.JPG
+*.png
+*.PNG

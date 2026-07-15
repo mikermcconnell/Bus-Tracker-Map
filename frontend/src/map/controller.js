@@ -190,6 +190,8 @@ export function createMapController({ dataClient, ui }) {
   var DEAD_RECKON_MIN_SAMPLE_MS = 400;
   var DEAD_RECKON_MAX_DURATION_FACTOR = 1.6;
   var ANIMATION_DURATION_FACTOR = 2.0;
+  var SERVICE_STATUS_REFRESH_MS = 15 * 60 * 1000;
+  var serviceStatusRefreshTimer = null;
 
   function updateDebugState(key, value) {
     if (typeof window === 'undefined') return;
@@ -259,8 +261,42 @@ export function createMapController({ dataClient, ui }) {
         updateDebugState('legend', 'error: init failed');
       })
       .then(function () {
+        loadServiceStatus();
+        scheduleServiceStatusRefresh();
         startVehiclesPoll();
       });
+  }
+
+  function loadServiceStatus() {
+    if (!dataClient || typeof dataClient.fetchServiceStatus !== 'function') return;
+    dataClient.fetchServiceStatus(getServicePreviewDate())
+      .then(function (status) {
+        if (ui && typeof ui.setServiceStatus === 'function') {
+          ui.setServiceStatus(status);
+        }
+      })
+      .catch(function (err) {
+        console.warn('Service status update failed:', err && err.message ? err.message : err);
+      });
+  }
+
+  function scheduleServiceStatusRefresh() {
+    if (serviceStatusRefreshTimer) {
+      clearInterval(serviceStatusRefreshTimer);
+    }
+    serviceStatusRefreshTimer = setInterval(loadServiceStatus, SERVICE_STATUS_REFRESH_MS);
+  }
+
+  function getServicePreviewDate() {
+    if (typeof window === 'undefined') return null;
+
+    if (typeof URLSearchParams === 'function') {
+      var params = new URLSearchParams(window.location.search || '');
+      return params.get('serviceDate') || null;
+    }
+
+    var match = String(window.location.search || '').match(/[?&]serviceDate=([^&]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
   }
 
   function setupMap() {

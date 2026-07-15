@@ -1,7 +1,9 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "deploy": {
-    "startCommand": "echo 'Bus monitor moved to GitHub Actions. This Railway service is disabled.'",
+    "startCommand": "node monitor/index.js",
+    "cronSchedule": "3,13,23,33,43,53 * * * *",
+    "requiredMountPath": "/app/monitor/cache",
     "restartPolicyType": "NEVER"
   }
 }

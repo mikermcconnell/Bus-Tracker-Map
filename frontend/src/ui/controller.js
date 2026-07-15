@@ -4,17 +4,6 @@
  * through the legend context so this module remains unaware of Leaflet internals.
  */
 
-const SERVICE_NOTICE_TEXT = '';
-const HAS_SERVICE_NOTICE_COPY = typeof SERVICE_NOTICE_TEXT === 'string' && SERVICE_NOTICE_TEXT.trim().length > 0;
-// Hide notice after Nov 3, 2024 (month is zero-indexed).
-const SERVICE_NOTICE_END = (() => {
-  const now = new Date();
-  const currentYearEnd = new Date(now.getFullYear(), 10, 3, 0, 0, 0, 0);
-  if (now >= currentYearEnd) {
-    return new Date(now.getFullYear() + 1, 10, 3, 0, 0, 0, 0);
-  }
-  return currentYearEnd;
-})();
 const BANNER_PRIORITY = ['routes', 'vehicles'];
 
 export function createUiController() {
@@ -23,7 +12,7 @@ export function createUiController() {
   let legendEl = null;
   let stopLegendEl = null;
   let serviceNoticeEl = null;
-  let serviceNoticeTimer = null;
+  let serviceStatusEl = null;
   let currentTimeEl = null;
   let lastUpdatedEl = null;
   let lastVehicleUpdate = null;
@@ -34,6 +23,7 @@ export function createUiController() {
     legendEl = document.getElementById('legend');
     stopLegendEl = document.getElementById('stop-legend');
     serviceNoticeEl = document.getElementById('service-notice');
+    serviceStatusEl = document.getElementById('service-status');
     currentTimeEl = document.getElementById('current-time');
     lastUpdatedEl = document.getElementById('last-updated');
 
@@ -198,56 +188,79 @@ export function createUiController() {
 
   function setupServiceNotice() {
     if (!serviceNoticeEl) return;
-    if (!HAS_SERVICE_NOTICE_COPY) {
-      serviceNoticeEl.hidden = true;
-      return;
-    }
+    serviceNoticeEl.hidden = true;
     const track = serviceNoticeEl.querySelector('.service-notice__track');
     if (track) {
       const segments = track.querySelectorAll('.service-notice__text');
       segments.forEach((segment) => {
-        segment.textContent = SERVICE_NOTICE_TEXT;
+        segment.textContent = '';
       });
     }
-    updateServiceNoticeVisibility();
-    scheduleServiceNoticeCheck();
   }
 
-  function shouldShowServiceNotice(now) {
-    if (!HAS_SERVICE_NOTICE_COPY) return false;
-    const current = now instanceof Date ? now : new Date(now);
-    if (!Number.isFinite(current.getTime())) return false;
-    if (!(SERVICE_NOTICE_END instanceof Date) || !Number.isFinite(SERVICE_NOTICE_END.getTime())) {
-      return false;
-    }
-    return current < SERVICE_NOTICE_END;
-  }
-
-  function updateServiceNoticeVisibility() {
+  function setServiceNoticeText(text) {
     if (!serviceNoticeEl) return;
-    serviceNoticeEl.hidden = !shouldShowServiceNotice(new Date());
+    const message = String(text || '').trim();
+    const track = serviceNoticeEl.querySelector('.service-notice__track');
+    if (track) {
+      const segments = track.querySelectorAll('.service-notice__text');
+      segments.forEach((segment) => {
+        segment.textContent = message;
+      });
+    }
+    serviceNoticeEl.hidden = !message;
   }
 
-  function scheduleServiceNoticeCheck() {
-    if (!serviceNoticeEl || !HAS_SERVICE_NOTICE_COPY) return;
-    if (serviceNoticeTimer) {
-      clearTimeout(serviceNoticeTimer);
-      serviceNoticeTimer = null;
+  function getSpecialServiceDisplay(status, today) {
+    if (today && today.display_label) {
+      return String(today.display_label).trim();
     }
-    const now = new Date();
-    if (!shouldShowServiceNotice(now)) return;
-    const remaining = SERVICE_NOTICE_END.getTime() - now.getTime();
-    if (remaining <= 0) {
-      updateServiceNoticeVisibility();
+
+    const label = today && today.label ? String(today.label).trim() : '';
+
+    if (today && today.mode === 'no_service') {
+      return label ? `${label} Service: No Service` : 'Holiday Service: No Service';
+    }
+
+    if (today && today.mode === 'service_day' && today.service_day === 'sunday') {
+      return label ? `${label} Service: Sunday Schedules` : 'Holiday Service: Sunday Schedules';
+    }
+
+    const serviceLabel = today && today.service_label
+      ? String(today.service_label).trim()
+      : (status && status.headline ? String(status.headline).trim() : 'Special Service');
+    return label ? `${label} Service: ${serviceLabel}` : serviceLabel;
+  }
+
+  function setServiceStatus(status) {
+    const isSpecial = Boolean(status && status.is_special_service && status.today);
+    const warningMessage = status && status.upcoming_warning && status.upcoming_warning.message
+      ? String(status.upcoming_warning.message).trim()
+      : '';
+
+    if (serviceStatusEl) {
+      serviceStatusEl.classList.remove('service-status-pill--no-service', 'service-status-pill--special');
+      if (!isSpecial) {
+        serviceStatusEl.hidden = true;
+        serviceStatusEl.textContent = '';
+      } else {
+        const today = status.today || {};
+        const display = getSpecialServiceDisplay(status, today);
+        serviceStatusEl.textContent = display;
+        serviceStatusEl.title = display;
+        serviceStatusEl.hidden = false;
+        serviceStatusEl.classList.add(today.mode === 'no_service'
+          ? 'service-status-pill--no-service'
+          : 'service-status-pill--special');
+      }
+    }
+
+    if (!isSpecial) {
+      setServiceNoticeText(warningMessage);
       return;
     }
-    const maxDelay = 6 * 60 * 60 * 1000;
-    const delay = Math.min(remaining, maxDelay);
-    serviceNoticeTimer = setTimeout(() => {
-      serviceNoticeTimer = null;
-      updateServiceNoticeVisibility();
-      scheduleServiceNoticeCheck();
-    }, delay);
+
+    setServiceNoticeText(getSpecialServiceDisplay(status, status.today || {}));
   }
 
   function showBanner(source, message) {
@@ -394,6 +407,7 @@ export function createUiController() {
     renderStopLegend,
     updateRouteLegendState,
     updateLastUpdated,
+    setServiceStatus,
     setConnectionStatus(status) {
       const el = document.getElementById('connection-status');
       if (!el) return;

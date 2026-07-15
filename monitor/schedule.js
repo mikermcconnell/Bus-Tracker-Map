@@ -7,9 +7,10 @@ const { parse } = require('csv-parse/sync');
 const { normalizeRouteId } = require('./routes');
 
 const DEFAULT_MONITOR_TIMEZONE = 'America/Toronto';
+const SERVICE_OVERRIDE_FILENAME = 'service-overrides.json';
 const formatterCache = new Map();
 
-function validateGtfsZip(zip) {
+function validateGtfsZip(zip, source) {
   for (const entry of zip.getEntries()) {
     if (entry.isDirectory) continue;
     try {
@@ -34,7 +35,7 @@ async function loadGtfsZip(gtfsUrl, cachePath, maxAgeHours = 24) {
     try {
       const zip = new AdmZip(buffer);
       zip.getEntries();
-      validateGtfsZip(zip);
+      validateGtfsZip(zip, source);
       return zip;
     } catch (err) {
       throw new Error(`Invalid GTFS ZIP from ${source}: ${err.message}`);
@@ -86,17 +87,125 @@ async function loadGtfsZip(gtfsUrl, cachePath, maxAgeHours = 24) {
   }
 }
 
+function normalizeDateKey(dateKey) {
+  return String(dateKey || '').trim().replace(/-/g, '');
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeServiceDay(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return null;
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  if (dayNames.includes(raw)) return raw;
+  return null;
+}
+
+function normalizeServiceOverrideEntry(entry) {
+  if (entry === null || entry === undefined) return null;
+
+  if (typeof entry === 'string') {
+    entry = { mode: entry };
+  }
+
+  if (!isPlainObject(entry)) return null;
+
+  const rawMode = String(entry.mode ?? entry.service_day ?? entry.serviceDay ?? '').trim().toLowerCase();
+  if (!rawMode) return null;
+
+  if (['no_service', 'no-service', 'none', 'closed'].includes(rawMode)) {
+    return { mode: 'no_service' };
+  }
+
+  if (rawMode === 'service_day') {
+    const normalizedDay = normalizeServiceDay(entry.serviceDay ?? entry.service_day);
+    if (normalizedDay) {
+      return { mode: 'service_day', serviceDay: normalizedDay };
+    }
+  }
+
+  const normalizedDay = normalizeServiceDay(rawMode);
+  if (normalizedDay) {
+    return { mode: 'service_day', serviceDay: normalizedDay };
+  }
+
+  return null;
+}
+
+function normalizeServiceOverrides(rawOverrides) {
+  const normalized = {};
+  if (!isPlainObject(rawOverrides)) return normalized;
+
+  for (const [dateKey, entry] of Object.entries(rawOverrides)) {
+    const normalizedKey = normalizeDateKey(dateKey);
+    const normalizedEntry = normalizeServiceOverrideEntry(entry);
+    if (!normalizedKey || !normalizedEntry) continue;
+    normalized[normalizedKey] = normalizedEntry;
+  }
+
+  return normalized;
+}
+
+function loadServiceOverrides(cachePath) {
+  const candidateFiles = [];
+
+  if (cachePath) {
+    candidateFiles.push(path.join(cachePath, SERVICE_OVERRIDE_FILENAME));
+  }
+
+  candidateFiles.push(path.join(__dirname, SERVICE_OVERRIDE_FILENAME));
+
+  for (const overrideFile of candidateFiles) {
+    if (!fs.existsSync(overrideFile)) continue;
+
+    try {
+      const raw = JSON.parse(fs.readFileSync(overrideFile, 'utf8'));
+      return normalizeServiceOverrides(raw);
+    } catch (err) {
+      console.warn('[schedule] Could not read service override file:', err.message);
+      return {};
+    }
+  }
+
+  return {};
+}
+
+function getServiceOverrideForDate(serviceOverrides, date) {
+  if (!isPlainObject(serviceOverrides) || !(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return serviceOverrides[formatDate(date)] || null;
+}
+
+function resolveServiceDayForDate(date, serviceOverride = null) {
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const defaultDay = dayNames[date.getDay()];
+
+  if (!serviceOverride) return defaultDay;
+
+  if (serviceOverride.mode === 'no_service') return null;
+  if (serviceOverride.mode === 'service_day' && normalizeServiceDay(serviceOverride.serviceDay)) {
+    return normalizeServiceDay(serviceOverride.serviceDay);
+  }
+
+  return defaultDay;
+}
+
 /**
  * Parse calendar.txt + calendar_dates.txt to find active service IDs for a date.
  */
-function getActiveServiceIds(zip, date) {
+function getActiveServiceIds(zip, date, serviceOverride = null) {
   const getText = (name) => {
     const entry = zip.getEntry(name);
     return entry ? zip.readAsText(entry) : null;
   };
 
-  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  const dayOfWeek = dayNames[date.getDay()];
+  const dayOfWeek = resolveServiceDayForDate(date, serviceOverride);
+  if (!dayOfWeek) return new Set();
+
   const dateStr = formatDate(date); // YYYYMMDD
 
   const activeIds = new Set();
@@ -350,6 +459,9 @@ function getNowContext(now = new Date(), timeZone = DEFAULT_MONITOR_TIMEZONE) {
  */
 async function getExpectedBuses(gtfsUrl, cachePath, maxAgeHours = 24, layoverGraceMin = 0, options = {}) {
   const zip = await loadGtfsZip(gtfsUrl, cachePath, maxAgeHours);
+  const serviceOverrides = normalizeServiceOverrides(
+    options.serviceOverrides || loadServiceOverrides(cachePath)
+  );
 
   const now = options.now instanceof Date ? options.now : new Date();
   const monitorTimeZone = options.timeZone || process.env.MONITOR_TIMEZONE || DEFAULT_MONITOR_TIMEZONE;
@@ -358,13 +470,15 @@ async function getExpectedBuses(gtfsUrl, cachePath, maxAgeHours = 24, layoverGra
   const layoverGraceSecs = Math.max(0, Number(layoverGraceMin) || 0) * 60;
 
   // Today's service
-  const todayServiceIds = getActiveServiceIds(zip, today);
+  const todayServiceOverride = getServiceOverrideForDate(serviceOverrides, today);
+  const todayServiceIds = getActiveServiceIds(zip, today, todayServiceOverride);
   const todayTripSpans = getTripTimeSpans(zip, todayServiceIds);
   const todaySpans = applyLayoverGrace(todayTripSpans, layoverGraceSecs);
   const todayResult = getActiveTripsNow(todaySpans, nowSecs);
 
   // Yesterday's service for midnight rollover (trips with times >24:00:00)
-  const yesterdayServiceIds = getActiveServiceIds(zip, yesterday);
+  const yesterdayServiceOverride = getServiceOverrideForDate(serviceOverrides, yesterday);
+  const yesterdayServiceIds = getActiveServiceIds(zip, yesterday, yesterdayServiceOverride);
   const yesterdayTripSpans = getTripTimeSpans(zip, yesterdayServiceIds);
   const yesterdaySpans = applyLayoverGrace(yesterdayTripSpans, layoverGraceSecs);
   // For yesterday's late-night trips, add 86400 to current time
@@ -404,6 +518,11 @@ function parseGtfsTime(str) {
 
 module.exports = {
   loadGtfsZip,
+  loadServiceOverrides,
+  normalizeServiceOverrides,
+  normalizeServiceOverrideEntry,
+  getServiceOverrideForDate,
+  resolveServiceDayForDate,
   getActiveServiceIds,
   getTripTimeSpans,
   applyLayoverGrace,

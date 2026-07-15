@@ -4,6 +4,7 @@ const fs = require('fs');
 const express = require('express');
 require('dotenv').config();
 const { fetchVehicles } = require('./vehicles');
+const { buildServiceStatus } = require('./service-status');
 const { noticeService } = require('./notices');
 
 function normalizeBasePath(input) {
@@ -188,6 +189,14 @@ apiRouter.get('/config', (req, res) => {
   });
 });
 
+apiRouter.get('/service-status', (req, res) => {
+  const status = buildServiceStatus({
+    cacheDir: CACHE_DIR,
+    date: req.query && req.query.date,
+  });
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  res.json(status);
+});
 
 apiRouter.get('/notices', async (req, res) => {
   try {

@@ -4,7 +4,7 @@
   "framework": null,
   "functions": {
     "api/index.js": {
-      "includeFiles": "{cache/**,node_modules/pdfjs-dist/**,node_modules/@napi-rs/{canvas,canvas-linux-x64-gnu,canvas-linux-x64-musl}/**}"
+      "includeFiles": "{cache/**,monitor/service-overrides.json,node_modules/pdfjs-dist/**,node_modules/@napi-rs/{canvas,canvas-linux-x64-gnu,canvas-linux-x64-musl}/**}"
     }
   },
   "headers": [
