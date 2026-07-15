@@ -9,7 +9,7 @@ const DEFAULT_NEWS_URL = 'https://myridebarrie.ca/News/GetAllNews';
 const MYRIDE_ORIGIN = 'https://myridebarrie.ca';
 const PDF_ORIGIN = 'https://assets.barrie.ca';
 const PDF_PATH_PREFIX = '/assets/MyRide/';
-const MANIFEST_TTL_MS = 10 * 60 * 1000;
+const MANIFEST_TTL_MS = 2 * 60 * 60 * 1000;
 const LAST_GOOD_TTL_SECONDS = 7 * 24 * 60 * 60;
 const PDF_META_TTL_SECONDS = 30 * 24 * 60 * 60;
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
@@ -183,11 +183,16 @@ function createCacheAdapter({ memoryCache = createMemoryCache() } = {}) {
   };
 }
 
-function publicManifest(record, status) {
+function publicManifest(record, status, currentTime = Date.now()) {
+  const checkedAt = Date.parse(record.checkedAt);
+  const ageMs = Number.isFinite(checkedAt) ? Math.max(0, currentTime - checkedAt) : 0;
+  const refreshAfterMs = status === 'fresh'
+    ? Math.max(1000, MANIFEST_TTL_MS - ageMs)
+    : MANIFEST_TTL_MS;
   return {
     status,
     checked_at: record.checkedAt,
-    refresh_after_ms: MANIFEST_TTL_MS,
+    refresh_after_ms: refreshAfterMs,
     slides: record.slides.map((slide) => ({ ...slide })),
   };
 }
@@ -389,7 +394,7 @@ function createNoticeService(options = {}) {
   async function getManifest({ force = false } = {}) {
     if (!force) {
       const fresh = await cache.get(cacheKey('manifest:fresh'));
-      if (fresh) return publicManifest(fresh, 'fresh');
+      if (fresh) return publicManifest(fresh, 'fresh', now().getTime());
     }
 
     if (!refreshPromise) {
@@ -400,11 +405,11 @@ function createNoticeService(options = {}) {
 
     try {
       const record = await refreshPromise;
-      return publicManifest(record, 'fresh');
+      return publicManifest(record, 'fresh', now().getTime());
     } catch (err) {
       console.error('[notices] Failed to refresh notice manifest:', err.message);
       const lastGood = await cache.get(cacheKey('manifest:last-good'));
-      if (lastGood) return publicManifest(lastGood, 'stale');
+      if (lastGood) return publicManifest(lastGood, 'stale', now().getTime());
       throw new NoticeError('Service notices are temporarily unavailable', {
         code: 'NOTICES_UNAVAILABLE',
         statusCode: 503,

@@ -57,8 +57,8 @@ Open [http://localhost:3000](http://localhost:3000) in a browser (or on the Smar
 
 Open [http://localhost:3000/notices](http://localhost:3000/notices) locally or `/notices` on the production site.
 
-- The display checks MyRide every 10 minutes and cycles through every page of each active PDF notice.
-- The right-side playlist groups stop closures separately from detours and marks the page that is showing, up next, or already shown in the current cycle.
+- The display checks MyRide every 2 hours and cycles through every page of each active PDF notice.
+- The right-side playlist groups pages under Detours, Stop Closures, Shuttles, and Holiday Service when applicable, and marks the page that is showing, up next, or already shown in the current cycle.
 - Stop-closure pages remain visible for 10 seconds; detour and other service-change pages remain visible for 30 seconds. A live countdown appears beside the current page. Use the left/right remote or keyboard buttons to move manually, Space to pause, and Enter/OK to request browser full screen.
 - PDF pages are converted to lightweight JPEGs on the server so older Smart TV browsers do not need PDF support.
 - If MyRide is temporarily unavailable, the last successful playlist continues and an update warning appears after 30 minutes.

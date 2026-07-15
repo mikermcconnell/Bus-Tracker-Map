@@ -1,7 +1,7 @@
 const STOP_CLOSURE_DURATION_MS = 10000;
 const DETOUR_DURATION_MS = 30000;
 const INITIAL_RETRY_MS = 60000;
-const DEFAULT_REFRESH_MS = 10 * 60 * 1000;
+const DEFAULT_REFRESH_MS = 2 * 60 * 60 * 1000;
 const STALE_WARNING_MS = 30 * 60 * 1000;
 const IMAGE_LOAD_TIMEOUT_MS = 12000;
 const STORAGE_KEY = 'barrie-transit-notice-playlist-v1';
@@ -53,11 +53,16 @@ function isValidManifest(value) {
 
 function classifySlide(slide) {
   const title = String(slide && slide.title || '').toLowerCase();
+  const isHolidayService = /\bholiday\b|\bchristmas\b|\bboxing day\b|\bnew year(?:'s|s)?\b|\bcanada day\b|\bthanksgiving\b|\bfamily day\b|\bvictoria day\b|\bcivic holiday\b|\blabou?r day\b|\bremembrance day\b|\bgood friday\b|\beaster\b/.test(title);
+  if (isHolidayService) return 'holiday-service';
+  if (/\bdetour(?:s)?\b/.test(title)) return 'detour';
   const isStopClosure = /\bstop(?:s)?\b/.test(title) && (
     /\bclos(?:e|ed|ure|ures|ing)\b/.test(title) ||
     /\bstop\s+#?\d+\b/.test(title)
   );
-  return isStopClosure ? 'stop-closure' : 'detour';
+  if (isStopClosure) return 'stop-closure';
+  if (/\bshuttle(?:s)?\b/.test(title)) return 'shuttle';
+  return 'detour';
 }
 
 function getSlideDurationMs(slide) {
@@ -67,12 +72,18 @@ function getSlideDurationMs(slide) {
 }
 
 function organizeSlides(nextSlides) {
+  const categoryOrder = {
+    detour: 0,
+    'stop-closure': 1,
+    shuttle: 2,
+    'holiday-service': 3,
+  };
   const validSlides = nextSlides.filter((slide) => slide && slide.id && slide.image_url);
   return validSlides
     .map((slide, sourceIndex) => ({ ...slide, category: classifySlide(slide), sourceIndex }))
     .sort((left, right) => {
       if (left.category === right.category) return left.sourceIndex - right.sourceIndex;
-      return left.category === 'stop-closure' ? -1 : 1;
+      return categoryOrder[left.category] - categoryOrder[right.category];
     })
     .map(({ sourceIndex, ...slide }) => slide);
 }
@@ -224,12 +235,12 @@ function createNoticePlayer(elements) {
     const status = document.createElement('span');
     status.className = 'playlist-state';
     status.textContent = state === 'current'
-      ? 'SHOWING'
+      ? 'Showing'
       : state === 'next'
-        ? 'UP NEXT'
+        ? 'Up Next'
         : state === 'past'
-          ? 'SHOWN'
-          : 'WAITING';
+          ? 'Shown'
+          : 'Waiting';
 
     item.appendChild(number);
     item.appendChild(copy);
@@ -240,24 +251,37 @@ function createNoticePlayer(elements) {
   function renderPlaylist() {
     elements.stopClosuresList.textContent = '';
     elements.detoursList.textContent = '';
-    let stopClosureCount = 0;
-    let detourCount = 0;
+    elements.shuttlesList.textContent = '';
+    elements.holidayServiceList.textContent = '';
+    const categoryCounts = {
+      detour: 0,
+      'stop-closure': 0,
+      shuttle: 0,
+      'holiday-service': 0,
+    };
+    const categoryLists = {
+      detour: elements.detoursList,
+      'stop-closure': elements.stopClosuresList,
+      shuttle: elements.shuttlesList,
+      'holiday-service': elements.holidayServiceList,
+    };
     let activeItem = null;
 
     slides.forEach((slide, index) => {
       const item = playlistItem(slide, index);
-      if (slide.category === 'stop-closure') {
-        elements.stopClosuresList.appendChild(item);
-        stopClosureCount += 1;
-      } else {
-        elements.detoursList.appendChild(item);
-        detourCount += 1;
-      }
+      categoryLists[slide.category].appendChild(item);
+      categoryCounts[slide.category] += 1;
       if (index === currentIndex) activeItem = item;
     });
 
-    elements.stopClosuresCount.textContent = String(stopClosureCount);
-    elements.detoursCount.textContent = String(detourCount);
+    elements.detoursCount.textContent = String(categoryCounts.detour);
+    elements.stopClosuresCount.textContent = String(categoryCounts['stop-closure']);
+    elements.shuttlesCount.textContent = String(categoryCounts.shuttle);
+    elements.holidayServiceCount.textContent = String(categoryCounts['holiday-service']);
+    elements.detoursGroup.hidden = categoryCounts.detour === 0;
+    elements.stopClosuresGroup.hidden = categoryCounts['stop-closure'] === 0;
+    elements.shuttlesGroup.hidden = categoryCounts.shuttle === 0;
+    elements.holidayServiceGroup.hidden = categoryCounts['holiday-service'] === 0;
     elements.playlistCount.textContent = `${slides.length} ${slides.length === 1 ? 'page' : 'pages'} in this cycle`;
     if (activeItem && typeof activeItem.scrollIntoView === 'function') {
       try {
@@ -515,10 +539,18 @@ function bootstrap() {
     playlistCount: document.getElementById('playlist-count'),
     playlistCountdownValue: document.getElementById('playlist-countdown-value'),
     playlistCountdownLabel: document.getElementById('playlist-countdown-label'),
+    detoursGroup: document.getElementById('detours-group'),
+    stopClosuresGroup: document.getElementById('stop-closures-group'),
+    shuttlesGroup: document.getElementById('shuttles-group'),
+    holidayServiceGroup: document.getElementById('holiday-service-group'),
     stopClosuresCount: document.getElementById('stop-closures-count'),
     detoursCount: document.getElementById('detours-count'),
+    shuttlesCount: document.getElementById('shuttles-count'),
+    holidayServiceCount: document.getElementById('holiday-service-count'),
     stopClosuresList: document.getElementById('stop-closures-list'),
     detoursList: document.getElementById('detours-list'),
+    shuttlesList: document.getElementById('shuttles-list'),
+    holidayServiceList: document.getElementById('holiday-service-list'),
   });
   player.start();
   window.noticePlayer = player;

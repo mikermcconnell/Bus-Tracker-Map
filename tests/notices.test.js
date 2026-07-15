@@ -4,6 +4,7 @@ import noticesModule from '../server/notices.js';
 
 const { Headers, Response } = nodeFetch;
 const {
+  MANIFEST_TTL_MS,
   createMemoryCache,
   createNoticeService,
   extractPdfUrls,
@@ -179,6 +180,7 @@ describe('notice manifest service', () => {
 
     expect(manifest.status).toBe('fresh');
     expect(manifest.checked_at).toBe('2026-07-14T17:00:00.000Z');
+    expect(manifest.refresh_after_ms).toBe(2 * 60 * 60 * 1000);
     expect(manifest.slides).toHaveLength(6);
     expect(manifest.slides.map((slide) => slide.title)).toEqual([
       'Newest notice',
@@ -191,6 +193,70 @@ describe('notice manifest service', () => {
     expect(manifest.slides.map((slide) => slide.page)).toEqual([1, 2, 1, 2, 1, 2]);
     expect(manifest.slides.every((slide) => slide.image_url.startsWith('api/notices/pages/'))).toBe(true);
     expect(inspectPdf).toHaveBeenCalledTimes(3);
+  });
+
+  test('tells displays to refresh when the shared two-hour cache expires', async () => {
+    let currentTime = new Date('2026-07-14T17:00:00Z');
+    const service = createNoticeService({
+      cache,
+      fetchImpl,
+      inspectPdf,
+      renderPdfPage,
+      now: () => currentTime,
+    });
+
+    const first = await service.getManifest();
+    expect(MANIFEST_TTL_MS).toBe(2 * 60 * 60 * 1000);
+    expect(first.refresh_after_ms).toBe(MANIFEST_TTL_MS);
+
+    currentTime = new Date('2026-07-14T18:30:00Z');
+    const cached = await service.getManifest();
+    expect(cached.refresh_after_ms).toBe(30 * 60 * 1000);
+  });
+
+  test('replaces removed notices and includes added notices on the next refresh', async () => {
+    let activeNotices = [
+      { newsId: 30, friendlyUrl: 'notice-a', title: 'Notice A' },
+      { newsId: 31, friendlyUrl: 'notice-b', title: 'Notice B' },
+    ];
+    const changingFetch = vi.fn(async (url, options = {}) => {
+      const target = String(url);
+      if (target.endsWith('/News/GetAllNews')) return jsonResponse(activeNotices);
+      if (target.includes('/News/30/')) {
+        return htmlResponse('<a href="https://assets.barrie.ca/assets/MyRide/a.pdf">A</a>');
+      }
+      if (target.includes('/News/31/')) {
+        return htmlResponse('<a href="https://assets.barrie.ca/assets/MyRide/b.pdf">B</a>');
+      }
+      if (target.includes('/News/32/')) {
+        return htmlResponse('<a href="https://assets.barrie.ca/assets/MyRide/c.pdf">C</a>');
+      }
+      if (target.startsWith('https://assets.barrie.ca/assets/MyRide/')) {
+        const version = `"${target.split('/').pop()}"`;
+        return options.method === 'HEAD' ? pdfHeadResponse(version) : pdfResponse(version);
+      }
+      return new Response('not found', { status: 404 });
+    });
+    const onePagePdf = vi.fn(async () => 1);
+    const service = createNoticeService({
+      cache,
+      fetchImpl: changingFetch,
+      inspectPdf: onePagePdf,
+      renderPdfPage,
+    });
+
+    const first = await service.getManifest();
+    expect(first.slides.map((slide) => slide.title)).toEqual(['Notice A', 'Notice B']);
+
+    activeNotices = [
+      { newsId: 31, friendlyUrl: 'notice-b', title: 'Notice B' },
+      { newsId: 32, friendlyUrl: 'notice-c', title: 'Notice C' },
+    ];
+    const refreshed = await service.getManifest({ force: true });
+
+    expect(refreshed.status).toBe('fresh');
+    expect(refreshed.slides.map((slide) => slide.title)).toEqual(['Notice B', 'Notice C']);
+    expect(refreshed.slides.some((slide) => slide.title === 'Notice A')).toBe(false);
   });
 
   test('serves a JPEG only for a document and page from the current manifest', async () => {

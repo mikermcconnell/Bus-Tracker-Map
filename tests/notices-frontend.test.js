@@ -24,20 +24,31 @@ describe('notice display manifest validation', () => {
 describe('notice display playlist organization', () => {
   const slide = (id, title) => ({ id, title, image_url: `api/${id}.jpg` });
 
-  test('groups stop closures before detours without changing order inside each group', () => {
+  test('groups detours, stop closures, shuttles, and holiday service in display order', () => {
     const organized = organizeSlides([
-      slide('detour-1', 'Livingstone Detour - Route 8A'),
+      slide('shuttle-1', 'Troubadour Festival Shuttle'),
       slide('stop-1', 'Stop 265 - Route 2B'),
+      slide('holiday-1', 'Christmas Holiday Service'),
+      slide('detour-1', 'Livingstone Detour - Route 8A'),
       slide('detour-2', 'Mapleview Detour and Shuttle'),
       slide('stop-2', 'Stop 54 Closure - Route 12A'),
     ]);
 
-    expect(organized.map((item) => item.id)).toEqual(['stop-1', 'stop-2', 'detour-1', 'detour-2']);
+    expect(organized.map((item) => item.id)).toEqual([
+      'detour-1',
+      'detour-2',
+      'stop-1',
+      'stop-2',
+      'shuttle-1',
+      'holiday-1',
+    ]);
     expect(organized.map((item) => item.category)).toEqual([
-      'stop-closure',
-      'stop-closure',
       'detour',
       'detour',
+      'stop-closure',
+      'stop-closure',
+      'shuttle',
+      'holiday-service',
     ]);
   });
 
@@ -45,6 +56,8 @@ describe('notice display playlist organization', () => {
     expect(classifySlide(slide('stop', 'Stop 54 Closure - Route 12A'))).toBe('stop-closure');
     expect(getSlideDurationMs(slide('stop', 'Stop 265 - Route 2B'))).toBe(10000);
     expect(getSlideDurationMs(slide('detour', 'Shanty Bay Detour'))).toBe(30000);
+    expect(classifySlide(slide('shuttle', 'Festival Shuttle'))).toBe('shuttle');
+    expect(classifySlide(slide('holiday', 'Canada Day Holiday Service'))).toBe('holiday-service');
   });
 
   test('marks the current, next, past, and waiting slides', () => {

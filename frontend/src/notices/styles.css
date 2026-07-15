@@ -281,6 +281,10 @@ body {
   margin-top: 24px;
 }
 
+.playlist-group[hidden] {
+  display: none;
+}
+
 .playlist-group-heading {
   display: flex;
   align-items: center;
@@ -368,7 +372,7 @@ body {
   color: #91a9bc;
   font-size: clamp(10px, 0.68vw, 13px);
   font-weight: 900;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.03em;
   text-align: right;
   white-space: nowrap;
 }
