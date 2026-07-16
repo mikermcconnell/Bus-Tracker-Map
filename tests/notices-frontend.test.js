@@ -54,8 +54,8 @@ describe('notice display playlist organization', () => {
 
   test('gives stop closures less screen time than detours', () => {
     expect(classifySlide(slide('stop', 'Stop 54 Closure - Route 12A'))).toBe('stop-closure');
-    expect(getSlideDurationMs(slide('stop', 'Stop 265 - Route 2B'))).toBe(10000);
-    expect(getSlideDurationMs(slide('detour', 'Shanty Bay Detour'))).toBe(30000);
+    expect(getSlideDurationMs(slide('stop', 'Stop 265 - Route 2B'))).toBe(15000);
+    expect(getSlideDurationMs(slide('detour', 'Shanty Bay Detour'))).toBe(20000);
     expect(classifySlide(slide('shuttle', 'Festival Shuttle'))).toBe('shuttle');
     expect(classifySlide(slide('holiday', 'Canada Day Holiday Service'))).toBe('holiday-service');
   });
