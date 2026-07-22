@@ -286,16 +286,19 @@ body {
 }
 
 .playlist-more-info {
+  position: relative;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-height: 92px;
-  padding: 14px clamp(20px, 1.45vw, 29px) 32px;
+  gap: 16px;
+  min-height: 102px;
+  padding: 16px clamp(20px, 1.45vw, 29px) 34px;
   padding-bottom: calc(14px + var(--tv-safe-bottom));
-  border-top: 1px solid rgba(255, 255, 255, 0.13);
-  background: rgba(98, 181, 229, 0.09);
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18);
+  border-top: 3px solid var(--blue-400);
+  background:
+    linear-gradient(115deg, rgba(98, 181, 229, 0.24), rgba(98, 181, 229, 0.1) 72%),
+    var(--navy-900);
+  box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.28), inset 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .playlist-more-info__icon {
@@ -305,13 +308,15 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid rgba(98, 181, 229, 0.75);
+  border: 2px solid #a9ddfa;
   border-radius: 50%;
-  color: var(--blue-400);
+  color: var(--navy-950);
+  background: var(--blue-400);
   font-family: Georgia, serif;
   font-size: 24px;
   font-weight: 700;
   line-height: 1;
+  box-shadow: 0 0 0 5px rgba(98, 181, 229, 0.12);
 }
 
 .playlist-more-info__copy {
@@ -324,18 +329,18 @@ body {
 }
 
 .playlist-more-info__copy span {
-  color: var(--muted);
+  color: #d9eaf5;
   font-size: clamp(13px, 0.76vw, 15px);
-  font-weight: 750;
-  letter-spacing: 0.04em;
+  font-weight: 800;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .playlist-more-info__copy strong {
-  margin-top: 4px;
-  color: var(--white);
-  font-size: clamp(17px, 1.05vw, 21px);
-  font-weight: 750;
+  margin-top: 5px;
+  color: #8fd3f7;
+  font-size: clamp(20px, 1.2vw, 24px);
+  font-weight: 850;
   letter-spacing: 0.01em;
   white-space: nowrap;
 }
@@ -601,7 +606,7 @@ body {
 
   .playlist-more-info {
     gap: 9px;
-    min-height: 78px;
+    min-height: 84px;
     padding: 10px 12px 28px;
     padding-bottom: calc(10px + var(--tv-safe-bottom));
   }
