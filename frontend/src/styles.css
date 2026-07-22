@@ -325,6 +325,17 @@ body {
   animation: status-pulse 2s infinite;
 }
 
+.status-connecting {
+  background: rgba(255, 255, 255, 0.14);
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.status-connecting .live-dot {
+  background: #e2e8f0;
+  animation: status-pulse 1.4s infinite;
+}
+
 .status-warning {
   background: rgba(255, 179, 0, 0.2);
   border: 2px solid rgba(255, 179, 0, 0.6);
@@ -347,6 +358,37 @@ body {
   background: #ff3d3d;
   box-shadow: 0 0 6px #ff3d3d;
   animation: none;
+}
+
+.data-status-banner {
+  position: fixed;
+  top: 82px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(920px, calc(100% - 40px));
+  box-sizing: border-box;
+  padding: 14px 22px;
+  border: 2px solid #f59e0b;
+  border-radius: 12px;
+  background: rgba(120, 53, 15, 0.96);
+  color: #ffffff;
+  font-family: var(--font-display);
+  font-size: clamp(16px, 1.8vw, 23px);
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  z-index: 480;
+  pointer-events: none;
+}
+
+.data-status-banner[hidden] {
+  display: none !important;
+}
+
+.vehicle-feed-degraded .vehicle-icon {
+  opacity: 0.45;
+  filter: grayscale(0.7);
 }
 
 @keyframes status-pulse {

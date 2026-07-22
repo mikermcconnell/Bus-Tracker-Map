@@ -1,4 +1,7 @@
 import { clusterVehicles, DEFAULT_CLUSTER_THRESHOLD_METERS, distanceBetweenMeters } from './vehicle-groups.js';
+import feedFreshness from '../../../shared/feed-freshness.js';
+
+const { assessVehicleFeedFreshness } = feedFreshness;
 
 export function createMapController({ dataClient, ui }) {
   var map, routesGroup, vehicleLayer, highlightLayer, majorRoadLineLayer, majorRoadLabelLayer;
@@ -3136,36 +3139,78 @@ export function createMapController({ dataClient, ui }) {
   }
 
   function startVehiclesPoll() {
-    var lastFetchTime = 0;
+    var lastPayload = null;
+    var requestFailed = false;
 
-    // Status check loop
-    setInterval(function () {
-      var now = Date.now();
-      var elapsed = now - lastFetchTime;
-      if (lastFetchTime === 0) {
-        // Initial state, do nothing or show connecting
-      } else if (elapsed > 60000) {
-        ui.setConnectionStatus('stale');
-      } else if (elapsed > 30000) {
-        ui.setConnectionStatus('warning');
-      } else {
+    function formatFeedTime(timestampSeconds) {
+      if (!timestampSeconds) return null;
+      var date = new Date(Number(timestampSeconds) * 1000);
+      if (!Number.isFinite(date.getTime())) return null;
+      return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    }
+
+    function applyFeedState(freshness) {
+      var reportedAt = formatFeedTime(freshness && freshness.latest_data_timestamp);
+      var status = freshness && freshness.feed_status;
+
+      if (status === 'live') {
         ui.setConnectionStatus('ok');
+        ui.clearBanner('vehicles');
+        if (typeof ui.setVehicleFeedDegraded === 'function') {
+          ui.setVehicleFeedDegraded(false);
+        }
+        return;
       }
+
+      if (typeof ui.setVehicleFeedDegraded === 'function') {
+        ui.setVehicleFeedDegraded(true);
+      }
+
+      if (status === 'delayed') {
+        ui.setConnectionStatus('warning');
+        ui.showBanner(
+          'vehicles',
+          'Live bus locations are delayed.' +
+            (reportedAt ? ' Showing positions last reported at ' + reportedAt + '.' : ' Retrying automatically.')
+        );
+        return;
+      }
+
+      ui.setConnectionStatus('stale');
+      ui.showBanner(
+        'vehicles',
+        reportedAt
+          ? 'Live bus locations are unavailable. Showing last known positions from ' + reportedAt + '.'
+          : 'Live bus locations are unavailable. No current position update has been received; retrying automatically.'
+      );
+    }
+
+    // Reassess the actual data timestamp between polls so a frozen feed cannot
+    // remain labelled LIVE just because HTTP requests continue to succeed.
+    setInterval(function () {
+      if (!lastPayload || requestFailed) return;
+      applyFeedState(assessVehicleFeedFreshness(lastPayload));
     }, 5000);
 
     var tick = function () {
       dataClient.fetchVehicles()
         .then(function (data) {
           if (data && Array.isArray(data.vehicles)) {
-            lastFetchTime = Date.now();
-            ui.setConnectionStatus('ok');
+            lastPayload = data;
+            requestFailed = false;
+            var freshness = assessVehicleFeedFreshness(data);
+            applyFeedState(freshness);
             updateVehicles(data.vehicles);
-            if (typeof ui.updateLastUpdated === 'function') {
-              ui.updateLastUpdated();
+            if (typeof ui.updateLastUpdated === 'function' && freshness.latest_data_timestamp) {
+              ui.updateLastUpdated(freshness.latest_data_timestamp);
             }
+            return;
           }
+          throw new Error('Invalid vehicle response');
         })
         .catch(function (err) {
+          requestFailed = true;
+          applyFeedState({ feed_status: 'offline', latest_data_timestamp: null });
           console.warn('Vehicle poll failed', err);
         })
         .then(function () {

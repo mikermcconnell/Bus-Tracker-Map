@@ -97,7 +97,9 @@ barrie-bus/
 ```
 
 ## Realtime feed notes
-- If the realtime feed is slow or offline, the map keeps the last known vehicle markers and shows a banner.
+- The map checks the timestamps inside the feed instead of treating every HTTP 200 response as live.
+- Data older than `FEED_DELAYED_AFTER_MIN` (default 2 minutes) is labelled **DELAYED**. Data older than `FEED_STALE_AFTER_MIN` (default 15 minutes), a failed request, or a missing timestamp is labelled **OFFLINE**.
+- If the realtime feed is delayed or offline, the map keeps and dims the last known vehicle markers, shows their actual last-reported time, displays a warning banner, and retries automatically.
 - Buses that do not update for 60 seconds are removed automatically.
 - Adjust `POLL_MS` in `.env` if you need faster or slower updates (default is 10 seconds).
 

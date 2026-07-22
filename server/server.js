@@ -4,6 +4,7 @@ const fs = require('fs');
 const express = require('express');
 require('dotenv').config();
 const { fetchVehicles } = require('./vehicles');
+const { assessVehicleFeedFreshness } = require('../shared/feed-freshness');
 const { buildServiceStatus } = require('./service-status');
 const { noticeService } = require('./notices');
 
@@ -121,6 +122,8 @@ const PORT = process.env.PORT || 3007;
 const POLL_MS = Number(process.env.POLL_MS || 10000);
 const MAPTILER_KEY = process.env.MAPTILER_KEY || '';
 const RT_URL = process.env.GTFS_RT_VEHICLES_URL || '';
+const FEED_DELAYED_AFTER_MS = Number(process.env.FEED_DELAYED_AFTER_MIN || 2) * 60 * 1000;
+const FEED_OFFLINE_AFTER_MS = Number(process.env.FEED_STALE_AFTER_MIN || 15) * 60 * 1000;
 const BASE_PATH = normalizeBasePath(process.env.BASE_PATH);
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend', 'dist');
 const CACHE_DIR = path.resolve(process.env.CACHE_DIR || path.join(__dirname, '..', 'cache'));
@@ -234,11 +237,24 @@ apiRouter.get('/notices/pages/:documentId/:page.jpg', async (req, res) => {
 apiRouter.get('/vehicles.json', async (req, res) => {
   try {
     const data = await fetchVehicles(RT_URL);
+    const freshness = assessVehicleFeedFreshness(data, {
+      configured: Boolean(RT_URL),
+      delayedAfterMs: FEED_DELAYED_AFTER_MS,
+      offlineAfterMs: FEED_OFFLINE_AFTER_MS,
+    });
     // allow short caching to reduce load; front end also polls every 10s
     res.setHeader('Cache-Control', 'public, max-age=5');
-    res.json(data);
+    res.json({ ...data, ...freshness });
   } catch (e) {
-    res.status(502).json({ generated_at: Date.now(), vehicles: [], error: e.message });
+    res.status(502).json({
+      generated_at: Date.now(),
+      vehicles: [],
+      feed_status: 'offline',
+      status_reason: 'fetch_failed',
+      latest_data_timestamp: null,
+      data_age_seconds: null,
+      error: e.message,
+    });
   }
 });
 

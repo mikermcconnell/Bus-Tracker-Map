@@ -88,15 +88,18 @@ export function createUiController() {
     setInterval(updateClock, 1000);
   }
 
-  function updateLastUpdated() {
-    lastVehicleUpdate = Date.now();
+  function updateLastUpdated(timestamp) {
+    const numeric = Number(timestamp);
+    lastVehicleUpdate = Number.isFinite(numeric) && numeric > 0
+      ? (numeric < 1e12 ? numeric * 1000 : numeric)
+      : Date.now();
     refreshLastUpdatedDisplay();
   }
 
   function refreshLastUpdatedDisplay() {
     if (!lastUpdatedEl || !lastVehicleUpdate) return;
 
-    const elapsed = Date.now() - lastVehicleUpdate;
+    const elapsed = Math.max(0, Date.now() - lastVehicleUpdate);
     const seconds = Math.floor(elapsed / 1000);
 
     if (seconds < 10) {
@@ -407,15 +410,26 @@ export function createUiController() {
     renderStopLegend,
     updateRouteLegendState,
     updateLastUpdated,
+    setVehicleFeedDegraded(degraded) {
+      if (!document.body) return;
+      if (degraded) {
+        document.body.classList.add('vehicle-feed-degraded');
+      } else {
+        document.body.classList.remove('vehicle-feed-degraded');
+      }
+    },
     setServiceStatus,
     setConnectionStatus(status) {
       const el = document.getElementById('connection-status');
       if (!el) return;
-      el.classList.remove('status-ok', 'status-warning', 'status-stale');
+      el.classList.remove('status-connecting', 'status-ok', 'status-warning', 'status-stale');
       const dot = el.querySelector('.live-dot');
       const text = el.querySelector('.live-text');
 
-      if (status === 'warning') {
+      if (status === 'connecting') {
+        el.classList.add('status-connecting');
+        if (text) text.textContent = 'CONNECTING';
+      } else if (status === 'warning') {
         el.classList.add('status-warning');
         if (text) text.textContent = 'DELAYED';
       } else if (status === 'stale') {

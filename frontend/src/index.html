@@ -18,16 +18,17 @@
       <span class="map-title__sub">Barrie Transit routes only</span>
       <span id="service-status" class="service-status-pill" hidden></span>
     </div>
-    <div id="connection-status" class="live-status-pill status-ok">
+    <div id="connection-status" class="live-status-pill status-connecting" role="status" aria-live="polite">
       <div class="live-dot"></div>
-      <span class="live-text">LIVE</span>
+      <span class="live-text">CONNECTING</span>
     </div>
     <div class="map-title__right">
       <span id="current-time" class="current-time"></span>
       <span class="info-separator">•</span>
-      <span id="last-updated" class="last-updated">Updated just now</span>
+      <span id="last-updated" class="last-updated">Waiting for live data</span>
     </div>
   </header>
+  <div id="banner" class="data-status-banner" role="alert" aria-live="assertive" hidden>Live bus locations unavailable.</div>
   <div class="map-stage">
     <div id="map"></div>
     <div class="map-overlay-frame" aria-hidden="false">

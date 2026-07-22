@@ -121,7 +121,11 @@ describe('API smoke tests', () => {
     const app = await initApp();
     const res = await request(app).get('/api/vehicles.json');
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ vehicles: [] });
+    expect(res.body).toMatchObject({
+      vehicles: [],
+      feed_status: 'offline',
+      status_reason: 'feed_not_configured',
+    });
   });
 
   test('returns holiday service status', async () => {
