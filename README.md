@@ -51,7 +51,7 @@ Open [http://localhost:3000](http://localhost:3000) in a browser (or on the Smar
 - Bus markers appear after the first realtime poll (default ~10 seconds) once `GTFS_RT_VEHICLES_URL` is set.
 - Highlighted stops display short codes on the map; use the left-side panel to see the full stop names those abbreviations represent.
 - When buses stack at the same location (for example the downtown terminal), the icon consolidates into a combined pill that lists every route present, keeping the map readable.
-- A banner if the realtime feed is temporarily unavailable (existing markers remain in place).
+- A banner if the realtime feed is temporarily unavailable (bus icons are hidden while it is offline).
 
 ## Service notice TV display
 
@@ -99,7 +99,7 @@ barrie-bus/
 ## Realtime feed notes
 - The map checks the timestamps inside the feed instead of treating every HTTP 200 response as live.
 - Data older than `FEED_DELAYED_AFTER_MIN` (default 2 minutes) is labelled **DELAYED**. Data older than `FEED_STALE_AFTER_MIN` (default 15 minutes), a failed request, or a missing timestamp is labelled **OFFLINE**.
-- If the realtime feed is delayed or offline, the map keeps and dims the last known vehicle markers, shows their actual last-reported time, displays a warning banner, and retries automatically.
+- If the realtime feed is delayed, the map dims the vehicle markers and shows their actual last-reported time. If the feed is offline, all bus icons are hidden. In both cases the map displays a warning banner and retries automatically.
 - Buses that do not update for 60 seconds are removed automatically.
 - Adjust `POLL_MS` in `.env` if you need faster or slower updates (default is 10 seconds).
 

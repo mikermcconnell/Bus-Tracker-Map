@@ -1,5 +1,6 @@
 const DEFAULT_DELAYED_AFTER_MS = 2 * 60 * 1000;
 const DEFAULT_OFFLINE_AFTER_MS = 15 * 60 * 1000;
+const FUTURE_TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000;
 
 function normalizeTimestampMs(value) {
   const numeric = Number(value);
@@ -81,6 +82,9 @@ function assessVehicleFeedFreshness(payload, options = {}) {
   } else if (ageMs > delayedAfterMs) {
     feedStatus = 'delayed';
     statusReason = 'delayed';
+  } else if (vehicles.length === 0) {
+    feedStatus = 'empty';
+    statusReason = 'no_vehicles';
   }
 
   return {
@@ -91,10 +95,29 @@ function assessVehicleFeedFreshness(payload, options = {}) {
   };
 }
 
+function selectVehiclesForDisplay(payload, freshness, options = {}) {
+  const status = freshness && freshness.feed_status;
+  if (status === 'offline' || status === 'empty') return [];
+
+  const nowMs = Number.isFinite(Number(options.nowMs)) ? Number(options.nowMs) : Date.now();
+  const maxAgeMs = Number.isFinite(Number(options.maxAgeMs))
+    ? Number(options.maxAgeMs)
+    : DEFAULT_OFFLINE_AFTER_MS;
+
+  return (payload && Array.isArray(payload.vehicles) ? payload.vehicles : []).filter((vehicle) => {
+    const timestampMs = normalizeTimestampMs(vehicle && vehicle.last_reported);
+    if (timestampMs === null) return false;
+    const ageMs = nowMs - timestampMs;
+    return ageMs >= -FUTURE_TIMESTAMP_TOLERANCE_MS && ageMs <= maxAgeMs;
+  });
+}
+
 module.exports = {
   DEFAULT_DELAYED_AFTER_MS,
   DEFAULT_OFFLINE_AFTER_MS,
+  FUTURE_TIMESTAMP_TOLERANCE_MS,
   normalizeTimestampMs,
   getLatestVehicleTimestampMs,
   assessVehicleFeedFreshness,
+  selectVehiclesForDisplay,
 };

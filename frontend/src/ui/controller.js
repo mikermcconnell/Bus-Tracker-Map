@@ -419,7 +419,7 @@ export function createUiController() {
       }
     },
     setServiceStatus,
-    setConnectionStatus(status) {
+    setConnectionStatus(status, label) {
       const el = document.getElementById('connection-status');
       if (!el) return;
       el.classList.remove('status-connecting', 'status-ok', 'status-warning', 'status-stale');
@@ -431,7 +431,7 @@ export function createUiController() {
         if (text) text.textContent = 'CONNECTING';
       } else if (status === 'warning') {
         el.classList.add('status-warning');
-        if (text) text.textContent = 'DELAYED';
+        if (text) text.textContent = label || 'DELAYED';
       } else if (status === 'stale') {
         el.classList.add('status-stale');
         if (text) text.textContent = 'OFFLINE';

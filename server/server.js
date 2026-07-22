@@ -184,6 +184,12 @@ apiRouter.get('/stops.geojson', (req, res) => {
 apiRouter.get('/config', (req, res) => {
   res.json({
     poll_ms: POLL_MS,
+    feed_delayed_after_ms: Number.isFinite(FEED_DELAYED_AFTER_MS) && FEED_DELAYED_AFTER_MS > 0
+      ? FEED_DELAYED_AFTER_MS
+      : 2 * 60 * 1000,
+    feed_offline_after_ms: Number.isFinite(FEED_OFFLINE_AFTER_MS) && FEED_OFFLINE_AFTER_MS > 0
+      ? FEED_OFFLINE_AFTER_MS
+      : 15 * 60 * 1000,
     base_path: BASE_PATH,
     tiles: MAPTILER_KEY
       ? `https://api.maptiler.com/maps/streets/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`

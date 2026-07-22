@@ -73,6 +73,8 @@ describe('API smoke tests', () => {
     delete process.env.GTFS_RT_VEHICLES_URL;
     delete process.env.ALLOWED_ORIGINS;
     delete process.env.LOG_LEVEL;
+    delete process.env.FEED_DELAYED_AFTER_MIN;
+    delete process.env.FEED_STALE_AFTER_MIN;
     vi.resetModules();
   });
 
@@ -93,9 +95,25 @@ describe('API smoke tests', () => {
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
       base_path: '/',
-      rt_feed_configured: false
+      rt_feed_configured: false,
+      feed_delayed_after_ms: 120000,
+      feed_offline_after_ms: 900000,
     });
     expect(res.body.poll_ms).toBeGreaterThan(0);
+  });
+
+  test('returns configured feed freshness thresholds to the browser', async () => {
+    const app = await initApp({
+      FEED_DELAYED_AFTER_MIN: '4',
+      FEED_STALE_AFTER_MIN: '20',
+    });
+    const res = await request(app).get('/api/config');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      feed_delayed_after_ms: 240000,
+      feed_offline_after_ms: 1200000,
+    });
   });
 
   test('blocks cross-origin requests when not whitelisted', async () => {

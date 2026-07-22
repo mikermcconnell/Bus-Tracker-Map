@@ -1,11 +1,13 @@
 import { clusterVehicles, DEFAULT_CLUSTER_THRESHOLD_METERS, distanceBetweenMeters } from './vehicle-groups.js';
 import feedFreshness from '../../../shared/feed-freshness.js';
 
-const { assessVehicleFeedFreshness } = feedFreshness;
+const { assessVehicleFeedFreshness, selectVehiclesForDisplay } = feedFreshness;
 
 export function createMapController({ dataClient, ui }) {
   var map, routesGroup, vehicleLayer, highlightLayer, majorRoadLineLayer, majorRoadLabelLayer;
   var pollMs = 5000;
+  var feedDelayedAfterMs = 2 * 60 * 1000;
+  var feedOfflineAfterMs = 15 * 60 * 1000;
   var tileUrl;
   var basePath = '/';
   var routeLayers = {};
@@ -233,6 +235,12 @@ export function createMapController({ dataClient, ui }) {
             if (Number.isFinite(parsedPollMs) && parsedPollMs > 0) {
               pollMs = parsedPollMs;
             }
+          }
+          if (Number.isFinite(Number(cfg.feed_delayed_after_ms)) && Number(cfg.feed_delayed_after_ms) > 0) {
+            feedDelayedAfterMs = Number(cfg.feed_delayed_after_ms);
+          }
+          if (Number.isFinite(Number(cfg.feed_offline_after_ms)) && Number(cfg.feed_offline_after_ms) > 0) {
+            feedOfflineAfterMs = Number(cfg.feed_offline_after_ms);
           }
           if (cfg.tiles) {
             tileUrl = cfg.tiles;
@@ -3162,6 +3170,15 @@ export function createMapController({ dataClient, ui }) {
         return;
       }
 
+      if (status === 'empty') {
+        ui.setConnectionStatus('warning', 'NO BUSES');
+        ui.showBanner('vehicles', 'No buses are currently reporting live locations. Retrying automatically.');
+        if (typeof ui.setVehicleFeedDegraded === 'function') {
+          ui.setVehicleFeedDegraded(false);
+        }
+        return;
+      }
+
       if (typeof ui.setVehicleFeedDegraded === 'function') {
         ui.setVehicleFeedDegraded(true);
       }
@@ -3180,16 +3197,31 @@ export function createMapController({ dataClient, ui }) {
       ui.showBanner(
         'vehicles',
         reportedAt
-          ? 'Live bus locations are unavailable. Showing last known positions from ' + reportedAt + '.'
-          : 'Live bus locations are unavailable. No current position update has been received; retrying automatically.'
+          ? 'Live bus locations are unavailable. Bus icons are hidden; the last update was at ' + reportedAt + '.'
+          : 'Live bus locations are unavailable. Bus icons are hidden; retrying automatically.'
       );
+    }
+
+    function assessPayload(payload) {
+      return assessVehicleFeedFreshness(payload, {
+        delayedAfterMs: feedDelayedAfterMs,
+        offlineAfterMs: feedOfflineAfterMs
+      });
+    }
+
+    function renderPayload(payload, freshness) {
+      updateVehicles(selectVehiclesForDisplay(payload, freshness, {
+        maxAgeMs: feedOfflineAfterMs
+      }));
     }
 
     // Reassess the actual data timestamp between polls so a frozen feed cannot
     // remain labelled LIVE just because HTTP requests continue to succeed.
     setInterval(function () {
       if (!lastPayload || requestFailed) return;
-      applyFeedState(assessVehicleFeedFreshness(lastPayload));
+      var freshness = assessPayload(lastPayload);
+      applyFeedState(freshness);
+      renderPayload(lastPayload, freshness);
     }, 5000);
 
     var tick = function () {
@@ -3198,9 +3230,9 @@ export function createMapController({ dataClient, ui }) {
           if (data && Array.isArray(data.vehicles)) {
             lastPayload = data;
             requestFailed = false;
-            var freshness = assessVehicleFeedFreshness(data);
+            var freshness = assessPayload(data);
             applyFeedState(freshness);
-            updateVehicles(data.vehicles);
+            renderPayload(data, freshness);
             if (typeof ui.updateLastUpdated === 'function' && freshness.latest_data_timestamp) {
               ui.updateLastUpdated(freshness.latest_data_timestamp);
             }
@@ -3211,6 +3243,7 @@ export function createMapController({ dataClient, ui }) {
         .catch(function (err) {
           requestFailed = true;
           applyFeedState({ feed_status: 'offline', latest_data_timestamp: null });
+          updateVehicles([]);
           console.warn('Vehicle poll failed', err);
         })
         .then(function () {
