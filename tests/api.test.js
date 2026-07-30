@@ -154,40 +154,6 @@ describe('API smoke tests', () => {
     expect(res.body.poll_ms).toBeGreaterThan(0);
   });
 
-  test('serves current terminal platform assignments from generated GTFS metadata', async () => {
-    writeJson(path.join(cacheDir, 'barrie-transit.json'), {
-      generated_at: '2026-07-30T18:42:08.922Z',
-      source_url: 'https://example.test/google_transit.zip',
-      terminal_stop_ids: ['9003', '9013'],
-      terminal_stops: [
-        { id: '9003', platform_code: '3' },
-        { id: '9013', platform_code: '13' }
-      ],
-      trips: {
-        route8: {
-          route_id: '8A',
-          headsign: 'RVH/YONGE to Park Place',
-          terminal_stops: [{ stop_id: '9003', stop_sequence: 10 }]
-        },
-        route12: {
-          route_id: '12A',
-          headsign: 'GEORGIAN MALL',
-          terminal_stops: [{ stop_id: '9013', stop_sequence: 20 }]
-        }
-      }
-    });
-    const app = await initApp();
-    const res = await request(app).get('/api/terminal-layout');
-
-    expect(res.status).toBe(200);
-    expect(res.headers['cache-control']).toContain('max-age=300');
-    expect(res.body.assignments).toEqual([
-      expect.objectContaining({ platform: '3', route_id: '8A', destination: 'Yonge Southbound' }),
-      expect.objectContaining({ platform: '13', route_id: '12A', destination: 'Georgian Mall' })
-    ]);
-    expect(res.body.assignments.some((entry) => entry.platform === '14')).toBe(false);
-  });
-
   test('returns configured feed freshness thresholds to the browser', async () => {
     const app = await initApp({
       FEED_DELAYED_AFTER_MIN: '4',

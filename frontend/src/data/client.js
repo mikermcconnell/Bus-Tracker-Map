@@ -93,11 +93,6 @@ export function createDataClient(options = {}) {
       return fetchJson(resolveUrl(`/api/service-status${suffix}`), { cache: 'no-store' });
     },
 
-    fetchTerminalLayout() {
-      const cacheBust = Date.now().toString(36);
-      return fetchJson(resolveUrl(`/api/terminal-layout?cb=${cacheBust}`), { cache: 'no-store' });
-    },
-
     fetchVehicles() {
       const cacheBust = Date.now().toString(36);
       return fetchJson(resolveUrl(`/api/vehicles.json?cb=${cacheBust}`), { cache: 'no-store' });

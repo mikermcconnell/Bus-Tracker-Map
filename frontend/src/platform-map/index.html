@@ -1,56 +1,21 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-  <meta charset="utf-8">
-  <title>Barrie Allandale Terminal Live Platform Map</title>
-  <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,viewport-fit=cover">
-  <link rel="stylesheet" href="%APP_CSS%">
-  <meta name="app-build-id" content="%BUILD_ID%">
+    <meta charset="utf-8">
+    <title>Platform Map TV</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="%APP_CSS%">
+    <meta name="app-build-id" content="%BUILD_ID%">
 </head>
+
 <body>
-  <main class="platform-app">
-    <div id="platform-canvas" class="platform-canvas">
-      <header class="platform-header">
-        <div class="platform-header__identity">
-          <span class="platform-header__eyebrow">Live terminal display</span>
-          <h1>Barrie Allandale Terminal</h1>
-        </div>
-        <div id="connection-status" class="connection-status status-connecting" role="status" aria-live="polite">
-          <span class="connection-status__dot"></span>
-          <span id="connection-label">CONNECTING</span>
-        </div>
-        <div class="platform-header__time">
-          <time id="platform-clock">--:--</time>
-          <span id="last-updated">WAITING FOR LIVE DATA</span>
-        </div>
-      </header>
-
-      <section class="terminal-status-rail" aria-label="Terminal live status">
-        <section id="source-statuses" class="source-statuses" aria-label="Transit feed status"></section>
-        <div id="platform-status" class="platform-status" role="alert" aria-live="assertive" hidden></div>
-        <div id="terminal-empty" class="terminal-empty" role="status" hidden>No live vehicles in the terminal area</div>
-      </section>
-
-      <div class="map-stage">
-        <div class="map-plane">
-          <img src="./assets/map.png" alt="Barrie Allandale Transit Terminal platform layout" class="map-image" id="map-image">
-          <section id="assignment-layer" class="assignment-layer" aria-label="Scheduled platform assignments"></section>
-          <div id="bus-layer" class="bus-layer" aria-label="Live vehicles"></div>
-        </div>
-      </div>
-
-      <footer class="platform-footer">
-        <div id="display-legend" class="display-legend">
-          <strong>Scheduled platform service</strong>
-          <span><i class="display-legend__vehicle"></i>Live vehicles appear as coloured icons</span>
-        </div>
-        <div id="service-notice" class="service-notice" role="status" aria-live="polite" hidden>
-          <strong>Service update</strong>
-          <span id="service-notice-text"></span>
-        </div>
-      </footer>
+    <div class="map-container">
+        <img src="./assets/map.png" alt="Barrie Allandale platform map" class="map-image" id="map-image">
+        <div id="bus-layer"></div>
+        <div id="platform-status" class="platform-status" hidden></div>
     </div>
-  </main>
-  <script src="%APP_JS%"></script>
+    <script src="%APP_JS%"></script>
 </body>
+
 </html>
