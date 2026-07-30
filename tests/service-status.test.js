@@ -69,7 +69,7 @@ describe('service status helpers', () => {
       days_until: 7,
       display_label: 'Canada Day Service: Sunday Schedules',
       display_date: 'Wednesday, July 1',
-      message: 'Upcoming Holiday Service: Canada Day Service: Sunday Schedules on Wednesday, July 1.',
+      message: 'Upcoming Holiday Service - Canada Day Service: Sunday Schedules on Wednesday, July 1.',
     }));
   });
 

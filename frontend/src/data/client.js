@@ -80,7 +80,8 @@ export function createDataClient(options = {}) {
     },
 
     fetchRoutes() {
-      return fetchJson(resolveUrl('/api/routes.geojson'));
+      const cacheBust = Date.now().toString(36);
+      return fetchJson(resolveUrl(`/api/routes.geojson?cb=${cacheBust}`), { cache: 'no-store' });
     },
 
     fetchStops() {

@@ -1,8 +1,8 @@
 /* ============================================================
    Barrie Transit Live Map — Transit Authority Design System
-   Typefaces: Barlow Condensed (display) + IBM Plex Sans (data)
+   Typefaces: Barlow Condensed (masthead) + Atkinson Hyperlegible (operational)
    ============================================================ */
-@import url("https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&family=Barlow+Condensed:wght@500;600;700;800&display=swap");
 
 :root {
   /* Core brand */
@@ -15,8 +15,9 @@
   --brand-surface: #ffffff;
 
   /* Typography */
-  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
-  --font-body: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-masthead: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-display: "Atkinson Hyperlegible", "Segoe UI", sans-serif;
+  --font-body: "Atkinson Hyperlegible", "Segoe UI", sans-serif;
 
   /* Text hierarchy */
   --text-primary: #0f172a;
@@ -203,7 +204,7 @@ body {
 }
 
 .map-title__main {
-  font-family: var(--font-display);
+  font-family: var(--font-masthead);
   font-size: clamp(40px, 4vw, 52px);
   font-weight: 700;
   line-height: 1;
@@ -1004,6 +1005,29 @@ body {
   letter-spacing: 0.12em;
 }
 
+.vehicle-label-line--agency {
+  margin-bottom: 1px;
+  font-family: var(--font-body);
+  font-size: 0.48em;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 0.9;
+}
+
+.vehicle-bubble--go-transit {
+  background: #007a33;
+  color: #ffffff;
+  box-shadow:
+    0 0 0 calc(2px * var(--bubble-scale, 1)) #007a33,
+    var(--bubble-shadow, var(--shadow-medium));
+}
+
+.vehicle-bubble--ontario-northland {
+  box-shadow:
+    0 0 0 calc(2px * var(--bubble-scale, 1)) #e6b012,
+    var(--bubble-shadow, var(--shadow-medium));
+}
+
 .vehicle-arrow {
   position: absolute;
   top: calc(-14px * var(--bubble-scale, 1));
@@ -1197,18 +1221,23 @@ body {
 /* ── Major road labels ──────────────────────────────────────── */
 
 .major-road-label {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border: none;
-  border-radius: 999px;
-  color: var(--brand-primary);
-  font: 700 13px/1.2 var(--font-body);
-  letter-spacing: 0.04em;
-  padding: 4px 11px;
+  border-radius: 0;
+  color: #344454;
+  font: 700 12px/1.2 var(--font-body);
+  letter-spacing: 0.055em;
+  padding: 0;
   text-align: center;
   text-transform: uppercase;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  text-shadow:
+    -2px -2px 0 rgba(255, 255, 255, 0.95),
+     2px -2px 0 rgba(255, 255,255, 0.95),
+    -2px  2px 0 rgba(255, 255, 255, 0.95),
+     2px  2px 0 rgba(255, 255, 255, 0.95);
+  box-shadow: none;
   pointer-events: none;
   white-space: nowrap;
   transform-origin: 50% 50%;
@@ -1303,7 +1332,7 @@ body {
   background: linear-gradient(135deg, var(--transit-blue), var(--transit-blue-dark));
   border: 2px solid var(--brand-accent);
   box-shadow: 0 4px 16px rgba(8, 145, 178, 0.3);
-  padding: 6px 12px;
+  padding: 6px 11px;
   border-radius: 12px;
 }
 
@@ -1311,10 +1340,11 @@ body {
 .stop-highlight[data-stop="9005"] .stop-highlight-note {
   color: #ffffff;
   font-weight: 800;
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  margin-top: 4px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  text-transform: uppercase;
 }
 
 /* ── Service notice banner ──────────────────────────────────── */
@@ -1362,6 +1392,19 @@ body {
   opacity: 0.92;
 }
 
+.service-notice__agency-logo {
+  display: block;
+  flex: 0 0 auto;
+  width: 112px;
+  height: 36px;
+  padding: 3px 7px;
+  border-radius: 7px;
+  background: #ffffff;
+  object-fit: contain;
+  box-sizing: border-box;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.18));
+}
+
 .service-notice__track {
   display: inline-flex;
   width: max-content;
@@ -1374,6 +1417,10 @@ body {
 .service-notice__text {
   white-space: nowrap;
   padding: 0 8px;
+}
+
+.service-notice__heading {
+  font-weight: 900;
 }
 
 @keyframes service-notice-scroll {
@@ -1638,4 +1685,634 @@ body {
   opacity: 0.85;
   max-height: 18vh;
   overflow-y: auto;
+}
+
+/* ── Public waiting-area TV layout ─────────────────────────── */
+
+.map-title {
+  min-height: 68px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  padding-block: 9px;
+}
+
+.map-title__left {
+  grid-column: 2;
+  grid-row: 1;
+  justify-content: center;
+  justify-self: center;
+  flex: none;
+  flex-wrap: nowrap;
+  gap: 12px;
+}
+
+.map-title__main {
+  font-size: clamp(32px, 2.6vw, 42px);
+}
+
+.live-feed-summary {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 5px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: clamp(15px, 1.15vw, 18px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.live-feed-summary .live-dot {
+  width: 9px;
+  height: 9px;
+}
+
+.map-title__right {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  margin-left: 0;
+  font-size: clamp(16px, 1.2vw, 19px);
+}
+
+.last-updated {
+  font-size: inherit;
+}
+
+.map-overlay-frame {
+  display: block;
+  padding: 0;
+}
+
+.map-overlay-column {
+  position: absolute;
+  display: block;
+  width: auto;
+  max-width: none;
+  min-width: 0;
+  max-height: none;
+}
+
+.map-overlay-column--left {
+  top: clamp(86px, 10vh, 104px);
+  left: clamp(14px, 1.4vw, 28px);
+  width: min(19vw, 310px);
+}
+
+.map-overlay-column--right {
+  top: clamp(86px, 10vh, 104px);
+  right: clamp(14px, 1.4vw, 28px);
+  width: min(25vw, 420px);
+  margin-left: 0;
+  overflow: visible;
+}
+
+.tracked-services {
+  width: 100%;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.2), 0 3px 10px rgba(15, 23, 42, 0.12);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.tracked-services__header {
+  padding: 11px 14px 10px;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--transit-blue), var(--transit-blue-dark));
+  border-bottom: 3px solid var(--brand-accent);
+}
+
+.tracked-services__eyebrow {
+  display: block;
+  margin-bottom: 2px;
+  font-size: clamp(9px, 0.7vw, 11px);
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  line-height: 1;
+  opacity: 0.82;
+  text-transform: uppercase;
+}
+
+.tracked-services h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(20px, 1.4vw, 24px);
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.tracked-services__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tracked-services__holding {
+  padding: 18px 14px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.tracked-agency {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 7px 11px;
+  border-bottom: 1px solid rgba(0, 78, 128, 0.13);
+  box-sizing: border-box;
+}
+
+.tracked-agency:last-child {
+  border-bottom: 0;
+}
+
+.tracked-agency__identity {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 40px;
+  padding: 3px 4px;
+  border-radius: 9px;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.tracked-agency__logo {
+  display: block;
+  width: 100%;
+  max-width: 88px;
+  max-height: 34px;
+  object-fit: contain;
+}
+
+.tracked-agency__logo[hidden] {
+  display: none;
+}
+
+.tracked-agency[data-agency-id="go-transit"] .tracked-agency__logo {
+  width: 58px;
+  max-height: 28px;
+}
+
+.tracked-agency[data-agency-id="ontario-northland"] .tracked-agency__logo {
+  max-width: 88px;
+  max-height: 22px;
+}
+
+.tracked-agency__name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.tracked-agency--text-logo .tracked-agency__name {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  color: #005596;
+  font-family: var(--font-display);
+  font-size: clamp(16px, 1.05vw, 19px);
+  font-weight: 900;
+  letter-spacing: 0.025em;
+  line-height: 0.95;
+  text-align: center;
+  white-space: normal;
+}
+
+.tracked-agency[data-agency-id="simcoe-linx"] .tracked-agency__logo {
+  max-width: 88px;
+  max-height: 31px;
+}
+
+.tracked-agency__services {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tracked-agency__service {
+  min-width: 0;
+}
+
+.tracked-agency__type {
+  display: block;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(11px, 0.76vw, 13px);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tracked-agency__status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.tracked-service__status-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #94a3b8;
+}
+
+.tracked-service__status-dot--live,
+.tracked-service__status-dot--empty {
+  background: #16a34a;
+}
+
+.tracked-service__status-dot--delayed {
+  background: #f59e0b;
+}
+
+.tracked-service__status-dot--offline {
+  background: #dc2626;
+}
+
+.tracked-service__status-dot--not-tracked {
+  background: #dc2626;
+}
+
+.tracked-agency__service[data-status="not-tracked"] .tracked-service__status-text {
+  color: #b91c1c;
+  font-weight: 850;
+}
+
+.tracked-service__status-text {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: clamp(9px, 0.68vw, 11px);
+  font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nearby-buses {
+  width: 100%;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.22), 0 4px 12px rgba(15, 23, 42, 0.12);
+  overflow: hidden;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
+.nearby-buses__header {
+  padding: 17px 18px 14px;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--transit-blue), var(--transit-blue-dark));
+  border-bottom: 3px solid var(--brand-accent);
+}
+
+.nearby-buses__eyebrow {
+  display: block;
+  margin-bottom: 2px;
+  font-family: var(--font-body);
+  font-size: clamp(10px, 0.85vw, 13px);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  opacity: 0.82;
+  text-transform: uppercase;
+}
+
+.nearby-buses h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(27px, 2.15vw, 36px);
+  font-weight: 800;
+  letter-spacing: 0.025em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.nearby-buses__terminal-name {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-body);
+  font-size: clamp(12px, 0.95vw, 15px);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
+}
+
+.nearby-buses__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nearby-bus {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 74px;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(0, 78, 128, 0.13);
+  box-sizing: border-box;
+}
+
+.nearby-bus:last-child {
+  border-bottom: 0;
+}
+
+.nearby-bus--terminal {
+  background: rgba(8, 145, 178, 0.09);
+  box-shadow: inset 5px 0 0 var(--brand-accent);
+}
+
+.nearby-bus__route {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  border: 4px solid #ffffff;
+  border-radius: 50%;
+  color: var(--route-text-color, #ffffff);
+  background: var(--route-color, var(--transit-blue));
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.22), 0 5px 12px rgba(15, 23, 42, 0.18);
+  font-family: var(--font-display);
+  font-size: clamp(18px, 1.45vw, 23px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.nearby-bus__route-agency {
+  margin-bottom: 1px;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 0.9;
+}
+
+.nearby-bus__route-agency:empty {
+  display: none;
+}
+
+.nearby-bus__route-code {
+  line-height: 0.95;
+}
+
+.nearby-bus[data-agency-id="go-transit"] .nearby-bus__route {
+  color: #ffffff;
+  background: #007a33;
+  box-shadow:
+    0 0 0 3px #007a33,
+    0 5px 12px rgba(15, 23, 42, 0.2);
+}
+
+.nearby-bus[data-agency-id="ontario-northland"] .nearby-bus__route {
+  box-shadow:
+    0 0 0 3px #e6b012,
+    0 5px 12px rgba(15, 23, 42, 0.2);
+}
+
+.nearby-bus__details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.nearby-bus__title {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: clamp(20px, 1.55vw, 25px);
+  font-weight: 700;
+  letter-spacing: 0.015em;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nearby-bus__agency {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: clamp(11px, 0.85vw, 14px);
+  font-weight: 600;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nearby-bus__distance {
+  max-width: 92px;
+  color: var(--transit-blue);
+  font-family: var(--font-display);
+  font-size: clamp(18px, 1.4vw, 23px);
+  font-weight: 800;
+  line-height: 1;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.nearby-bus--terminal .nearby-bus__distance {
+  width: 116px;
+  max-width: 116px;
+  color: #006b7f;
+  font-size: clamp(16px, 1.2vw, 20px);
+  line-height: 0.95;
+}
+
+.nearby-buses__holding {
+  padding: 34px 22px;
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  font-size: clamp(20px, 1.55vw, 25px);
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.nearby-buses__footer {
+  padding: 9px 16px 11px;
+  border-top: 1px solid rgba(0, 78, 128, 0.12);
+  color: var(--text-secondary);
+  background: rgba(241, 245, 249, 0.85);
+  font-size: clamp(10px, 0.75vw, 12px);
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.vehicle-bubble {
+  --bubble-shadow:
+    0 0 0 3px rgba(15, 23, 42, 0.2),
+    0 8px 18px rgba(15, 23, 42, 0.38);
+}
+
+.vehicle-mini {
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.24), 0 5px 12px rgba(15, 23, 42, 0.3);
+}
+
+.stop-highlight-label {
+  padding: 5px 10px;
+  font-size: 14px;
+  opacity: 0.84;
+}
+
+.stop-highlight[data-stop="9002"] .stop-highlight-label,
+.stop-highlight[data-stop="9005"] .stop-highlight-label {
+  max-width: 180px;
+  padding: 7px 11px;
+  font-size: clamp(13px, 1vw, 15px);
+  letter-spacing: 0.04em;
+  line-height: 1.05;
+  opacity: 1;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.major-road-label {
+  padding: 0;
+  font-size: 11px;
+  opacity: 0.82;
+}
+
+.map-coverage-badge {
+  bottom: 14px;
+  max-width: min(700px, calc(100% - 720px));
+  padding: 6px 14px;
+  border-width: 1px;
+  font-size: 12px;
+  opacity: 0.82;
+}
+
+.map-coverage-badge small {
+  display: none;
+}
+
+.service-notice {
+  padding: 12px 24px;
+  font-size: clamp(24px, 2vw, 30px);
+  box-sizing: border-box;
+}
+
+.service-notice__track {
+  display: block;
+  width: auto;
+  min-width: 0;
+  animation: none;
+}
+
+.service-notice__text {
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .map-title {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .map-title__left {
+    grid-column: 1;
+    justify-content: flex-start;
+    justify-self: start;
+  }
+
+  .live-feed-summary {
+    display: none;
+  }
+
+  .map-title__right {
+    grid-column: 2;
+  }
+
+  .map-overlay-column--right {
+    width: min(34vw, 380px);
+  }
+
+  .map-overlay-column--left {
+    width: min(27vw, 280px);
+  }
+}
+
+@media (max-width: 760px), (max-height: 560px) {
+  .tracked-services,
+  .nearby-buses__footer,
+  .nearby-bus__agency {
+    display: none;
+  }
+
+  .map-overlay-column--right {
+    top: 78px;
+    right: 10px;
+    width: min(42vw, 330px);
+  }
+
+  .nearby-buses__header {
+    padding: 11px 13px;
+  }
+
+  .nearby-bus {
+    grid-template-columns: 46px minmax(0, 1fr);
+    min-height: 58px;
+    padding: 7px 11px;
+  }
+
+  .nearby-bus__route {
+    width: 42px;
+    height: 42px;
+    border-width: 3px;
+  }
+
+  .nearby-bus__distance {
+    grid-column: 2;
+    max-width: none;
+    text-align: left;
+  }
+
+  .nearby-bus--terminal .nearby-bus__distance {
+    width: auto;
+    max-width: none;
+  }
 }

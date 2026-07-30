@@ -17,6 +17,10 @@ const {
 const { assessVehicleFeedFreshness } = require('../shared/feed-freshness');
 const { buildServiceStatus } = require('./service-status');
 const { noticeService } = require('./notices');
+const {
+  enrichTerminalProgress,
+  loadTerminalMetadata,
+} = require('./terminal-progress');
 
 function normalizeBasePath(input) {
   if (!input) return '/';
@@ -152,6 +156,7 @@ const FEED_OFFLINE_AFTER_MS = Number(process.env.FEED_STALE_AFTER_MIN || 15) * 6
 const BASE_PATH = normalizeBasePath(process.env.BASE_PATH);
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend', 'dist');
 const CACHE_DIR = path.resolve(process.env.CACHE_DIR || path.join(__dirname, '..', 'cache'));
+const barrieTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'barrie-transit.json');
 const hashedAssetPattern = /\.[0-9a-f]{10}\.(?:js|css)$/;
 const allowedOrigins = parseAllowedOrigins(process.env.ALLOWED_ORIGINS);
 const corsMiddleware = createCorsMiddleware(allowedOrigins);
@@ -201,7 +206,7 @@ function sendMergedRoutes(res) {
   const goTransit = GO_TRANSIT_ENABLED
     ? readFeatureCollection(goTransitPath)
     : null;
-  res.setHeader('Cache-Control', 'public, max-age=604800');
+  res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
   res.json({
     type: 'FeatureCollection',
     features: barrie.features
@@ -213,12 +218,21 @@ function sendMergedRoutes(res) {
 function addBarrieAgencyMetadata(payload) {
   return {
     ...payload,
-    vehicles: (payload && Array.isArray(payload.vehicles) ? payload.vehicles : []).map((vehicle) => ({
-      ...vehicle,
-      agency_id: 'barrie-transit',
-      agency_name: 'Barrie Transit',
-      source_route_id: vehicle.route_id || null,
-    })),
+    vehicles: (payload && Array.isArray(payload.vehicles) ? payload.vehicles : []).map((vehicle) => {
+      const trip = vehicle && vehicle.trip_id &&
+        barrieTerminalMetadata.trips &&
+        barrieTerminalMetadata.trips[vehicle.trip_id] || {};
+      return enrichTerminalProgress({
+        ...vehicle,
+        trip_headsign: trip.headsign || null,
+        agency_id: 'barrie-transit',
+        agency_name: 'Barrie Transit',
+        source_route_id: vehicle.route_id || null,
+      }, {
+        terminalStopIds: barrieTerminalMetadata.terminal_stop_ids,
+        terminalStops: trip.terminal_stops,
+      });
+    }),
   };
 }
 

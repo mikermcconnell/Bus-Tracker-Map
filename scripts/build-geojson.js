@@ -13,7 +13,10 @@ const forceRefresh = args.includes('--force-refresh');
 const OUT_DIR = path.resolve(process.env.CACHE_DIR || path.join(__dirname, '..', 'cache'));
 const ROUTES_PATH = path.join(OUT_DIR, 'routes.geojson');
 const STOPS_PATH = path.join(OUT_DIR, 'stops.geojson');
-const hasCache = fs.existsSync(ROUTES_PATH) && fs.existsSync(STOPS_PATH);
+const BARRIE_METADATA_PATH = path.join(OUT_DIR, 'barrie-transit.json');
+const hasCache = fs.existsSync(ROUTES_PATH) &&
+  fs.existsSync(STOPS_PATH) &&
+  fs.existsSync(BARRIE_METADATA_PATH);
 const GTFS_URL = process.env.GTFS_STATIC_URL;
 
 if (!GTFS_URL) {
@@ -59,10 +62,12 @@ function normalizeHexColor(color) {
 
     const tripsTxt = getText('trips.txt');
     const routesTxt = getText('routes.txt');
+    const stopTimesTxt = getText('stop_times.txt');
 
     const shapeToRouteCounts = new Map();
+    let tripsRows = [];
     if (tripsTxt) {
-      const tripsRows = parse(tripsTxt, { columns: true, skip_empty_lines: true });
+      tripsRows = parse(tripsTxt, { columns: true, skip_empty_lines: true });
       tripsRows.forEach((trip) => {
         const shapeId = trip.shape_id;
         const routeId = trip.route_id;
@@ -171,6 +176,70 @@ function normalizeHexColor(color) {
     const stopsGeoJSON = { type: 'FeatureCollection', features: stopFeatures };
     fs.writeFileSync(STOPS_PATH, JSON.stringify(stopsGeoJSON));
     console.log('Wrote cache/stops.geojson with', stopFeatures.length, 'stops');
+
+    if (!stopTimesTxt) throw new Error('stop_times.txt missing in GTFS zip');
+    const terminalStationIds = new Set(
+      stopsRows
+        .filter((stop) => (
+          String(stop.location_type || '') === '1' &&
+          /Barrie Allandale Transit Terminal/i.test(String(stop.stop_name || ''))
+        ))
+        .map((stop) => String(stop.stop_id))
+    );
+    const terminalStops = stopsRows.filter((stop) => (
+      String(stop.location_type || '0') === '0' &&
+      (
+        terminalStationIds.has(String(stop.parent_station || '')) ||
+        /Barrie Allandale Transit Terminal Platform/i.test(String(stop.stop_name || ''))
+      )
+    ));
+    if (!terminalStops.length) {
+      throw new Error('No Barrie Allandale Transit Terminal platform stops found');
+    }
+
+    const terminalStopIds = new Set(terminalStops.map((stop) => String(stop.stop_id)));
+    const terminalStopsByTrip = {};
+    parse(stopTimesTxt, { columns: true, skip_empty_lines: true }).forEach((stopTime) => {
+      const stopId = String(stopTime.stop_id || '');
+      const stopSequence = Number(stopTime.stop_sequence);
+      if (!terminalStopIds.has(stopId) || !Number.isFinite(stopSequence)) return;
+      const tripId = String(stopTime.trip_id || '');
+      if (!tripId) return;
+      if (!terminalStopsByTrip[tripId]) terminalStopsByTrip[tripId] = [];
+      terminalStopsByTrip[tripId].push({
+        stop_id: stopId,
+        stop_sequence: stopSequence,
+      });
+    });
+
+    const tripMetadata = {};
+    tripsRows.forEach((trip) => {
+      const tripId = String(trip.trip_id || '');
+      const tripTerminalStops = terminalStopsByTrip[tripId];
+      if (!tripId || !tripTerminalStops || !tripTerminalStops.length) return;
+      tripMetadata[tripId] = {
+        route_id: String(trip.route_id || ''),
+        headsign: trip.trip_headsign || null,
+        terminal_stops: tripTerminalStops.sort((a, b) => a.stop_sequence - b.stop_sequence),
+      };
+    });
+
+    fs.writeFileSync(BARRIE_METADATA_PATH, JSON.stringify({
+      generated_at: new Date().toISOString(),
+      source_url: GTFS_URL,
+      terminal_stop_ids: Array.from(terminalStopIds).sort(),
+      terminal_stops: terminalStops.map((stop) => ({
+        id: String(stop.stop_id),
+        name: stop.stop_name || null,
+        platform_code: stop.platform_code || null,
+      })),
+      trips: tripMetadata,
+    }));
+    console.log(
+      'Wrote cache/barrie-transit.json with',
+      Object.keys(tripMetadata).length,
+      'BATT-serving trips'
+    );
 
     console.log('GTFS -> GeoJSON complete');
   } catch (e) {

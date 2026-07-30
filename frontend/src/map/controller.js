@@ -1,4 +1,10 @@
 import { clusterVehicles, DEFAULT_CLUSTER_THRESHOLD_METERS, distanceBetweenMeters } from './vehicle-groups.js';
+import {
+  formatTerminalDistance,
+  getTerminalDisplayStatus,
+  selectNearestVehicles
+} from './nearby-vehicles.js';
+import { buildTrackedAgencySummaries } from './tracked-services.js';
 import feedFreshness from '../../../shared/feed-freshness.js';
 
 const { assessVehicleFeedFreshness, selectVehiclesForDisplay } = feedFreshness;
@@ -23,7 +29,7 @@ export function createMapController({ dataClient, ui }) {
     '9005': {
       cssOffsets: { x: '-50%', y: '-50%' },
       label: 'Barrie Allandale Transit Terminal',
-      shortLabel: 'BATT',
+      shortLabel: 'Allandale Terminal',
       note: 'You Are Here'
     },
     '725': {
@@ -61,7 +67,7 @@ export function createMapController({ dataClient, ui }) {
     },
     '9002': {
       label: 'Barrie Allandale Transit Terminal',
-      shortLabel: 'BATT',
+      shortLabel: 'Allandale Terminal',
       note: 'You Are Here',
       coords: { lat: 44.3740170437343, lng: -79.6899831810679 },
       labelCoords: { lat: 44.375813666084284, lng: -79.6849561868082 },
@@ -116,21 +122,38 @@ export function createMapController({ dataClient, ui }) {
   var MAJOR_ROAD_LABEL_MIN_LENGTH_FOR_REPEAT = 1600;
   var MAJOR_ROAD_LABEL_MAX_COUNT = 2;
   var MAJOR_ROAD_LABEL_MIN_SPACING_METERS = 900;
+  var MAJOR_ROAD_LABEL_COLLISION_PADDING_PX = 10;
+  var MAJOR_ROAD_LABEL_GROUPS = {
+    'DUNLOP STREET EAST': 'DUNLOP STREET',
+    'DUNLOP STREET WEST': 'DUNLOP STREET',
+    'MAPLEVIEW DRIVE EAST': 'MAPLEVIEW DRIVE',
+    'MAPLEVIEW DRIVE WEST': 'MAPLEVIEW DRIVE'
+  };
+  var MAJOR_ROAD_LABEL_PRIORITIES = {
+    'BAYFIELD STREET': 100,
+    'CUNDLES ROAD EAST': 95,
+    'DUNLOP STREET': 90,
+    'MAPLEVIEW DRIVE': 85,
+    'HURONIA ROAD': 80,
+    'ST. VINCENT STREET': 75,
+    'ESSA': 70,
+    'YONGE STREET': 65,
+    'ANNE STREET': 30,
+    'BRADFORD STREET': 25
+  };
   var MAJOR_ROAD_LABEL_MANUAL_LIMITS = {
       'BAYFIELD STREET': 1,
       'BIG BAY POINT ROAD': 1,
-      'MAPLEVIEW DRIVE EAST': 1,
-      'MAPLEVIEW DRIVE WEST': 1,
+      'MAPLEVIEW DRIVE': 1,
       'HURONIA ROAD': 1,
-      'DUNLOP STREET EAST': 1,
-      'DUNLOP STREET WEST': 1,
+      'DUNLOP STREET': 1,
       'ESSA ROAD': 0,
       'CUNDLES ROAD EAST': 1,
       'DUCKWORTH STREET': 0,
       'YONGE STREET': 1,
       'ST. VINCENT STREET': 1,
-      'ANNE STREET': 1,
-      'BRADFORD STREET': 1,
+      'ANNE STREET': 0,
+      'BRADFORD STREET': 0,
       'LAKESHORE DRIVE': 0,
       'LAKE SHORE ROAD': 0
     };
@@ -139,12 +162,7 @@ export function createMapController({ dataClient, ui }) {
       { lat: 44.3699307, lng: -79.668287 }
     ]
   };
-  var MAJOR_ROAD_LABEL_MANUAL_OFFSETS = {
-    'DUNLOP STREET EAST': { distanceMeters: 500, bearingDegrees: 90 },
-    'DUNLOP STREET WEST': { distanceMeters: 500, bearingDegrees: 90 },
-    'ANNE STREET': { distanceMeters: 300, bearingDegrees: 180 },
-    'YONGE STREET': { distanceMeters: 300, bearingDegrees: 135 }
-  };
+  var MAJOR_ROAD_LABEL_MANUAL_OFFSETS = {};
   var DEFAULT_VISIBLE_ROUTE_IDS = ['7A', '7B', '8A', '8B', '12A', '12B', 'ONTC', 'GO-BUS', 'GO-TRAIN'];
   var DEFAULT_VISIBLE_ROUTE_KEYS = (function () {
     var map = Object.create(null);
@@ -272,6 +290,7 @@ export function createMapController({ dataClient, ui }) {
         updateDebugState('legend', 'error: init failed');
       })
       .then(function () {
+        scheduleMajorRoadLabelDeclutter();
         loadServiceStatus();
         scheduleServiceStatusRefresh();
         startVehiclesPoll();
@@ -357,6 +376,7 @@ export function createMapController({ dataClient, ui }) {
     vehicleLayer = L.layerGroup().addTo(map);
     highlightLayer = L.layerGroup().addTo(map);
     map.on('zoomend', updateMajorRoadLabelVisibility);
+    map.on('zoomend moveend', scheduleMajorRoadLabelDeclutter);
     updateMajorRoadLabelVisibility();
     initializeMiniMapSupport();
   }
@@ -639,13 +659,15 @@ export function createMapController({ dataClient, ui }) {
               lineCap: 'round',
               lineJoin: 'round'
             };
-          },
-          onEachFeature: function (feature, layer) {
-            addMajorRoadLabel(feature, layer);
           }
         }).addTo(majorRoadLineLayer);
 
+        var labelFeatures = consolidateMajorRoadLabelFeatures(geojson);
+        for (var i = 0; i < labelFeatures.length; i++) {
+          addMajorRoadLabel(labelFeatures[i], null);
+        }
         updateMajorRoadLabelVisibility();
+        scheduleMajorRoadLabelDeclutter();
       })
       .catch(function (err) {
         console.warn('Major road data unavailable', err);
@@ -753,6 +775,45 @@ export function createMapController({ dataClient, ui }) {
     return cleaned;
   }
 
+  function consolidateMajorRoadLabelFeatures(geojson) {
+    var features = geojson && Array.isArray(geojson.features) ? geojson.features : [];
+    var results = [];
+    var grouped = Object.create(null);
+
+    for (var i = 0; i < features.length; i++) {
+      var feature = features[i];
+      if (!feature || !feature.properties || !feature.properties.name || !feature.geometry) continue;
+      var rawKey = String(feature.properties.name).trim().toUpperCase();
+      var groupedKey = MAJOR_ROAD_LABEL_GROUPS[rawKey];
+      if (!groupedKey) {
+        results.push(feature);
+        continue;
+      }
+
+      if (!grouped[groupedKey]) {
+        grouped[groupedKey] = {
+          type: 'Feature',
+          properties: { name: toMajorRoadDisplayName(groupedKey) },
+          geometry: { type: 'MultiLineString', coordinates: [] }
+        };
+        results.push(grouped[groupedKey]);
+      }
+
+      var lineStrings = collectGeometryLineStrings(feature.geometry);
+      for (var j = 0; j < lineStrings.length; j++) {
+        grouped[groupedKey].geometry.coordinates.push(lineStrings[j]);
+      }
+    }
+
+    return results;
+  }
+
+  function toMajorRoadDisplayName(key) {
+    return String(key || '').toLowerCase().replace(/\b[a-z]/g, function (letter) {
+      return letter.toUpperCase();
+    });
+  }
+
   function addMajorRoadLabel(feature, layer) {
     if (!feature || !feature.properties || !feature.properties.name) return;
     var anchors = computeMajorRoadLabelAnchors(feature, layer);
@@ -784,12 +845,16 @@ export function createMapController({ dataClient, ui }) {
         labelRef.on('add', function () {
           var el = labelRef.getElement();
           if (!el) return;
+          var roadKey = String(rawName || '').trim().toUpperCase();
+          el.dataset.roadKey = roadKey;
+          el.dataset.roadPriority = String(MAJOR_ROAD_LABEL_PRIORITIES[roadKey] || 0);
           var angleToken = formatMajorRoadAngle(anchorRef.bearing);
           if (angleToken) {
             el.style.setProperty('--major-road-angle', angleToken);
           } else {
             el.style.removeProperty('--major-road-angle');
           }
+          scheduleMajorRoadLabelDeclutter();
         });
       })(anchor, label);
       majorRoadLabelLayer.addLayer(label);
@@ -970,7 +1035,65 @@ export function createMapController({ dataClient, ui }) {
     if (angle > 180) angle -= 180;
     if (angle > 90) angle -= 180;
     if (angle < -90) angle += 180;
+    angle = Math.max(-40, Math.min(40, angle));
     return angle;
+  }
+
+  function scheduleMajorRoadLabelDeclutter() {
+    requestFrame(declutterMajorRoadLabels);
+  }
+
+  function declutterMajorRoadLabels() {
+    if (!map || !majorRoadLabelLayer || !map.hasLayer(majorRoadLabelLayer)) return;
+    var mapElement = map.getContainer && map.getContainer();
+    if (!mapElement) return;
+
+    var labelElements = Array.prototype.slice.call(
+      mapElement.querySelectorAll('.major-road-label')
+    );
+    var reservedElements = Array.prototype.slice.call(
+      mapElement.querySelectorAll('.stop-highlight-label')
+    );
+    var mapRect = mapElement.getBoundingClientRect();
+    var occupied = reservedElements
+      .filter(function (element) { return element.offsetParent !== null; })
+      .map(function (element) {
+        return expandScreenRect(element.getBoundingClientRect(), MAJOR_ROAD_LABEL_COLLISION_PADDING_PX);
+      });
+
+    labelElements.forEach(function (element) {
+      element.style.visibility = 'visible';
+    });
+    labelElements.sort(function (a, b) {
+      return Number(b.dataset.roadPriority || 0) - Number(a.dataset.roadPriority || 0);
+    });
+
+    labelElements.forEach(function (element) {
+      var rect = element.getBoundingClientRect();
+      var insideMap = rect.left >= mapRect.left && rect.right <= mapRect.right &&
+        rect.top >= mapRect.top && rect.bottom <= mapRect.bottom;
+      var paddedRect = expandScreenRect(rect, MAJOR_ROAD_LABEL_COLLISION_PADDING_PX);
+      var collides = occupied.some(function (candidate) {
+        return screenRectsOverlap(paddedRect, candidate);
+      });
+      element.style.visibility = insideMap && !collides ? 'visible' : 'hidden';
+      if (insideMap && !collides) {
+        occupied.push(paddedRect);
+      }
+    });
+  }
+
+  function expandScreenRect(rect, padding) {
+    return {
+      left: rect.left - padding,
+      right: rect.right + padding,
+      top: rect.top - padding,
+      bottom: rect.bottom + padding
+    };
+  }
+
+  function screenRectsOverlap(a, b) {
+    return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
   }
 
   function collectGeometryLineStrings(geometry) {
@@ -2194,6 +2317,8 @@ export function createMapController({ dataClient, ui }) {
         longName: vehicle.route_long_name || routeMeta.longName || 'GO Transit',
         agencyId: 'go-transit',
         agencyName: 'GO Transit',
+        routeMode: vehicle.route_mode || 'bus',
+        routeCode: getRegionalRouteCode(vehicle, 'GO'),
         offsetMeters: routeMeta.offsetMeters || 0
       };
     }
@@ -2207,8 +2332,109 @@ export function createMapController({ dataClient, ui }) {
       longName: vehicle.route_long_name || routeMeta.longName || 'Ontario Northland',
       agencyId: 'ontario-northland',
       agencyName: 'Ontario Northland',
+      routeMode: 'coach',
+      routeCode: sourceRouteId || 'ON',
       offsetMeters: routeMeta.offsetMeters || 0
     };
+  }
+
+  function getRegionalRouteCode(vehicle, fallback) {
+    var routeLabel = vehicle && vehicle.route_label ? String(vehicle.route_label).trim() : '';
+    var withoutAgency = routeLabel.replace(/^(?:GO|ON)\s+/i, '').trim();
+    if (withoutAgency) return withoutAgency;
+
+    var sourceRouteId = vehicle && vehicle.source_route_id
+      ? String(vehicle.source_route_id).trim()
+      : '';
+    if (sourceRouteId) return sourceRouteId;
+    if (vehicle && vehicle.route_mode === 'train') return 'TRAIN';
+    return fallback || '';
+  }
+
+  function getDisplayEligibleVehicles(list) {
+    return (Array.isArray(list) ? list : []).filter(function (vehicle) {
+      if (!vehicle || !Number.isFinite(Number(vehicle.lat)) || !Number.isFinite(Number(vehicle.lon))) {
+        return false;
+      }
+      var resolved = vehicle.route_id ? resolveRouteEntry(vehicle.route_id) : null;
+      return Boolean(resolved && isRouteVisible(resolved.id));
+    });
+  }
+
+  function isVehicleOnMainMap(vehicle) {
+    if (!map || typeof map.getBounds !== 'function' || !vehicle) return false;
+    var lat = Number(vehicle.lat);
+    var lon = Number(vehicle.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+    var bounds = map.getBounds();
+    return Boolean(bounds && (!bounds.isValid || bounds.isValid()) && bounds.contains([lat, lon]));
+  }
+
+  function getVehicleServiceLabel(vehicle, agencyLabel) {
+    if (vehicle && vehicle.agency_id === 'go-transit') {
+      return 'GO Transit · ' + (vehicle.route_mode === 'train' ? 'Train' : 'Bus');
+    }
+    if (vehicle && vehicle.agency_id === 'ontario-northland') {
+      return 'Ontario Northland · Coach';
+    }
+    return (agencyLabel || 'Barrie Transit') + ' · Local bus';
+  }
+
+  function getNearbyDestination(vehicle, meta, routeLabel) {
+    var destination = vehicle && vehicle.trip_headsign
+      ? String(vehicle.trip_headsign).trim()
+      : '';
+
+    if (!destination && meta && meta.longName && meta.longName !== routeLabel) {
+      destination = String(meta.longName).trim();
+    }
+
+    if (vehicle && vehicle.agency_id === 'barrie-transit') {
+      var shortName = destination.split(/\s+to\s+/i)[0].trim();
+      if (shortName) return shortName;
+    }
+
+    return destination;
+  }
+
+  function buildNearbyVehicleSummaries(list) {
+    var eligible = getDisplayEligibleVehicles(list);
+
+    return selectNearestVehicles(eligible, {
+      terminal: { lat: TERMINAL_COORDS.lat, lon: TERMINAL_COORDS.lng },
+      limit: 5
+    }).map(function (entry) {
+      var vehicle = entry.vehicle;
+      var resolved = vehicle.route_id ? resolveRouteEntry(vehicle.route_id) : null;
+      var baseMeta = resolved ? getRouteMeta(resolved.id) : null;
+      var meta = getVehicleDisplayMeta(vehicle, baseMeta) || {};
+      var routeLabel = vehicle.route_label || meta.displayName || vehicle.route_id || 'Bus';
+      var agencyLabel = vehicle.agency_name || meta.agencyName || 'Barrie Transit';
+      var destination = getNearbyDestination(vehicle, meta, routeLabel);
+      var terminalStatus = getTerminalDisplayStatus(
+        vehicle.terminal_progress_status,
+        entry.distanceMeters,
+        TERMINAL_RADIUS_METERS
+      );
+
+      return {
+        id: vehicle.id || routeLabel,
+        routeLabel: routeLabel,
+        routeCode: meta.routeCode || routeLabel,
+        agencyId: vehicle.agency_id || meta.agencyId || 'barrie-transit',
+        agencyLabel: agencyLabel,
+        serviceLabel: getVehicleServiceLabel(vehicle, agencyLabel),
+        destination: destination,
+        terminalStatus: terminalStatus,
+        distanceMeters: entry.distanceMeters,
+        distanceLabel: formatTerminalDistance(
+          entry.distanceMeters,
+          terminalStatus
+        ),
+        color: meta.color || '#004e80',
+        textColor: meta.textColor || '#ffffff'
+      };
+    });
   }
 
   function createCombinedBusIcon(members) {
@@ -2330,7 +2556,10 @@ export function createMapController({ dataClient, ui }) {
     if (opts && opts.bubbleClassName && /^[a-zA-Z0-9 _-]+$/.test(opts.bubbleClassName)) {
       bubbleExtraClass = ' ' + opts.bubbleClassName.trim();
     }
-    var label = meta.displayName || '';
+    var agencyId = meta.agencyId || '';
+    var isRegional = agencyId === 'go-transit' || agencyId === 'ontario-northland';
+    var agencyMark = agencyId === 'go-transit' ? 'GO' : (agencyId === 'ontario-northland' ? 'ON' : '');
+    var label = isRegional ? (meta.routeCode || meta.displayName || agencyMark) : (meta.displayName || '');
     var background = meta.color || '#444444';
     var textColor = meta.textColor || '#FFFFFF';
     var safeLabel = sanitizeVehicleText(label);
@@ -2357,9 +2586,12 @@ export function createMapController({ dataClient, ui }) {
     var safeArrowStroke = sanitizeColorValue(arrowStroke, 'rgba(255, 255, 255, 0.8)');
     var directionBadge = deriveRouteEightDirection(meta, normalizedBearing, opts);
     var safeDirection = directionBadge ? sanitizeVehicleText(directionBadge) : '';
-    var labelHtml = safeDirection
+    var routeLabelHtml = safeDirection
       ? '<span class="vehicle-label-line">' + safeLabel + '</span><span class="vehicle-label-line vehicle-label-line--direction">' + safeDirection + '</span>'
       : safeLabel;
+    var labelHtml = agencyMark
+      ? '<span class="vehicle-label-line vehicle-label-line--agency">' + sanitizeVehicleText(agencyMark) + '</span><span class="vehicle-label-line">' + routeLabelHtml + '</span>'
+      : routeLabelHtml;
 
     var bubbleStyle = [
       '--route-color:' + safeBg,
@@ -2373,11 +2605,12 @@ export function createMapController({ dataClient, ui }) {
       '--bubble-inner-inset:' + bubbleInnerInset.toFixed(2) + 'px',
       '--bubble-shadow:' + bubbleShadow
     ].join(';');
-    var attrs = 'class="vehicle-bubble' + bubbleExtraClass + '" style="' + bubbleStyle + ';"';
+    var agencyClass = agencyId ? ' vehicle-bubble--' + sanitizeVehicleText(agencyId) : '';
+    var attrs = 'class="vehicle-bubble' + agencyClass + bubbleExtraClass + '" style="' + bubbleStyle + ';"';
     if (!hasBearing) {
       attrs += ' data-no-bearing="true"';
     }
-    var baseSize = 44;
+    var baseSize = 54;
     var iconSize = Math.round(baseSize * scale);
     var anchor = Math.round((baseSize / 2) * scale);
     var popupAnchor = Math.round(-anchor);
@@ -2879,7 +3112,7 @@ export function createMapController({ dataClient, ui }) {
             smoothFactor: 1.5,
             filter: onlyLinework,
             style: function () {
-              return { color: '#ffffff', weight: 14, opacity: 0.9, lineJoin: 'round', lineCap: 'round' };
+              return { color: '#ffffff', weight: 8, opacity: 0.58, lineJoin: 'round', lineCap: 'round' };
             }
           });
 
@@ -2889,7 +3122,7 @@ export function createMapController({ dataClient, ui }) {
             smoothFactor: 1.5,
             filter: onlyLinework,
             style: function () {
-              return { color: meta.color, weight: 9, opacity: 0.95, lineJoin: 'round', lineCap: 'round' };
+              return { color: meta.color, weight: 4.5, opacity: 0.58, lineJoin: 'round', lineCap: 'round' };
             }
           });
 
@@ -3229,7 +3462,7 @@ export function createMapController({ dataClient, ui }) {
 
   function startVehiclesPoll() {
     var lastPayload = null;
-    var requestFailed = false;
+    var lastFreshnessStatus = null;
 
     function formatFeedTime(timestampSeconds) {
       if (!timestampSeconds) return null;
@@ -3290,10 +3523,45 @@ export function createMapController({ dataClient, ui }) {
       });
     }
 
+    function getEffectiveSources(payload, freshness) {
+      var sources = payload && payload.sources;
+      if (!sources || !freshness) return sources || null;
+      if (freshness.feed_status !== 'delayed' && freshness.feed_status !== 'offline') {
+        return sources;
+      }
+
+      var effective = {};
+      Object.keys(sources).forEach(function (key) {
+        var source = sources[key] || {};
+        var sourceStatus = source.feed_status;
+        effective[key] = Object.assign({}, source, {
+          feed_status: sourceStatus === 'offline'
+            ? 'offline'
+            : freshness.feed_status
+        });
+      });
+      return effective;
+    }
+
     function renderPayload(payload, freshness) {
-      updateVehicles(selectVehiclesForDisplay(payload, freshness, {
+      var visibleVehicles = selectVehiclesForDisplay(payload, freshness, {
         maxAgeMs: feedOfflineAfterMs
-      }));
+      });
+      var eligibleVehicles = getDisplayEligibleVehicles(visibleVehicles);
+      var onMapVehicles = eligibleVehicles.filter(isVehicleOnMainMap);
+      updateVehicles(visibleVehicles);
+      if (typeof ui.renderNearbyVehicles === 'function') {
+        ui.renderNearbyVehicles(buildNearbyVehicleSummaries(onMapVehicles));
+      }
+      if (typeof ui.renderTrackedServices === 'function') {
+        ui.renderTrackedServices(buildTrackedAgencySummaries({
+          vehicles: visibleVehicles,
+          sources: getEffectiveSources(payload, freshness),
+          isOnMap: function (vehicle) {
+            return eligibleVehicles.indexOf(vehicle) !== -1 && isVehicleOnMainMap(vehicle);
+          }
+        }));
+      }
     }
 
     function applySourceFeedState(payload) {
@@ -3306,7 +3574,8 @@ export function createMapController({ dataClient, ui }) {
       var problems = [];
       [
         { key: 'barrie_transit', label: 'Barrie Transit' },
-        { key: 'ontario_northland', label: 'Ontario Northland' }
+        { key: 'ontario_northland', label: 'Ontario Northland' },
+        { key: 'go_transit', label: 'GO Transit' }
       ].forEach(function (sourceInfo) {
         var source = sources[sourceInfo.key];
         var status = source && source.feed_status;
@@ -3327,10 +3596,13 @@ export function createMapController({ dataClient, ui }) {
     // Reassess the actual data timestamp between polls so a frozen feed cannot
     // remain labelled LIVE just because HTTP requests continue to succeed.
     setInterval(function () {
-      if (!lastPayload || requestFailed) return;
+      if (!lastPayload) return;
       var freshness = assessPayload(lastPayload);
       applyFeedState(freshness);
-      renderPayload(lastPayload, freshness);
+      if (freshness.feed_status !== lastFreshnessStatus) {
+        renderPayload(lastPayload, freshness);
+        lastFreshnessStatus = freshness.feed_status;
+      }
     }, 5000);
 
     var tick = function () {
@@ -3338,11 +3610,11 @@ export function createMapController({ dataClient, ui }) {
         .then(function (data) {
           if (data && Array.isArray(data.vehicles)) {
             lastPayload = data;
-            requestFailed = false;
             var freshness = assessPayload(data);
             applyFeedState(freshness);
             applySourceFeedState(data);
             renderPayload(data, freshness);
+            lastFreshnessStatus = freshness.feed_status;
             if (typeof ui.updateLastUpdated === 'function' && freshness.latest_data_timestamp) {
               ui.updateLastUpdated(freshness.latest_data_timestamp);
             }
@@ -3351,12 +3623,14 @@ export function createMapController({ dataClient, ui }) {
           throw new Error('Invalid vehicle response');
         })
         .catch(function (err) {
-          requestFailed = true;
-          applyFeedState({ feed_status: 'offline', latest_data_timestamp: null });
+          lastPayload = null;
+          var offlineFreshness = { feed_status: 'offline', latest_data_timestamp: null };
+          applyFeedState(offlineFreshness);
+          renderPayload({ vehicles: [], sources: null }, offlineFreshness);
+          lastFreshnessStatus = 'offline';
           if (typeof ui.setSourceStatuses === 'function') {
             ui.setSourceStatuses(null);
           }
-          updateVehicles([]);
           console.warn('Vehicle poll failed', err);
         })
         .then(function () {

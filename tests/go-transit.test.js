@@ -85,6 +85,12 @@ describe('GO Transit Allandale integration', () => {
       map_route_id: 'GO-TRAIN',
       mode: 'train',
     });
+    expect(result.metadata.trips['bus-trip'].terminal_stops).toEqual([
+      { stop_id: '08049', stop_sequence: 1 },
+    ]);
+    expect(result.metadata.trips['train-trip'].terminal_stops).toEqual([
+      { stop_id: 'AD', stop_sequence: 1 },
+    ]);
     expect(result.routes.features.map((feature) => feature.properties.route_id).sort())
       .toEqual(['GO-BUS', 'GO-TRAIN']);
   });
@@ -94,6 +100,12 @@ describe('GO Transit Allandale integration', () => {
       agency: { id: 'go-transit', name: 'GO Transit' },
       allandale_route_ids: ['feed-68', 'feed-BR'],
       map_bounds: [-79.72, 44.34, -79.66, 44.41],
+      shape_coordinates: {
+        'bus-shape': [[
+          [-79.6880, 44.3800],
+          [-79.6880, 44.3600],
+        ]],
+      },
       routes: {
         'feed-68': {
           map_route_id: 'GO-BUS',
@@ -108,6 +120,12 @@ describe('GO Transit Allandale integration', () => {
           long_name: 'Barrie',
           color: '#003767',
           text_color: '#FFFFFF',
+        },
+      },
+      trips: {
+        'trip-new': {
+          shape_id: 'bus-shape',
+          headsign: 'East Gwillimbury GO',
         },
       },
     };
@@ -129,6 +147,11 @@ describe('GO Transit Allandale integration', () => {
             trip: { trip_id: 'trip-new', route_id: 'feed-68' },
             vehicle: { id: '2546', label: '68B - East Gwillimbury GO' },
             position: { latitude: 44.3750, longitude: -79.6880 },
+            bearing: 0,
+            speed: 0,
+            stop_id: '08049',
+            current_stop_sequence: 2,
+            current_status: 1,
             timestamp: 1785433120,
           },
         },
@@ -137,7 +160,7 @@ describe('GO Transit Allandale integration', () => {
           vehicle: {
             trip: { trip_id: 'train-trip', route_id: 'feed-BR' },
             vehicle: { id: '620', label: 'BR - Union Station GO' },
-            position: { latitude: 44.3800, longitude: -79.6870 },
+            position: { latitude: 44.3800, longitude: -79.6870, bearing: 90, speed: 10 },
             timestamp: 1785433121,
           },
         },
@@ -159,12 +182,17 @@ describe('GO Transit Allandale integration', () => {
       route_id: 'GO-BUS',
       route_label: 'GO 68B',
       trip_headsign: 'East Gwillimbury GO',
+      terminal_progress_status: 'departed',
+      bearing: 180,
+      bearing_source: 'static_shape',
       lat: 44.375,
     });
     expect(vehicles.find((vehicle) => vehicle.id === 'go-transit:620')).toMatchObject({
       route_id: 'GO-TRAIN',
       route_label: 'GO TRAIN',
       route_mode: 'train',
+      bearing: 90,
+      bearing_source: 'realtime',
     });
   });
 });

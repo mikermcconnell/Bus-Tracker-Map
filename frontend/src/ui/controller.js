@@ -4,6 +4,8 @@
  * through the legend context so this module remains unaware of Leaflet internals.
  */
 
+import { buildNearbyRenderSignature } from '../map/tracked-services.js';
+
 const BANNER_PRIORITY = ['routes', 'vehicles'];
 
 export function createUiController() {
@@ -15,6 +17,12 @@ export function createUiController() {
   let serviceStatusEl = null;
   let currentTimeEl = null;
   let lastUpdatedEl = null;
+  let nearbyBusesListEl = null;
+  let trackedServicesListEl = null;
+  let nearbyRowNodes = Object.create(null);
+  let trackedServiceNodes = Object.create(null);
+  let lastNearbySignature = null;
+  let lastTrackedServicesSignature = null;
   let lastVehicleUpdate = null;
   const bannerMessages = Object.create(null);
 
@@ -26,6 +34,8 @@ export function createUiController() {
     serviceStatusEl = document.getElementById('service-status');
     currentTimeEl = document.getElementById('current-time');
     lastUpdatedEl = document.getElementById('last-updated');
+    nearbyBusesListEl = document.getElementById('nearby-buses-list');
+    trackedServicesListEl = document.getElementById('tracked-services-list');
 
     if (bannerEl) {
       bannerDefaultText = bannerEl.textContent || 'Live data unavailable, retrying';
@@ -33,43 +43,7 @@ export function createUiController() {
     }
 
     setupServiceNotice();
-    initWeather();
     initClock();
-  }
-
-  function requestJson(url) {
-    if (typeof fetch === 'function') {
-      return fetch(url).then((response) => {
-        if (!response.ok) throw new Error('Request failed: ' + response.status);
-        return response.json();
-      });
-    }
-
-    return new Promise((resolve, reject) => {
-      if (typeof XMLHttpRequest !== 'function') {
-        reject(new Error('No supported HTTP client available'));
-        return;
-      }
-
-      const request = new XMLHttpRequest();
-      request.open('GET', url, true);
-      request.onreadystatechange = function () {
-        if (request.readyState !== 4) return;
-        if (request.status >= 200 && request.status < 300) {
-          try {
-            resolve(JSON.parse(request.responseText));
-          } catch (err) {
-            reject(err);
-          }
-          return;
-        }
-        reject(new Error('Request failed: ' + request.status));
-      };
-      request.onerror = function () {
-        reject(new Error('Network request failed'));
-      };
-      request.send(null);
-    });
   }
 
   function initClock() {
@@ -103,90 +77,263 @@ export function createUiController() {
     const seconds = Math.floor(elapsed / 1000);
 
     if (seconds < 10) {
-      lastUpdatedEl.textContent = 'Updated just now';
+      lastUpdatedEl.textContent = 'JUST NOW';
+      lastUpdatedEl.setAttribute('aria-label', 'Updated just now');
     } else if (seconds < 60) {
-      lastUpdatedEl.textContent = `Updated ${seconds}s ago`;
+      lastUpdatedEl.textContent = `${seconds}s AGO`;
+      lastUpdatedEl.setAttribute('aria-label', `Updated ${seconds} seconds ago`);
     } else {
       const minutes = Math.floor(seconds / 60);
-      lastUpdatedEl.textContent = `Updated ${minutes}m ago`;
+      lastUpdatedEl.textContent = `${minutes}m AGO`;
+      lastUpdatedEl.setAttribute('aria-label', `Updated ${minutes} minutes ago`);
     }
   }
 
   // Refresh the "Updated X ago" display every 5 seconds
   setInterval(refreshLastUpdatedDisplay, 5000);
 
-  function initWeather() {
-    const dateEl = document.getElementById('weather-date');
-    const tempEl = document.getElementById('weather-temp');
-    const condEl = document.getElementById('weather-condition');
 
-    if (!dateEl || !tempEl || !condEl) return;
+  function createNearbyRow(id) {
+    const item = document.createElement('li');
+    item.className = 'nearby-bus';
+    item.dataset.vehicleId = id;
 
-    const updateDate = () => {
-      const now = new Date();
-      const options = { weekday: 'long', month: 'short', day: 'numeric' };
-      dateEl.textContent = now.toLocaleDateString('en-US', options);
-    };
+    const route = document.createElement('span');
+    route.className = 'nearby-bus__route';
 
-    const fetchWeather = async () => {
-      try {
-        // Barrie coordinates: 44.3894,-79.6903
-        const data = await requestJson(
-          'https://api.open-meteo.com/v1/forecast?latitude=44.3894&longitude=-79.6903&current=temperature_2m,weather_code&timezone=America%2FNew_York'
-        );
-        const temp = Math.round(data.current.temperature_2m);
-        const code = data.current.weather_code;
+    const routeAgency = document.createElement('span');
+    routeAgency.className = 'nearby-bus__route-agency';
 
-        tempEl.innerHTML = `${temp}&deg;`;
-        condEl.textContent = getWeatherCondition(code);
-      } catch (err) {
-        console.warn('Weather update failed:', err);
-        tempEl.innerHTML = '--&deg;';
-        condEl.textContent = 'Unavailable';
-      }
-    };
+    const routeCode = document.createElement('span');
+    routeCode.className = 'nearby-bus__route-code';
 
-    updateDate();
-    fetchWeather();
+    const details = document.createElement('span');
+    details.className = 'nearby-bus__details';
 
-    // Update date every minute, weather every 15 minutes
-    setInterval(updateDate, 60000);
-    setInterval(fetchWeather, 15 * 60000);
+    const title = document.createElement('strong');
+    title.className = 'nearby-bus__title';
+
+    const agency = document.createElement('span');
+    agency.className = 'nearby-bus__agency';
+
+    const distance = document.createElement('strong');
+    distance.className = 'nearby-bus__distance';
+
+    details.appendChild(title);
+    details.appendChild(agency);
+    route.appendChild(routeAgency);
+    route.appendChild(routeCode);
+    item.appendChild(route);
+    item.appendChild(details);
+    item.appendChild(distance);
+    item.__nearbyParts = { route, routeAgency, routeCode, title, agency, distance };
+    return item;
   }
 
-  function getWeatherCondition(code) {
-    // WMO Weather interpretation codes (WW)
-    const codes = {
-      0: 'Clear sky',
-      1: 'Mainly clear',
-      2: 'Partly cloudy',
-      3: 'Overcast',
-      45: 'Fog',
-      48: 'Depositing rime fog',
-      51: 'Light drizzle',
-      53: 'Moderate drizzle',
-      55: 'Dense drizzle',
-      56: 'Light freezing drizzle',
-      57: 'Dense freezing drizzle',
-      61: 'Slight rain',
-      63: 'Moderate rain',
-      65: 'Heavy rain',
-      66: 'Light freezing rain',
-      67: 'Heavy freezing rain',
-      71: 'Slight snow fall',
-      73: 'Moderate snow fall',
-      75: 'Heavy snow fall',
-      77: 'Snow grains',
-      80: 'Slight rain showers',
-      81: 'Moderate rain showers',
-      82: 'Violent rain showers',
-      85: 'Slight snow showers',
-      86: 'Heavy snow showers',
-      95: 'Thunderstorm',
-      96: 'Thunderstorm with slight hail',
-      99: 'Thunderstorm with heavy hail'
-    };
-    return codes[code] || 'Unknown';
+  function updateNearbyRow(item, entry) {
+    const parts = item.__nearbyParts;
+    const terminalStatus = String(entry.terminalStatus || '').toLowerCase();
+    const terminal = terminalStatus === 'at_terminal';
+    const agencyId = String(entry.agencyId || 'barrie-transit');
+    const regionalAgencyMark = agencyId === 'go-transit'
+      ? 'GO'
+      : (agencyId === 'ontario-northland' ? 'ON' : '');
+    item.classList.toggle('nearby-bus--terminal', terminal);
+    item.dataset.agencyId = agencyId;
+    item.dataset.terminalStatus = terminalStatus;
+    parts.routeAgency.textContent = regionalAgencyMark;
+    parts.routeCode.textContent = String(entry.routeCode || entry.routeLabel || 'Bus');
+    parts.route.style.setProperty('--route-color', String(entry.color || '#004e80'));
+    parts.route.style.setProperty('--route-text-color', String(entry.textColor || '#ffffff'));
+    parts.title.textContent = entry.destination
+      ? String(entry.destination)
+      : String(entry.agencyLabel || 'Live bus');
+    parts.agency.textContent = String(entry.serviceLabel || entry.agencyLabel || 'Live vehicle');
+    parts.distance.textContent = String(entry.distanceLabel || '');
+  }
+
+  function renderNearbyVehicles(rows) {
+    if (!nearbyBusesListEl) return;
+    const entries = Array.isArray(rows) ? rows : [];
+    const nextSignature = buildNearbyRenderSignature(entries);
+    if (nextSignature === lastNearbySignature) return;
+
+    if (!entries.length) {
+      while (nearbyBusesListEl.firstChild) {
+        nearbyBusesListEl.removeChild(nearbyBusesListEl.firstChild);
+      }
+      const holding = document.createElement('li');
+      holding.className = 'nearby-buses__holding';
+      holding.textContent = 'No vehicles are currently approaching Barrie Allandale Transit Terminal';
+      nearbyBusesListEl.appendChild(holding);
+      nearbyRowNodes = Object.create(null);
+      lastNearbySignature = nextSignature;
+      return;
+    }
+
+    const desiredNodes = [];
+    const seen = Object.create(null);
+    entries.forEach((entry, index) => {
+      const id = String(entry && entry.id || `nearby-${index}`);
+      let item = nearbyRowNodes[id];
+      if (!item) {
+        item = createNearbyRow(id);
+        nearbyRowNodes[id] = item;
+      }
+      updateNearbyRow(item, entry || {});
+      desiredNodes.push(item);
+      seen[id] = true;
+    });
+
+    Object.keys(nearbyRowNodes).forEach((id) => {
+      if (seen[id]) return;
+      const stale = nearbyRowNodes[id];
+      if (stale.parentNode === nearbyBusesListEl) {
+        nearbyBusesListEl.removeChild(stale);
+      }
+      delete nearbyRowNodes[id];
+    });
+
+    desiredNodes.forEach((item, index) => {
+      const current = nearbyBusesListEl.children[index] || null;
+      if (current !== item) {
+        nearbyBusesListEl.insertBefore(item, current);
+      }
+    });
+    while (nearbyBusesListEl.children.length > desiredNodes.length) {
+      nearbyBusesListEl.removeChild(nearbyBusesListEl.lastElementChild);
+    }
+    lastNearbySignature = nextSignature;
+  }
+
+  function createTrackedAgencyRow(id) {
+    const item = document.createElement('li');
+    item.className = 'tracked-agency';
+    item.dataset.agencyId = id;
+
+    const identity = document.createElement('span');
+    identity.className = 'tracked-agency__identity';
+
+    const logo = document.createElement('img');
+    logo.className = 'tracked-agency__logo';
+
+    const name = document.createElement('strong');
+    name.className = 'tracked-agency__name';
+
+    const services = document.createElement('ul');
+    services.className = 'tracked-agency__services';
+
+    identity.appendChild(logo);
+    identity.appendChild(name);
+    item.appendChild(identity);
+    item.appendChild(services);
+    item.__trackedParts = { logo, name, services, serviceNodes: Object.create(null) };
+    return item;
+  }
+
+  function createTrackedModeRow(id) {
+    const item = document.createElement('li');
+    item.className = 'tracked-agency__service';
+    item.dataset.serviceId = id;
+
+    const type = document.createElement('span');
+    type.className = 'tracked-agency__type';
+
+    const status = document.createElement('span');
+    status.className = 'tracked-agency__status';
+    const dot = document.createElement('span');
+    dot.className = 'tracked-service__status-dot';
+
+    const statusText = document.createElement('span');
+    statusText.className = 'tracked-service__status-text';
+
+    status.appendChild(dot);
+    status.appendChild(statusText);
+    item.appendChild(type);
+    item.appendChild(status);
+    item.__trackedParts = { type, dot, statusText };
+    return item;
+  }
+
+  function updateTrackedAgencyRow(item, agency) {
+    const parts = item.__trackedParts;
+    const logoSrc = String(agency.logoSrc || '');
+    item.classList.toggle('tracked-agency--text-logo', !logoSrc);
+    parts.logo.hidden = !logoSrc;
+    if (logoSrc) parts.logo.src = logoSrc;
+    parts.logo.alt = String(agency.logoAlt || agency.agencyLabel || '');
+    parts.name.textContent = String(agency.logoText || agency.agencyLabel || 'Transit service');
+
+    const desiredNodes = [];
+    const seen = Object.create(null);
+    const services = Array.isArray(agency.services) ? agency.services : [];
+    services.forEach((service, index) => {
+      const id = String(service && service.id || `mode-${index}`);
+      let serviceItem = parts.serviceNodes[id];
+      if (!serviceItem) {
+        serviceItem = createTrackedModeRow(id);
+        parts.serviceNodes[id] = serviceItem;
+      }
+      const serviceParts = serviceItem.__trackedParts;
+      const status = String(service.status || 'unavailable');
+      serviceItem.dataset.status = status;
+      serviceParts.type.textContent = String(service.serviceType || '');
+      serviceParts.dot.className = `tracked-service__status-dot tracked-service__status-dot--${status}`;
+      serviceParts.statusText.textContent = String(service.statusLabel || 'Unavailable');
+      desiredNodes.push(serviceItem);
+      seen[id] = true;
+    });
+
+    Object.keys(parts.serviceNodes).forEach((id) => {
+      if (seen[id]) return;
+      const stale = parts.serviceNodes[id];
+      if (stale.parentNode === parts.services) parts.services.removeChild(stale);
+      delete parts.serviceNodes[id];
+    });
+    desiredNodes.forEach((serviceItem, index) => {
+      const current = parts.services.children[index] || null;
+      if (current !== serviceItem) parts.services.insertBefore(serviceItem, current);
+    });
+  }
+
+  function renderTrackedServices(rows) {
+    if (!trackedServicesListEl) return;
+    const entries = Array.isArray(rows) ? rows : [];
+    const signature = JSON.stringify(entries);
+    if (signature === lastTrackedServicesSignature) return;
+
+    const desiredNodes = [];
+    const seen = Object.create(null);
+    entries.forEach((entry, index) => {
+      const id = String(entry && entry.id || `service-${index}`);
+      let item = trackedServiceNodes[id];
+      if (!item) {
+        item = createTrackedAgencyRow(id);
+        trackedServiceNodes[id] = item;
+      }
+      updateTrackedAgencyRow(item, entry || {});
+      desiredNodes.push(item);
+      seen[id] = true;
+    });
+
+    Object.keys(trackedServiceNodes).forEach((id) => {
+      if (seen[id]) return;
+      const stale = trackedServiceNodes[id];
+      if (stale.parentNode === trackedServicesListEl) {
+        trackedServicesListEl.removeChild(stale);
+      }
+      delete trackedServiceNodes[id];
+    });
+    desiredNodes.forEach((item, index) => {
+      const current = trackedServicesListEl.children[index] || null;
+      if (current !== item) {
+        trackedServicesListEl.insertBefore(item, current);
+      }
+    });
+    while (trackedServicesListEl.children.length > desiredNodes.length) {
+      trackedServicesListEl.removeChild(trackedServicesListEl.lastElementChild);
+    }
+    lastTrackedServicesSignature = signature;
   }
 
   function setupServiceNotice() {
@@ -208,7 +355,19 @@ export function createUiController() {
     if (track) {
       const segments = track.querySelectorAll('.service-notice__text');
       segments.forEach((segment) => {
-        segment.textContent = message;
+        const upcomingMatch = message.match(/^Upcoming Holiday Service\s*(?::|-)\s*(.*)$/i);
+        segment.textContent = '';
+        if (upcomingMatch) {
+          const heading = document.createElement('strong');
+          heading.className = 'service-notice__heading';
+          heading.textContent = 'Upcoming Holiday Service -';
+          segment.appendChild(heading);
+          if (upcomingMatch[1]) {
+            segment.appendChild(document.createTextNode(` ${upcomingMatch[1]}`));
+          }
+        } else {
+          segment.textContent = message;
+        }
       });
     }
     serviceNoticeEl.hidden = !message;
@@ -241,6 +400,12 @@ export function createUiController() {
     return `Barrie Transit — ${text}`;
   }
 
+  function stripBarrieServicePrefix(message) {
+    return String(message || '')
+      .trim()
+      .replace(/^Barrie Transit\s*(?:—|-|:)\s*/i, '');
+  }
+
   function setServiceStatus(status) {
     const isSpecial = Boolean(status && status.is_special_service && status.today);
     const warningMessage = status && status.upcoming_warning && status.upcoming_warning.message
@@ -265,11 +430,11 @@ export function createUiController() {
     }
 
     if (!isSpecial) {
-      setServiceNoticeText(scopeBarrieServiceMessage(warningMessage));
+      setServiceNoticeText(stripBarrieServicePrefix(warningMessage));
       return;
     }
 
-    setServiceNoticeText(scopeBarrieServiceMessage(getSpecialServiceDisplay(status, status.today || {})));
+    setServiceNoticeText(stripBarrieServicePrefix(getSpecialServiceDisplay(status, status.today || {})));
   }
 
   function showBanner(source, message) {
@@ -494,6 +659,8 @@ export function createUiController() {
     renderStopLegend,
     updateRouteLegendState,
     updateLastUpdated,
+    renderNearbyVehicles,
+    renderTrackedServices,
     setVehicleFeedDegraded(degraded) {
       if (!document.body) return;
       if (degraded) {
@@ -523,6 +690,7 @@ export function createUiController() {
     setConnectionStatus(status, label) {
       const el = document.getElementById('connection-status');
       if (!el) return;
+      const text = el.querySelector('.live-feed-summary__text');
       const overallLabel = status === 'connecting'
         ? 'Connecting to transit feeds'
         : (status === 'warning'
@@ -530,6 +698,19 @@ export function createUiController() {
           : (status === 'stale' ? 'Transit feeds offline' : 'Transit feeds available'));
       el.dataset.overallStatus = status || 'ok';
       el.setAttribute('aria-label', overallLabel);
+      el.classList.remove('status-connecting', 'status-ok', 'status-warning', 'status-stale');
+      el.classList.add(
+        status === 'connecting'
+          ? 'status-connecting'
+          : (status === 'warning' ? 'status-warning' : (status === 'stale' ? 'status-stale' : 'status-ok'))
+      );
+      if (text) {
+        text.textContent = status === 'connecting'
+          ? 'CONNECTING'
+          : (status === 'warning'
+            ? (label || 'DELAYED')
+            : (status === 'stale' ? 'OFFLINE' : 'LIVE'));
+      }
     },
   };
 }

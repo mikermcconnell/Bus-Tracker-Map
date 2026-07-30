@@ -21,8 +21,8 @@ function createGtfsZipBuffer() {
   ].join('\n'), 'utf8'));
 
   zip.addFile('trips.txt', Buffer.from([
-    'route_id,service_id,trip_id,shape_id',
-    '1,weekday,trip-1,shape-1',
+    'route_id,service_id,trip_id,trip_headsign,shape_id',
+    '1,weekday,trip-1,Downtown,shape-1',
     ''
   ].join('\n'), 'utf8'));
 
@@ -34,8 +34,17 @@ function createGtfsZipBuffer() {
   ].join('\n'), 'utf8'));
 
   zip.addFile('stops.txt', Buffer.from([
-    'stop_id,stop_code,stop_name,stop_lat,stop_lon',
-    '1001,1001,Terminal,44.3900,-79.6900',
+    'stop_id,stop_code,stop_name,stop_lat,stop_lon,location_type,parent_station,platform_code',
+    '1001,1001,Terminal,44.3900,-79.6900,0,,',
+    'BATT,BATT,Barrie Allandale Transit Terminal,44.3740,-79.6902,1,,',
+    '9006,9006,Barrie Allandale Transit Terminal Platform 6,44.3742,-79.6897,0,BATT,6',
+    ''
+  ].join('\n'), 'utf8'));
+
+  zip.addFile('stop_times.txt', Buffer.from([
+    'trip_id,arrival_time,departure_time,stop_id,stop_sequence',
+    'trip-1,12:00:00,12:00:00,1001,1',
+    'trip-1,12:15:00,12:20:00,9006,2',
     ''
   ].join('\n'), 'utf8'));
 
@@ -73,8 +82,10 @@ test('build-geojson emits routes and stops artefacts', async () => {
 
     const routesPath = path.join(cacheDir, 'routes.geojson');
     const stopsPath = path.join(cacheDir, 'stops.geojson');
+    const metadataPath = path.join(cacheDir, 'barrie-transit.json');
     expect(fs.existsSync(routesPath)).toBe(true);
     expect(fs.existsSync(stopsPath)).toBe(true);
+    expect(fs.existsSync(metadataPath)).toBe(true);
 
     const routes = JSON.parse(fs.readFileSync(routesPath, 'utf8'));
     expect(routes.type).toBe('FeatureCollection');
@@ -84,6 +95,12 @@ test('build-geojson emits routes and stops artefacts', async () => {
 
     const stops = JSON.parse(fs.readFileSync(stopsPath, 'utf8'));
     expect(stops.features[0].properties.stop_name).toBe('Terminal');
+
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+    expect(metadata.terminal_stop_ids).toEqual(['9006']);
+    expect(metadata.trips['trip-1'].terminal_stops).toEqual([
+      { stop_id: '9006', stop_sequence: 2 },
+    ]);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     fs.rmSync(cacheDir, { recursive: true, force: true });

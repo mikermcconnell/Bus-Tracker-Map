@@ -150,7 +150,7 @@ function buildServiceStatus({ cacheDir, date, now = new Date(), timeZone = DEFAU
         ...upcoming,
         days_until: daysUntilUpcoming,
         display_date: formatDisplayDate(upcoming.date),
-        message: `Upcoming Holiday Service: ${upcoming.display_label} on ${formatDisplayDate(upcoming.date)}.`,
+        message: `Upcoming Holiday Service - ${upcoming.display_label} on ${formatDisplayDate(upcoming.date)}.`,
       }
     : null;
 
