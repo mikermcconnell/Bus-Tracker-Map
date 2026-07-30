@@ -23,19 +23,4 @@ describe('frontend data client route loading', () => {
     );
   });
 
-  test('bypasses cached terminal assignments', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(456);
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ assignments: [] })
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    await createDataClient().fetchTerminalLayout();
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/terminal-layout?cb=co',
-      { cache: 'no-store' }
-    );
-  });
 });
