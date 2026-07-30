@@ -75,6 +75,9 @@ describe('Ontario Northland integration', () => {
     expect(result.metadata.barrie_route_ids).toEqual(['101']);
     expect(result.metadata.barrie_stop_ids).toEqual(['315']);
     expect(result.metadata.trips['trip-barrie'].headsign).toBe('NORTH BAY');
+    expect(result.metadata.trips['trip-barrie'].terminal_stops).toEqual([
+      { stop_id: '315', stop_sequence: 2 },
+    ]);
     expect(result.routes.features.length).toBeGreaterThan(0);
     expect(result.routes.features[0].properties).toMatchObject({
       route_id: 'ONTC',
@@ -115,6 +118,50 @@ describe('Ontario Northland integration', () => {
       agency_name: 'Ontario Northland',
       terminal_stop_id: '315',
       terminal_delay_seconds: 60,
+    });
+  });
+
+  test('rejects a departing coach when a stale Barrie stop id conflicts with its sequence', () => {
+    const metadata = {
+      agency: {
+        id: 'ontario-northland',
+        name: 'Ontario Northland',
+        map_route_id: 'ONTC',
+        map_label: 'ON',
+      },
+      barrie_stop_ids: ['315'],
+      barrie_route_ids: ['201'],
+      routes: { '201': { long_name: 'Toronto - Sudbury' } },
+      trips: {
+        'trip-201': {
+          headsign: 'SUDBURY',
+          terminal_stops: [{ stop_id: '315', stop_sequence: 4 }],
+        },
+      },
+    };
+
+    const vehicle = qualifyVehicle({
+      id: 'coach-201',
+      route_id: '201',
+      trip_id: 'trip-201',
+      lat: 44.381,
+      lon: -79.710,
+      stop_id: '315',
+      current_stop_sequence: 5,
+      current_status: 1,
+    }, metadata, {
+      'trip-201': {
+        stop_id: '315',
+        stop_sequence: 4,
+        arrival_time: 1785427200,
+      },
+    });
+
+    expect(vehicle).toMatchObject({
+      source_route_id: '201',
+      trip_headsign: 'SUDBURY',
+      terminal_stop_sequence: 4,
+      terminal_progress_status: 'departed',
     });
   });
 

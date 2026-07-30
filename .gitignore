@@ -19,6 +19,8 @@ dist/
 build/
 .next/
 .cache/
+playwright-report/
+test-results/
 
 # OS files
 .DS_Store

@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
@@ -30,5 +30,14 @@ jobs:
       - name: Build frontend bundle
         run: npm run build:frontend
 
+      - name: Lint source
+        run: npm run lint
+
       - name: Run tests
         run: npm test
+
+      - name: Install browser for smoke tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser smoke tests
+        run: npm run test:e2e

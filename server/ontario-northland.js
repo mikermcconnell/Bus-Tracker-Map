@@ -3,6 +3,7 @@ const path = require('path');
 const fetch = require('node-fetch');
 const GtfsRealtimeBindings = require('gtfs-realtime-bindings');
 const { fetchVehicles } = require('./vehicles');
+const { enrichTerminalProgress } = require('./terminal-progress');
 
 const DEFAULT_STATIC_URL = 'https://ontarionorthland.tmix.se/gtfs/gtfs.zip';
 const DEFAULT_VEHICLES_URL = 'https://ontarionorthland.tmix.se/gtfs-realtime/vehicleupdates.pb';
@@ -145,7 +146,7 @@ function qualifyVehicle(vehicle, metadata, tripUpdates) {
   const terminalUpdate = vehicle.trip_id && tripUpdates && tripUpdates[vehicle.trip_id] || null;
   const rawVehicleId = String(vehicle.id || vehicle.trip_id || `route-${sourceRouteId}`);
 
-  return {
+  return enrichTerminalProgress({
     ...vehicle,
     id: `ontario-northland:${rawVehicleId}`,
     route_id: agency.map_route_id || 'ONTC',
@@ -160,7 +161,17 @@ function qualifyVehicle(vehicle, metadata, tripUpdates) {
     terminal_stop_id: terminalUpdate && terminalUpdate.stop_id || null,
     terminal_arrival_time: terminalUpdate && terminalUpdate.arrival_time || null,
     terminal_delay_seconds: terminalUpdate && terminalUpdate.delay_seconds,
-  };
+  }, {
+    terminalStopIds: metadata.barrie_stop_ids,
+    terminalStops: trip.terminal_stops || (
+      terminalUpdate && terminalUpdate.stop_id
+        ? [{
+            stop_id: terminalUpdate.stop_id,
+            stop_sequence: terminalUpdate.stop_sequence,
+          }]
+        : []
+    ),
+  });
 }
 
 async function fetchOntarioNorthlandRealtime(options = {}) {

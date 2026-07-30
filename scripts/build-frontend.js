@@ -31,6 +31,7 @@ const entryPoints = [
     key: 'main',
     entryPath: path.join(srcDir, 'main.js'),
     cssPath: path.join(srcDir, 'styles.css'),
+    includeLeafletCss: true,
     templatePath: path.join(srcDir, 'index.html'),
     outputHtml: 'index.html'
   },
@@ -38,6 +39,7 @@ const entryPoints = [
     key: 'battMap',
     entryPath: path.join(srcDir, 'batt-map', 'main.js'),
     cssPath: path.join(srcDir, 'batt-map', 'styles.css'),
+    includeLeafletCss: true,
     templatePath: path.join(srcDir, 'batt-map', 'index.html'),
     outputHtml: 'batt.map.html'
   },
@@ -119,7 +121,9 @@ function copySharedAssets() {
     'town-winter.png',
     'town-summer-clean.png',
     'agency-barrie-transit.png',
-    'agency-ontario-northland.png'
+    'agency-go-transit.svg',
+    'agency-ontario-northland.png',
+    'agency-simcoe-linx.png'
   ];
   if (!fs.existsSync(sharedAssetsDir)) return;
 
@@ -128,6 +132,14 @@ function copySharedAssets() {
     if (!fs.existsSync(source)) continue;
     fs.copyFileSync(source, path.join(assetsDir, entry));
   }
+}
+
+function copyLeafletAssets() {
+  const leafletImagesDir = path.join(projectRoot, 'node_modules', 'leaflet', 'dist', 'images');
+  if (!fs.existsSync(leafletImagesDir)) {
+    throw new Error('Leaflet image assets are missing; run npm install before building');
+  }
+  fs.cpSync(leafletImagesDir, path.join(assetsDir, 'images'), { recursive: true });
 }
 
 async function buildJs(entry) {
@@ -159,7 +171,14 @@ async function buildJs(entry) {
 }
 
 function buildCss(entry) {
-  const buffer = fs.readFileSync(entry.cssPath);
+  const appCss = fs.readFileSync(entry.cssPath);
+  const buffer = entry.includeLeafletCss
+    ? Buffer.concat([
+      fs.readFileSync(path.join(projectRoot, 'node_modules', 'leaflet', 'dist', 'leaflet.css')),
+      Buffer.from('\n'),
+      appCss,
+    ])
+    : appCss;
   const hash = contentHash(buffer);
   const fileName = `${entry.key}.${hash}.css`;
   const filePath = path.join(assetsDir, fileName);
@@ -208,6 +227,7 @@ async function main() {
   copyBattMapAssets();
   copyPlatformMapAssets();
   copySharedAssets();
+  copyLeafletAssets();
 
   writeManifest(entryAssets);
   console.log('Frontend build complete:', entryAssets);

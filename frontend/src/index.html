@@ -5,40 +5,24 @@
   <meta charset="utf-8">
   <title>Find Your Bus - Live Bus Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="%APP_CSS%">
   <meta name="app-build-id" content="%BUILD_ID%">
 </head>
 
 <body>
   <header class="map-title">
+    <div id="connection-status" class="live-feed-summary status-connecting" role="status" aria-live="polite" aria-label="Connecting to transit feeds">
+      <span class="live-dot"></span>
+      <span class="live-feed-summary__text">CONNECTING</span>
+    </div>
     <div class="map-title__left">
       <span class="map-title__main">Find Your Bus</span>
-      <span class="map-title__sub">Live Bus Map</span>
       <span id="service-status" class="service-status-pill" hidden></span>
-    </div>
-    <div id="connection-status" class="source-statuses" role="status" aria-live="polite" aria-label="Connecting to transit feeds">
-      <div id="source-status-barrie" class="source-status-pill status-connecting">
-        <span class="source-status-code">BT</span>
-        <span class="live-dot"></span>
-        <span class="live-text">CONNECTING</span>
-      </div>
-      <div id="source-status-northland" class="source-status-pill source-status-pill--northland status-connecting">
-        <span class="source-status-code">ON</span>
-        <span class="live-dot"></span>
-        <span class="live-text">CONNECTING</span>
-      </div>
-      <div id="source-status-go" class="source-status-pill source-status-pill--go status-connecting">
-        <span class="source-status-code">GO</span>
-        <span class="live-dot"></span>
-        <span class="live-text">CONNECTING</span>
-      </div>
     </div>
     <div class="map-title__right">
       <span id="current-time" class="current-time"></span>
       <span class="info-separator">•</span>
-      <span id="last-updated" class="last-updated">Waiting for live data</span>
+      <span id="last-updated" class="last-updated">WAITING</span>
     </div>
   </header>
   <div id="banner" class="data-status-banner" role="alert" aria-live="assertive" hidden>Live bus locations unavailable.</div>
@@ -50,38 +34,48 @@
     </div>
     <div class="map-overlay-frame" aria-hidden="false">
       <div class="map-overlay-column map-overlay-column--left">
-        <div id="stop-legend" class="stop-legend" hidden></div>
-        <div id="mini-map" class="mini-map" aria-hidden="true">
-          <div class="mini-map__title">Barrie Allandale Transit Terminal (BATT)</div>
-          <div id="mini-map-canvas" class="mini-map__canvas"></div>
-        </div>
+        <section id="tracked-services" class="tracked-services" aria-labelledby="tracked-services-title">
+          <header class="tracked-services__header">
+            <div>
+              <span class="tracked-services__eyebrow">Network status</span>
+              <h2 id="tracked-services-title">Live services</h2>
+            </div>
+          </header>
+          <ul id="tracked-services-list" class="tracked-services__list">
+            <li class="tracked-services__holding">Connecting to vehicle feeds…</li>
+          </ul>
+        </section>
       </div>
       <div class="map-overlay-column map-overlay-column--right">
-        <div id="legend" class="legend"></div>
-        <div class="town-image-container">
-          <img src="./assets/town-summer-clean.png" alt="" class="town-image">
-          <div class="weather-overlay">
-            <div class="weather-header">
-              <h2 class="weather-title">BARRIE</h2>
-              <div class="weather-date" id="weather-date"></div>
+        <section id="nearby-buses" class="nearby-buses" aria-labelledby="nearby-buses-title">
+          <header class="nearby-buses__header">
+            <div>
+              <span class="nearby-buses__eyebrow">Live locations</span>
+              <h2 id="nearby-buses-title">Approaching Terminal</h2>
+              <span class="nearby-buses__terminal-name">Barrie Allandale Transit Terminal</span>
             </div>
-            <div class="weather-current">
-              <span class="weather-temp" id="weather-temp">--&deg;</span>
-              <span class="weather-condition" id="weather-condition">Loading...</span>
-            </div>
+          </header>
+          <ol id="nearby-buses-list" class="nearby-buses__list">
+            <li class="nearby-buses__holding">Locating approaching vehicles…</li>
+          </ol>
+          <div class="nearby-buses__footer">
+            Only vehicles with Barrie Allandale Transit Terminal still ahead are shown
           </div>
-        </div>
+        </section>
       </div>
     </div>
   </div>
   <div id="service-notice" class="service-notice" role="status" aria-live="polite" hidden>
+    <img
+      class="service-notice__agency-logo"
+      src="./assets/agency-barrie-transit.png"
+      alt="Barrie Transit"
+    >
     <div class="service-notice__track">
       <span class="service-notice__text"></span>
     </div>
   </div>
   <div id="debug-panel" class="debug-panel" hidden></div>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
   <script src="%APP_JS%"></script>
 </body>
 

@@ -5,7 +5,7 @@ const path = require('path');
 const fetch = require('node-fetch');
 const AdmZip = require('adm-zip');
 const { parse } = require('csv-parse/sync');
-const { bboxClip } = require('@turf/turf');
+const bboxClip = require('@turf/bbox-clip').default;
 require('dotenv').config();
 
 const DEFAULT_STATIC_URL =
@@ -97,6 +97,19 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
   const allandaleShapeIds = new Set(
     allandaleTrips.map((trip) => String(trip.shape_id || '')).filter(Boolean)
   );
+  const terminalStopsByTrip = {};
+  stopTimes.forEach((stopTime) => {
+    const stopId = String(stopTime.stop_id || '');
+    const stopSequence = Number(stopTime.stop_sequence);
+    if (!allandaleStopIds.has(stopId) || !Number.isFinite(stopSequence)) return;
+    const tripId = String(stopTime.trip_id || '');
+    if (!tripId) return;
+    if (!terminalStopsByTrip[tripId]) terminalStopsByTrip[tripId] = [];
+    terminalStopsByTrip[tripId].push({
+      stop_id: stopId,
+      stop_sequence: stopSequence,
+    });
+  });
   const routeById = Object.fromEntries(routes.map((route) => [String(route.route_id), route]));
 
   const primaryAgency = agencies.find((agency) => String(agency.agency_id) === 'GO') || agencies[0] || {};
@@ -132,6 +145,8 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
       route_id: String(trip.route_id),
       headsign: trip.trip_headsign || null,
       shape_id: trip.shape_id || null,
+      terminal_stops: (terminalStopsByTrip[String(trip.trip_id)] || [])
+        .sort((a, b) => a.stop_sequence - b.stop_sequence),
     };
   });
 

@@ -94,6 +94,9 @@ async function fetchVehicles(rtUrl) {
         bearing: v.position.bearing || null,
         speed: v.position.speed || null,
         stop_id: v.stopId || null,
+        current_stop_sequence: Number.isFinite(Number(v.currentStopSequence))
+          ? Number(v.currentStopSequence)
+          : null,
         current_status: Number.isFinite(Number(v.currentStatus)) ? Number(v.currentStatus) : null,
         last_reported:
           (v.timestamp && Number(v.timestamp.toNumber ? v.timestamp.toNumber() : v.timestamp)) || null,

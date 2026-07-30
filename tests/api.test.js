@@ -89,6 +89,7 @@ describe('API smoke tests', () => {
     const routesRes = await request(app).get('/api/routes.geojson');
     expect(routesRes.status).toBe(200);
     expect(routesRes.body.features).toHaveLength(1);
+    expect(routesRes.headers['cache-control']).toContain('max-age=300');
 
     const stopsRes = await request(app).get('/api/stops.geojson');
     expect(stopsRes.status).toBe(200);
@@ -111,6 +112,33 @@ describe('API smoke tests', () => {
 
     expect(routesRes.status).toBe(200);
     expect(routesRes.body.features.map((feature) => feature.properties.route_id)).toEqual(['1', 'ONTC']);
+  });
+
+  test('merges the two GO Allandale layers when Metrolinx is configured', async () => {
+    writeJson(path.join(cacheDir, 'go-transit-routes.geojson'), {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: [[-79.70, 44.37], [-79.69, 44.38]] },
+          properties: { route_id: 'GO-BUS', route_short_name: 'GO BUS', agency_id: 'go-transit' }
+        },
+        {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: [[-79.69, 44.37], [-79.68, 44.39]] },
+          properties: { route_id: 'GO-TRAIN', route_short_name: 'GO TRAIN', agency_id: 'go-transit' }
+        }
+      ]
+    });
+    const app = await initApp({
+      GO_TRANSIT_ENABLED: 'true',
+      METROLINX_API_KEY: 'test-key',
+    });
+    const routesRes = await request(app).get('/api/routes.geojson');
+
+    expect(routesRes.status).toBe(200);
+    expect(routesRes.body.features.map((feature) => feature.properties.route_id))
+      .toEqual(['1', 'GO-BUS', 'GO-TRAIN']);
   });
 
   test('returns config with defaults and base path', async () => {

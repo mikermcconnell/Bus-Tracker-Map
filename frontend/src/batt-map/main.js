@@ -1,5 +1,8 @@
+import L from 'leaflet';
 import { createDataClient } from '../data/client.js';
 import { createBattMapController } from './controller.js';
+
+window.L = L;
 
 function bootstrap() {
   const dataClient = createDataClient();

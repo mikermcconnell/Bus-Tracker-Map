@@ -1,7 +1,9 @@
+import L from 'leaflet';
 import { createDataClient } from './data/client.js';
 import { createMapController } from './map/controller.js';
 import { createUiController } from './ui/controller.js';
 
+window.L = L;
 
 document.addEventListener('DOMContentLoaded', function () {
   setupDebugPanel();
@@ -53,10 +55,8 @@ function setupDebugPanel() {
 
   const getOverlaySnapshot = () => {
     const elements = [
-      { label: 'legend', element: document.getElementById('legend') },
-      { label: 'mini-map', element: document.getElementById('mini-map') },
-      { label: 'stop-legend', element: document.getElementById('stop-legend') },
-      { label: 'weather', element: document.querySelector('.town-image-container') }
+      { label: 'nearby-buses', element: document.getElementById('nearby-buses') },
+      { label: 'tracked-services', element: document.getElementById('tracked-services') },
     ];
     const lines = [];
     elements.forEach(({ label, element: el }) => {
@@ -96,7 +96,7 @@ function setupDebugPanel() {
       `doc: ${docWidth}x${docHeight} `,
       `media ${mediaQuery}: ${mediaMatch} `
     ]
-      .concat(stateEntries.length ? stateEntries : ['legend/mini-map state pending'])
+      .concat(stateEntries.length ? stateEntries : ['map overlay state pending'])
       .concat(overlayDetails);
 
     const logLines = logs.slice(-6);
