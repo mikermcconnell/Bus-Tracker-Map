@@ -21,6 +21,7 @@ const {
   enrichTerminalProgress,
   loadTerminalMetadata,
 } = require('./terminal-progress');
+const { buildTerminalLayout } = require('./terminal-layout');
 
 function normalizeBasePath(input) {
   if (!input) return '/';
@@ -157,6 +158,8 @@ const BASE_PATH = normalizeBasePath(process.env.BASE_PATH);
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend', 'dist');
 const CACHE_DIR = path.resolve(process.env.CACHE_DIR || path.join(__dirname, '..', 'cache'));
 const barrieTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'barrie-transit.json');
+const northlandTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'ontario-northland.json');
+const goTransitTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'go-transit.json');
 const hashedAssetPattern = /\.[0-9a-f]{10}\.(?:js|css)$/;
 const allowedOrigins = parseAllowedOrigins(process.env.ALLOWED_ORIGINS);
 const corsMiddleware = createCorsMiddleware(allowedOrigins);
@@ -410,6 +413,15 @@ apiRouter.get('/config', (req, res) => {
       go_transit: GO_TRANSIT_ENABLED,
     },
   });
+});
+
+apiRouter.get('/terminal-layout', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+  res.json(buildTerminalLayout({
+    barrie: barrieTerminalMetadata,
+    ontarioNorthland: northlandTerminalMetadata,
+    goTransit: goTransitTerminalMetadata,
+  }));
 });
 
 apiRouter.get('/service-status', (req, res) => {
