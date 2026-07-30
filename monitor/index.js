@@ -6,7 +6,13 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const fetch = require('node-fetch');
 const { fetchVehicles, fetchGtfsRtFeedMeta } = require('../server/vehicles');
 const { getExpectedBuses } = require('./schedule');
-const { sendAlert, sendTestAlert, sendSystemAlert } = require('./notify');
+const {
+  sendAlert,
+  sendTestAlert,
+  sendSystemAlert,
+  sendGtfsStaticChangeAlert,
+} = require('./notify');
+const { checkGtfsStaticChange, saveGtfsStaticState } = require('./gtfs-static-change');
 const { normalizeRouteId } = require('./routes');
 
 const GTFS_STATIC_URL = process.env.GTFS_STATIC_URL;
@@ -42,6 +48,7 @@ const CACHE_DIR = path.join(__dirname, 'cache');
 const STATE_FILE = path.join(CACHE_DIR, 'state.json');
 const HEARTBEAT_FILE = path.join(CACHE_DIR, 'heartbeat.json');
 const ISSUE_STATE_FILE = path.join(CACHE_DIR, 'issue-state.json');
+const GTFS_STATIC_STATE_FILE = path.join(CACHE_DIR, 'gtfs-static-state.json');
 
 function writeJsonFile(filePath, data) {
   const dir = path.dirname(filePath);
@@ -554,6 +561,34 @@ async function main() {
       } catch (err) {
         console.warn('[monitor] Test email failed:', err.message || err);
       }
+    }
+
+    try {
+      const gtfsChange = await checkGtfsStaticChange({
+        url: GTFS_STATIC_URL,
+        stateFile: GTFS_STATIC_STATE_FILE,
+        fetchImpl: fetch,
+        now,
+      });
+      if (gtfsChange.status === 'baseline') {
+        console.log(
+          '[monitor] GTFS static baseline recorded: %s',
+          gtfsChange.current.feedVersion || gtfsChange.current.fingerprint
+        );
+      } else if (gtfsChange.status === 'changed') {
+        console.log(
+          '[monitor] GTFS static changed: %s -> %s. Sending re-upload alert.',
+          gtfsChange.previous.feedVersion || gtfsChange.previous.fingerprint,
+          gtfsChange.current.feedVersion || gtfsChange.current.fingerprint
+        );
+        await sendGtfsStaticChangeAlert(emailConfig, {
+          ...gtfsChange,
+          url: GTFS_STATIC_URL,
+        });
+        saveGtfsStaticState(GTFS_STATIC_STATE_FILE, gtfsChange.current);
+      }
+    } catch (err) {
+      console.warn('[monitor] GTFS static change check failed:', formatErrorText(err));
     }
 
     const expected = await getExpectedBuses(

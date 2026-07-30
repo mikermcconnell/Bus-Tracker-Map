@@ -7,6 +7,7 @@ const {
   buildTaggedSubject,
   buildSystemSubject,
   buildSystemMessage,
+  buildGtfsStaticChangeMessage,
   buildHealthCheckSubject,
   buildHealthCheckMessage,
   formatIsoTimestamp,
@@ -14,6 +15,30 @@ const {
   buildHtml,
   buildPlainText,
 } = notifyModule;
+
+describe('buildGtfsStaticChangeMessage', () => {
+  test('creates an actionable manual re-upload alert', () => {
+    const { subject, text, html } = buildGtfsStaticChangeMessage({
+      url: 'https://www.myridebarrie.ca/gtfs/google_transit.zip',
+      previous: { feedVersion: '20260628' },
+      current: {
+        feedVersion: '20260901',
+        feedStartDate: '20260901',
+        feedEndDate: '20261231',
+        hasTransfersFile: false,
+        matchingAllandaleTransfers: 0,
+        expectedAllandaleTransfers: 4,
+        checkedAt: '2026-08-15T14:00:00Z',
+      },
+    });
+
+    expect(subject).toContain('Re-upload required');
+    expect(subject).toContain('20260901');
+    expect(text).toContain('transfers.txt is missing');
+    expect(text).toContain('Do not re-upload the previous patched ZIP');
+    expect(html).toContain('BARRIE TRANSIT GTFS STATIC CHANGED');
+  });
+});
 
 describe('escapeHtml', () => {
   test('escapes all HTML special characters', () => {

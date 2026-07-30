@@ -79,6 +79,53 @@ async function sendMail(config, message) {
   return info;
 }
 
+function buildGtfsStaticChangeMessage(change) {
+  const previous = change.previous || {};
+  const current = change.current || {};
+  const checkedAt = formatAlertTimestamp(current.checkedAt || new Date());
+  const transferStatus = current.hasTransfersFile
+    ? `${current.matchingAllandaleTransfers}/${current.expectedAllandaleTransfers} required Allandale rules found`
+    : 'transfers.txt is missing';
+  const subject = `Barrie Transit GTFS Static Changed | Re-upload required | ${current.feedVersion || 'version unknown'}`;
+  const rows = [
+    ['Detected at', checkedAt],
+    ['Previous feed version', previous.feedVersion || 'unknown'],
+    ['New feed version', current.feedVersion || 'unknown'],
+    ['New service dates', `${current.feedStartDate || 'unknown'} to ${current.feedEndDate || 'unknown'}`],
+    ['Allandale transfer status', transferStatus],
+    ['Source feed', change.url || 'unknown'],
+    ['Required action', 'Create a fresh patched ZIP from this new source feed, validate it, and manually upload it to Google Transit.'],
+  ];
+  const rowHtml = rows.map(([label, value]) => `
+    <tr>
+      <td style="padding:8px;border:1px solid #D1D5DB;font-weight:bold">${escapeHtml(label)}</td>
+      <td style="padding:8px;border:1px solid #D1D5DB">${escapeHtml(String(value))}</td>
+    </tr>
+  `).join('');
+  const html = `
+    <div style="font-family:Arial,sans-serif;color:#111827;max-width:720px">
+      <div style="background:#9A3412;color:#FFFFFF;padding:16px;font-size:18px;font-weight:bold">
+        BARRIE TRANSIT GTFS STATIC CHANGED
+      </div>
+      <p>The source GTFS Schedule feed has meaningfully changed. Google Transit uses manual uploads, so the Allandale timed-transfer correction must be carried into a new upload.</p>
+      <table style="border-collapse:collapse;width:100%">${rowHtml}</table>
+      <p><strong>Do not re-upload the previous patched ZIP.</strong> Start with the new source feed so schedule changes are preserved.</p>
+    </div>
+  `;
+  const text = [
+    'BARRIE TRANSIT GTFS STATIC CHANGED',
+    '',
+    ...rows.map(([label, value]) => `${label}: ${value}`),
+    '',
+    'Do not re-upload the previous patched ZIP. Start with the new source feed so schedule changes are preserved.',
+  ].join('\n');
+  return { subject, html, text };
+}
+
+async function sendGtfsStaticChangeAlert(config, change) {
+  return sendMail(config, buildGtfsStaticChangeMessage(change));
+}
+
 function formatAlertTimestamp(value) {
   if (!value) return 'unknown';
   const date = value instanceof Date ? value : new Date(value);
@@ -649,11 +696,13 @@ function buildPlainText(report) {
 module.exports = {
   sendAlert,
   sendSystemAlert,
+  sendGtfsStaticChangeAlert,
   sendHealthCheck,
   sendTestAlert,
   buildAlertSubject,
   buildSystemSubject,
   buildSystemMessage,
+  buildGtfsStaticChangeMessage,
   buildHealthCheckSubject,
   buildHealthCheckMessage,
   buildTaggedSubject,
