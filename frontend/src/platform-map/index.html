@@ -9,19 +9,12 @@
     <meta name="app-build-id" content="%BUILD_ID%">
 </head>
 
-<body style="border: 5px solid red; box-sizing: border-box;">
+<body>
     <div class="map-container">
-        <img src="/assets/map.png" alt="Platform Map" class="map-image" id="map-image">
+        <img src="./assets/map.png" alt="Barrie Allandale platform map" class="map-image" id="map-image">
         <div id="bus-layer"></div>
+        <div id="platform-status" class="platform-status" hidden></div>
     </div>
-    <div id="debug-console" class="debug-console"></div>
-    <script>
-        (function () {
-            // Inline console hook
-            var consoleDiv = document.getElementById('debug-console');
-            if (consoleDiv) consoleDiv.innerHTML += '<div>Inline Hook Active</div>';
-        })();
-    </script>
     <script src="%APP_JS%"></script>
 </body>
 

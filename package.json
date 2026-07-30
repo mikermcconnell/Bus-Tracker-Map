@@ -22,7 +22,9 @@
   },
   "scripts": {
     "build": "npm run build:frontend && npm run build:data",
-    "build:data": "node scripts/build-geojson.js",
+    "build:data": "node scripts/build-geojson.js && node scripts/build-ontario-northland.js && node scripts/build-go-transit.js",
+    "build:northland": "node scripts/build-ontario-northland.js",
+    "build:go": "node scripts/build-go-transit.js",
     "build:frontend": "node scripts/build-frontend.js",
     "watch:frontend": "node scripts/watch-frontend.js",
     "start": "node server/server.js",

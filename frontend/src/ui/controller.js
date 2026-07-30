@@ -235,6 +235,12 @@ export function createUiController() {
     return label ? `${label} Service: ${serviceLabel}` : serviceLabel;
   }
 
+  function scopeBarrieServiceMessage(message) {
+    const text = String(message || '').trim();
+    if (!text || /^Barrie Transit\b/i.test(text)) return text;
+    return `Barrie Transit — ${text}`;
+  }
+
   function setServiceStatus(status) {
     const isSpecial = Boolean(status && status.is_special_service && status.today);
     const warningMessage = status && status.upcoming_warning && status.upcoming_warning.message
@@ -248,7 +254,7 @@ export function createUiController() {
         serviceStatusEl.textContent = '';
       } else {
         const today = status.today || {};
-        const display = getSpecialServiceDisplay(status, today);
+        const display = scopeBarrieServiceMessage(getSpecialServiceDisplay(status, today));
         serviceStatusEl.textContent = display;
         serviceStatusEl.title = display;
         serviceStatusEl.hidden = false;
@@ -259,11 +265,11 @@ export function createUiController() {
     }
 
     if (!isSpecial) {
-      setServiceNoticeText(warningMessage);
+      setServiceNoticeText(scopeBarrieServiceMessage(warningMessage));
       return;
     }
 
-    setServiceNoticeText(getSpecialServiceDisplay(status, status.today || {}));
+    setServiceNoticeText(scopeBarrieServiceMessage(getSpecialServiceDisplay(status, status.today || {})));
   }
 
   function showBanner(source, message) {
@@ -275,25 +281,30 @@ export function createUiController() {
     }
 
     let nextMessage = null;
+    let nextSource = '';
     for (let i = 0; i < BANNER_PRIORITY.length; i += 1) {
       const key = BANNER_PRIORITY[i];
       if (bannerMessages[key]) {
         nextMessage = bannerMessages[key];
+        nextSource = key;
         break;
       }
     }
     if (!nextMessage) {
       const keys = Object.keys(bannerMessages);
       if (keys.length > 0) {
-        nextMessage = bannerMessages[keys[0]];
+        nextSource = keys[0];
+        nextMessage = bannerMessages[nextSource];
       }
     }
 
     if (!nextMessage) {
       bannerEl.textContent = bannerDefaultText;
+      delete bannerEl.dataset.source;
       bannerEl.hidden = true;
     } else {
       bannerEl.textContent = nextMessage;
+      bannerEl.dataset.source = nextSource;
       bannerEl.hidden = false;
     }
   }
@@ -308,10 +319,9 @@ export function createUiController() {
 
     const routesTitle = document.createElement('div');
     routesTitle.className = 'legend-section-title legend-section-title--terminal';
-    routesTitle.setAttribute('aria-label', 'Barrie Allandale Transit Terminal');
+    routesTitle.setAttribute('aria-label', 'Live route layers by transit agency');
     routesTitle.innerHTML = [
-      '<span class="legend-section-title__line">Barrie Allandale</span>',
-      '<span class="legend-section-title__line">Transit Terminal</span>'
+      '<span class="legend-section-title__line">Live Route Layers</span>'
     ].join('');
     routesSection.appendChild(routesTitle);
 
@@ -333,6 +343,27 @@ export function createUiController() {
     const routeIds = context.getRouteIds();
     const routeLayers = context.getRouteLayers();
 
+    const agencyGroups = {
+      'barrie-transit': {
+        label: 'Barrie Transit',
+        logoSrc: './assets/agency-barrie-transit.png',
+        className: 'legend-agency--barrie',
+        routes: []
+      },
+      'ontario-northland': {
+        label: 'Ontario Northland',
+        logoSrc: './assets/agency-ontario-northland.png',
+        className: 'legend-agency--northland',
+        routes: []
+      },
+      'go-transit': {
+        label: 'GO Transit',
+        logoSrc: null,
+        className: 'legend-agency--go',
+        routes: []
+      }
+    };
+
     routeIds.forEach((routeId) => {
       const entry = routeLayers[routeId];
       if (!entry) return;
@@ -341,8 +372,42 @@ export function createUiController() {
       if (entry.visible === false) return;
 
       const meta = context.getRouteMeta(routeId);
+      const agencyId = Object.prototype.hasOwnProperty.call(agencyGroups, meta.agencyId)
+        ? meta.agencyId
+        : 'barrie-transit';
+      agencyGroups[agencyId].routes.push({ routeId, entry, meta });
+    });
+
+    Object.keys(agencyGroups).forEach((agencyId) => {
+      const group = agencyGroups[agencyId];
+      if (!group.routes.length) return;
+
+      const agencySection = document.createElement('section');
+      agencySection.className = `legend-agency ${group.className}`;
+
+      const agencyTitle = document.createElement('div');
+      agencyTitle.className = 'legend-agency-title';
+      agencyTitle.setAttribute('aria-label', group.label);
+      if (group.logoSrc) {
+        const agencyLogo = document.createElement('img');
+        agencyLogo.className = 'legend-agency-logo';
+        agencyLogo.src = group.logoSrc;
+        agencyLogo.alt = group.label;
+        agencyTitle.appendChild(agencyLogo);
+      } else {
+        const agencyName = document.createElement('span');
+        agencyName.className = 'legend-agency-name';
+        agencyName.textContent = group.label;
+        agencyTitle.appendChild(agencyName);
+      }
+      agencySection.appendChild(agencyTitle);
+
+      const agencyRoutes = document.createElement('div');
+      agencyRoutes.className = 'route-list';
+
+      group.routes.forEach(({ routeId, entry, meta }) => {
       const item = document.createElement('div');
-      item.className = 'route-item route-item--display';
+      item.className = `route-item route-item--display route-item--${agencyId}`;
       item.title = meta.longName ? `${meta.displayName} - ${meta.longName}` : meta.displayName;
 
       const swatch = document.createElement('span');
@@ -352,10 +417,29 @@ export function createUiController() {
 
       const nameSpan = document.createElement('span');
       nameSpan.className = 'route-name';
-      nameSpan.textContent = meta.displayName;
+      nameSpan.textContent = agencyId === 'go-transit'
+        ? (routeId === 'GO-TRAIN' ? 'BARRIE TRAIN' : 'BUS 68')
+        : meta.displayName;
       item.appendChild(nameSpan);
 
-      routeList.appendChild(item);
+        if (agencyId === 'ontario-northland' && Array.isArray(entry.sourceRouteIds) && entry.sourceRouteIds.length) {
+          const details = document.createElement('span');
+          details.className = 'route-details';
+          details.textContent = `Routes ${entry.sourceRouteIds.join(' • ')}`;
+          item.appendChild(details);
+          item.title = `${group.label}: ${details.textContent}`;
+        }
+        if (agencyId === 'go-transit') {
+          item.title = routeId === 'GO-TRAIN'
+            ? `${group.label}: Barrie Line train`
+            : `${group.label}: Route 68 bus`;
+        }
+
+        agencyRoutes.appendChild(item);
+      });
+
+      agencySection.appendChild(agencyRoutes);
+      routeList.appendChild(agencySection);
     });
   }
 
@@ -419,26 +503,62 @@ export function createUiController() {
       }
     },
     setServiceStatus,
+    setSourceStatuses(sources) {
+      updateSourceStatusPill(
+        document.getElementById('source-status-barrie'),
+        sources && sources.barrie_transit,
+        'Barrie Transit'
+      );
+      updateSourceStatusPill(
+        document.getElementById('source-status-northland'),
+        sources && sources.ontario_northland,
+        'Ontario Northland'
+      );
+      updateSourceStatusPill(
+        document.getElementById('source-status-go'),
+        sources && sources.go_transit,
+        'GO Transit'
+      );
+    },
     setConnectionStatus(status, label) {
       const el = document.getElementById('connection-status');
       if (!el) return;
-      el.classList.remove('status-connecting', 'status-ok', 'status-warning', 'status-stale');
-      const dot = el.querySelector('.live-dot');
-      const text = el.querySelector('.live-text');
-
-      if (status === 'connecting') {
-        el.classList.add('status-connecting');
-        if (text) text.textContent = 'CONNECTING';
-      } else if (status === 'warning') {
-        el.classList.add('status-warning');
-        if (text) text.textContent = label || 'DELAYED';
-      } else if (status === 'stale') {
-        el.classList.add('status-stale');
-        if (text) text.textContent = 'OFFLINE';
-      } else {
-        el.classList.add('status-ok');
-        if (text) text.textContent = 'LIVE';
-      }
+      const overallLabel = status === 'connecting'
+        ? 'Connecting to transit feeds'
+        : (status === 'warning'
+          ? (label || 'Some transit data is delayed')
+          : (status === 'stale' ? 'Transit feeds offline' : 'Transit feeds available'));
+      el.dataset.overallStatus = status || 'ok';
+      el.setAttribute('aria-label', overallLabel);
     },
   };
+}
+
+function updateSourceStatusPill(element, source, agencyName) {
+  if (!element) return;
+  const text = element.querySelector('.live-text');
+  const status = source && source.feed_status ? source.feed_status : 'offline';
+  element.classList.remove('status-connecting', 'status-ok', 'status-warning', 'status-stale');
+
+  if (!source) {
+    element.classList.add('status-stale');
+    if (text) text.textContent = 'OFFLINE';
+  } else if (status === 'live') {
+    element.classList.add('status-ok');
+    if (text) text.textContent = 'LIVE';
+  } else if (status === 'delayed') {
+    element.classList.add('status-warning');
+    if (text) text.textContent = 'DELAYED';
+  } else if (status === 'empty') {
+    element.classList.add('status-warning');
+    if (text) text.textContent = 'NO BUSES';
+  } else {
+    element.classList.add('status-stale');
+    if (text) text.textContent = 'OFFLINE';
+  }
+
+  const age = source && Number.isFinite(Number(source.data_age_seconds))
+    ? `, last data ${Math.max(0, Number(source.data_age_seconds))} seconds ago`
+    : '';
+  element.title = `${agencyName}: ${text ? text.textContent : status}${age}`;
 }

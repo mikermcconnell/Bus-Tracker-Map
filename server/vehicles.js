@@ -85,11 +85,16 @@ async function fetchVehicles(rtUrl) {
       vehicles.push({
         id: (v.vehicle && (v.vehicle.id || v.vehicle.label)) || ent.id,
         route_id: (v.trip && v.trip.routeId) || null,
+        trip_id: (v.trip && v.trip.tripId) || null,
+        start_date: (v.trip && v.trip.startDate) || null,
+        start_time: (v.trip && v.trip.startTime) || null,
         direction_id: (v.trip && Number.isFinite(Number(v.trip.directionId)) ? Number(v.trip.directionId) : null),
         lat: v.position.latitude,
         lon: v.position.longitude,
         bearing: v.position.bearing || null,
         speed: v.position.speed || null,
+        stop_id: v.stopId || null,
+        current_status: Number.isFinite(Number(v.currentStatus)) ? Number(v.currentStatus) : null,
         last_reported:
           (v.timestamp && Number(v.timestamp.toNumber ? v.timestamp.toNumber() : v.timestamp)) || null,
       });

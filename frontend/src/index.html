@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="utf-8">
-  <title>Barrie Transit Live Map</title>
+  <title>Find Your Bus - Live Bus Map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -14,13 +14,26 @@
 <body>
   <header class="map-title">
     <div class="map-title__left">
-      <span class="map-title__main">Barrie Allandale Transit Terminal Routes</span>
-      <span class="map-title__sub">Barrie Transit routes only</span>
+      <span class="map-title__main">Find Your Bus</span>
+      <span class="map-title__sub">Live Bus Map</span>
       <span id="service-status" class="service-status-pill" hidden></span>
     </div>
-    <div id="connection-status" class="live-status-pill status-connecting" role="status" aria-live="polite">
-      <div class="live-dot"></div>
-      <span class="live-text">CONNECTING</span>
+    <div id="connection-status" class="source-statuses" role="status" aria-live="polite" aria-label="Connecting to transit feeds">
+      <div id="source-status-barrie" class="source-status-pill status-connecting">
+        <span class="source-status-code">BT</span>
+        <span class="live-dot"></span>
+        <span class="live-text">CONNECTING</span>
+      </div>
+      <div id="source-status-northland" class="source-status-pill source-status-pill--northland status-connecting">
+        <span class="source-status-code">ON</span>
+        <span class="live-dot"></span>
+        <span class="live-text">CONNECTING</span>
+      </div>
+      <div id="source-status-go" class="source-status-pill source-status-pill--go status-connecting">
+        <span class="source-status-code">GO</span>
+        <span class="live-dot"></span>
+        <span class="live-text">CONNECTING</span>
+      </div>
     </div>
     <div class="map-title__right">
       <span id="current-time" class="current-time"></span>
@@ -31,6 +44,10 @@
   <div id="banner" class="data-status-banner" role="alert" aria-live="assertive" hidden>Live bus locations unavailable.</div>
   <div class="map-stage">
     <div id="map"></div>
+    <div class="map-coverage-badge" role="note" title="Data used in this product or service is provided with the permission of Metrolinx. Metrolinx makes no representations or warranties of any kind, express or implied, with respect to the Data and assumes no responsibility for the accuracy or currency of the data used in this product or service.">
+      <span>Only Barrie Transit, Ontario Northland and GO Transit vehicles are shown</span>
+      <small>Metrolinx data used with permission; accuracy and currency are not guaranteed.</small>
+    </div>
     <div class="map-overlay-frame" aria-hidden="false">
       <div class="map-overlay-column map-overlay-column--left">
         <div id="stop-legend" class="stop-legend" hidden></div>
@@ -42,7 +59,7 @@
       <div class="map-overlay-column map-overlay-column--right">
         <div id="legend" class="legend"></div>
         <div class="town-image-container">
-          <img src="/assets/town-summer-clean.png" alt="Summer Town" class="town-image">
+          <img src="./assets/town-summer-clean.png" alt="" class="town-image">
           <div class="weather-overlay">
             <div class="weather-header">
               <h2 class="weather-title">BARRIE</h2>

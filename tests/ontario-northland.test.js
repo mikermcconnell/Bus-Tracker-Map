@@ -1,0 +1,159 @@
+import { describe, expect, test } from 'vitest';
+import AdmZip from 'adm-zip';
+import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
+import {
+  buildArtifactsFromZip,
+} from '../scripts/build-ontario-northland.js';
+import {
+  parseAlerts,
+  parseTripUpdates,
+  qualifyVehicle,
+} from '../server/ontario-northland.js';
+
+function createStaticZip() {
+  const zip = new AdmZip();
+  const files = {
+    'agency.txt': [
+      'agency_id,agency_name,agency_url,agency_timezone',
+      '0,Ontario Northland,https://ontarionorthland.ca,America/Toronto',
+      ''
+    ],
+    'routes.txt': [
+      'route_id,route_short_name,route_long_name,route_type,route_color,route_text_color',
+      '101,ONTC,Toronto - North Bay,3,00214D,E6B012',
+      '301,ONTC,North Bay - Timmins,3,00214D,E6B012',
+      ''
+    ],
+    'stops.txt': [
+      'stop_id,stop_name,stop_lat,stop_lon',
+      '315,BARRIE ALLANDALE TERMINAL,44.3741,-79.6902',
+      '900,NORTH BAY,46.3,-79.4',
+      ''
+    ],
+    'stop_times.txt': [
+      'trip_id,arrival_time,departure_time,stop_id,stop_sequence',
+      'trip-barrie,12:00:00,12:05:00,315,2',
+      'trip-other,13:00:00,13:05:00,900,2',
+      ''
+    ],
+    'trips.txt': [
+      'route_id,service_id,trip_id,trip_headsign,shape_id',
+      '101,weekday,trip-barrie,NORTH BAY,shape-barrie',
+      '301,weekday,trip-other,TIMMINS,shape-other',
+      ''
+    ],
+    'shapes.txt': [
+      'shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence',
+      'shape-barrie,44.3600,-79.7100,1',
+      'shape-barrie,44.3900,-79.6800,2',
+      'shape-other,46.3000,-79.4000,1',
+      'shape-other,46.4000,-79.3000,2',
+      ''
+    ],
+  };
+  Object.entries(files).forEach(([name, lines]) => {
+    zip.addFile(name, Buffer.from(lines.join('\n'), 'utf8'));
+  });
+  return zip.toBuffer();
+}
+
+describe('Ontario Northland integration', () => {
+  test('static build keeps only routes serving Barrie and namespaces the map layer', () => {
+    const barrieRoutes = {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        properties: { route_id: '1' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [[-79.72, 44.35], [-79.66, 44.41]]
+        }
+      }]
+    };
+    const result = buildArtifactsFromZip(createStaticZip(), barrieRoutes);
+
+    expect(result.metadata.barrie_route_ids).toEqual(['101']);
+    expect(result.metadata.barrie_stop_ids).toEqual(['315']);
+    expect(result.metadata.trips['trip-barrie'].headsign).toBe('NORTH BAY');
+    expect(result.routes.features.length).toBeGreaterThan(0);
+    expect(result.routes.features[0].properties).toMatchObject({
+      route_id: 'ONTC',
+      route_short_name: 'ON',
+      source_route_id: '101',
+    });
+  });
+
+  test('qualifies live vehicles without colliding with Barrie route 101', () => {
+    const metadata = {
+      agency: {
+        id: 'ontario-northland',
+        name: 'Ontario Northland',
+        map_route_id: 'ONTC',
+        map_label: 'ON',
+        color: '#00214D',
+        text_color: '#E6B012',
+      },
+      barrie_route_ids: ['101'],
+      routes: { '101': { long_name: 'Toronto - North Bay' } },
+      trips: { 'trip-1': { headsign: 'NORTH BAY' } },
+    };
+    const vehicle = qualifyVehicle({
+      id: 'bus-1',
+      route_id: '101',
+      trip_id: 'trip-1',
+      lat: 44.38,
+      lon: -79.69,
+    }, metadata, {
+      'trip-1': { stop_id: '315', arrival_time: 1785427200, delay_seconds: 60 },
+    });
+
+    expect(vehicle).toMatchObject({
+      id: 'ontario-northland:bus-1',
+      route_id: 'ONTC',
+      route_label: 'ON',
+      source_route_id: '101',
+      agency_name: 'Ontario Northland',
+      terminal_stop_id: '315',
+      terminal_delay_seconds: 60,
+    });
+  });
+
+  test('reads Allandale arrival updates and active alert text', () => {
+    const FeedMessage = GtfsRealtimeBindings.transit_realtime.FeedMessage;
+    const tripFeed = FeedMessage.create({
+      header: { gtfsRealtimeVersion: '1.0' },
+      entity: [{
+        id: 'trip',
+        tripUpdate: {
+          trip: { tripId: 'trip-1', routeId: '101' },
+          stopTimeUpdate: [{
+            stopId: '315',
+            stopSequence: 2,
+            arrival: { time: 1785427200, delay: 120 },
+          }]
+        }
+      }]
+    });
+    const alertFeed = FeedMessage.create({
+      header: { gtfsRealtimeVersion: '1.0' },
+      entity: [{
+        id: 'alert-1',
+        alert: {
+          headerText: { translation: [{ text: 'Terminal delay', language: 'en' }] },
+          descriptionText: { translation: [{ text: 'Expect delays.', language: 'en' }] },
+        }
+      }]
+    });
+
+    expect(parseTripUpdates(tripFeed, ['315'])['trip-1']).toMatchObject({
+      stop_id: '315',
+      arrival_time: 1785427200,
+      delay_seconds: 120,
+    });
+    expect(parseAlerts(alertFeed)[0]).toMatchObject({
+      id: 'alert-1',
+      header: 'Terminal delay',
+      description: 'Expect delays.',
+    });
+  });
+});

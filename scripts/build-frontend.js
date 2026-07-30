@@ -113,13 +113,18 @@ function copyPlatformMapAssets() {
   }
 }
 
-function copyWeatherAssets() {
-  const weatherAssetsDir = path.join(srcDir, 'assets');
-  const weatherAssets = ['town-winter.png', 'town-summer-clean.png'];
-  if (!fs.existsSync(weatherAssetsDir)) return;
+function copySharedAssets() {
+  const sharedAssetsDir = path.join(srcDir, 'assets');
+  const sharedAssets = [
+    'town-winter.png',
+    'town-summer-clean.png',
+    'agency-barrie-transit.png',
+    'agency-ontario-northland.png'
+  ];
+  if (!fs.existsSync(sharedAssetsDir)) return;
 
-  for (const entry of weatherAssets) {
-    const source = path.join(weatherAssetsDir, entry);
+  for (const entry of sharedAssets) {
+    const source = path.join(sharedAssetsDir, entry);
     if (!fs.existsSync(source)) continue;
     fs.copyFileSync(source, path.join(assetsDir, entry));
   }
@@ -202,7 +207,7 @@ async function main() {
   copyDataDirectory();
   copyBattMapAssets();
   copyPlatformMapAssets();
-  copyWeatherAssets();
+  copySharedAssets();
 
   writeManifest(entryAssets);
   console.log('Frontend build complete:', entryAssets);

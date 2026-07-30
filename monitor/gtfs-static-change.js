@@ -6,10 +6,10 @@ const AdmZip = require('adm-zip');
 const { parse } = require('csv-parse/sync');
 
 const ALLANDALE_TRANSFERS = [
-  ['9003', '9004', '1', '120'],
-  ['9004', '9003', '1', '120'],
-  ['9005', '9012', '1', '120'],
-  ['9012', '9005', '1', '120'],
+  ['9003', '9004', '1', ''],
+  ['9004', '9003', '1', ''],
+  ['9005', '9012', '1', ''],
+  ['9012', '9005', '1', ''],
 ];
 
 function writeJsonFile(filePath, value) {

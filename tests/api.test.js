@@ -31,6 +31,9 @@ describe('API smoke tests', () => {
     cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bus-cache-'));
     process.env.CACHE_DIR = cacheDir;
     process.env.GTFS_RT_VEHICLES_URL = '';
+    process.env.ONTARIO_NORTHLAND_ENABLED = 'false';
+    process.env.GO_TRANSIT_ENABLED = 'false';
+    process.env.METROLINX_API_KEY = '';
     process.env.LOG_LEVEL = 'info';
     mockNoticeService.getManifest.mockReset();
     mockNoticeService.getPageImage.mockReset();
@@ -71,6 +74,9 @@ describe('API smoke tests', () => {
     }
     delete process.env.CACHE_DIR;
     delete process.env.GTFS_RT_VEHICLES_URL;
+    delete process.env.ONTARIO_NORTHLAND_ENABLED;
+    delete process.env.GO_TRANSIT_ENABLED;
+    delete process.env.METROLINX_API_KEY;
     delete process.env.ALLOWED_ORIGINS;
     delete process.env.LOG_LEVEL;
     delete process.env.FEED_DELAYED_AFTER_MIN;
@@ -87,6 +93,24 @@ describe('API smoke tests', () => {
     const stopsRes = await request(app).get('/api/stops.geojson');
     expect(stopsRes.status).toBe(200);
     expect(stopsRes.body.features[0].properties.stop_name).toBe('Terminal');
+  });
+
+  test('merges Ontario Northland route segments when the source is enabled', async () => {
+    writeJson(path.join(cacheDir, 'ontario-northland-routes.geojson'), {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: [[-79.70, 44.37], [-79.69, 44.38]] },
+          properties: { route_id: 'ONTC', route_short_name: 'ON' }
+        }
+      ]
+    });
+    const app = await initApp({ ONTARIO_NORTHLAND_ENABLED: 'true' });
+    const routesRes = await request(app).get('/api/routes.geojson');
+
+    expect(routesRes.status).toBe(200);
+    expect(routesRes.body.features.map((feature) => feature.properties.route_id)).toEqual(['1', 'ONTC']);
   });
 
   test('returns config with defaults and base path', async () => {

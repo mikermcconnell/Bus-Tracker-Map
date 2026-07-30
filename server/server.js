@@ -4,6 +4,16 @@ const fs = require('fs');
 const express = require('express');
 require('dotenv').config();
 const { fetchVehicles } = require('./vehicles');
+const {
+  DEFAULT_VEHICLES_URL: DEFAULT_ONTARIO_NORTHLAND_VEHICLES_URL,
+  DEFAULT_TRIP_UPDATES_URL: DEFAULT_ONTARIO_NORTHLAND_TRIP_UPDATES_URL,
+  DEFAULT_ALERTS_URL: DEFAULT_ONTARIO_NORTHLAND_ALERTS_URL,
+  fetchOntarioNorthlandRealtime,
+} = require('./ontario-northland');
+const {
+  DEFAULT_API_BASE: DEFAULT_METROLINX_API_BASE,
+  fetchGoTransitRealtime,
+} = require('./go-transit');
 const { assessVehicleFeedFreshness } = require('../shared/feed-freshness');
 const { buildServiceStatus } = require('./service-status');
 const { noticeService } = require('./notices');
@@ -122,6 +132,21 @@ const PORT = process.env.PORT || 3007;
 const POLL_MS = Number(process.env.POLL_MS || 10000);
 const MAPTILER_KEY = process.env.MAPTILER_KEY || '';
 const RT_URL = process.env.GTFS_RT_VEHICLES_URL || '';
+const ONTARIO_NORTHLAND_ENABLED = !/^(?:0|false|no|off)$/i.test(
+  String(process.env.ONTARIO_NORTHLAND_ENABLED || 'true').trim()
+);
+const ONTARIO_NORTHLAND_RT_URL =
+  process.env.ONTARIO_NORTHLAND_GTFS_RT_VEHICLES_URL || DEFAULT_ONTARIO_NORTHLAND_VEHICLES_URL;
+const ONTARIO_NORTHLAND_TRIP_UPDATES_URL =
+  process.env.ONTARIO_NORTHLAND_GTFS_RT_TRIP_UPDATES_URL || DEFAULT_ONTARIO_NORTHLAND_TRIP_UPDATES_URL;
+const ONTARIO_NORTHLAND_ALERTS_URL =
+  process.env.ONTARIO_NORTHLAND_GTFS_RT_ALERTS_URL || DEFAULT_ONTARIO_NORTHLAND_ALERTS_URL;
+const METROLINX_API_KEY = String(process.env.METROLINX_API_KEY || '').trim();
+const GO_TRANSIT_ENABLED = Boolean(METROLINX_API_KEY) && !/^(?:0|false|no|off)$/i.test(
+  String(process.env.GO_TRANSIT_ENABLED || 'true').trim()
+);
+const METROLINX_API_BASE =
+  process.env.METROLINX_API_BASE || DEFAULT_METROLINX_API_BASE;
 const FEED_DELAYED_AFTER_MS = Number(process.env.FEED_DELAYED_AFTER_MIN || 2) * 60 * 1000;
 const FEED_OFFLINE_AFTER_MS = Number(process.env.FEED_STALE_AFTER_MIN || 15) * 60 * 1000;
 const BASE_PATH = normalizeBasePath(process.env.BASE_PATH);
@@ -148,6 +173,178 @@ function sendCachedJson(res, filePath, maxAgeSeconds) {
   });
 }
 
+function readFeatureCollection(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (parsed && parsed.type === 'FeatureCollection' && Array.isArray(parsed.features)) {
+      return parsed;
+    }
+  } catch (err) {
+    console.error('Failed to read GeoJSON:', filePath, err.message || err);
+  }
+  return null;
+}
+
+function sendMergedRoutes(res) {
+  const barriePath = path.join(CACHE_DIR, 'routes.geojson');
+  const northlandPath = path.join(CACHE_DIR, 'ontario-northland-routes.geojson');
+  const goTransitPath = path.join(CACHE_DIR, 'go-transit-routes.geojson');
+  const barrie = readFeatureCollection(barriePath);
+  if (!barrie) {
+    res.status(404).json({ error: 'routes.geojson not built yet' });
+    return;
+  }
+  const northland = ONTARIO_NORTHLAND_ENABLED
+    ? readFeatureCollection(northlandPath)
+    : null;
+  const goTransit = GO_TRANSIT_ENABLED
+    ? readFeatureCollection(goTransitPath)
+    : null;
+  res.setHeader('Cache-Control', 'public, max-age=604800');
+  res.json({
+    type: 'FeatureCollection',
+    features: barrie.features
+      .concat(northland ? northland.features : [])
+      .concat(goTransit ? goTransit.features : []),
+  });
+}
+
+function addBarrieAgencyMetadata(payload) {
+  return {
+    ...payload,
+    vehicles: (payload && Array.isArray(payload.vehicles) ? payload.vehicles : []).map((vehicle) => ({
+      ...vehicle,
+      agency_id: 'barrie-transit',
+      agency_name: 'Barrie Transit',
+      source_route_id: vehicle.route_id || null,
+    })),
+  };
+}
+
+function maxTimestamp(values) {
+  const valid = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
+  return valid.length ? Math.max(...valid) : null;
+}
+
+async function getCombinedVehiclePayload() {
+  const barriePromise = RT_URL
+    ? fetchVehicles(RT_URL).then(addBarrieAgencyMetadata)
+    : Promise.resolve({
+      generated_at: Date.now(),
+      feed_timestamp: null,
+      vehicles: [],
+    });
+  const northlandPromise = fetchOntarioNorthlandRealtime({
+    enabled: ONTARIO_NORTHLAND_ENABLED,
+    cacheDir: CACHE_DIR,
+    vehiclesUrl: ONTARIO_NORTHLAND_RT_URL,
+    tripUpdatesUrl: ONTARIO_NORTHLAND_TRIP_UPDATES_URL,
+    alertsUrl: ONTARIO_NORTHLAND_ALERTS_URL,
+    alertsEnabled: false,
+  });
+  const goTransitPromise = fetchGoTransitRealtime({
+    enabled: GO_TRANSIT_ENABLED,
+    apiKey: METROLINX_API_KEY,
+    apiBase: METROLINX_API_BASE,
+    cacheDir: CACHE_DIR,
+  });
+
+  const [barrieResult, northlandResult, goTransitResult] = await Promise.allSettled([
+    barriePromise,
+    northlandPromise,
+    goTransitPromise,
+  ]);
+
+  const barriePayload = barrieResult.status === 'fulfilled'
+    ? barrieResult.value
+    : {
+      generated_at: Date.now(),
+      feed_timestamp: null,
+      vehicles: [],
+      fetch_error: true,
+    };
+  const northlandPayload = northlandResult.status === 'fulfilled'
+    ? northlandResult.value
+    : {
+      generated_at: Date.now(),
+      feed_timestamp: null,
+      vehicles: [],
+      alerts: [],
+      fetch_error: true,
+    };
+  const goTransitPayload = goTransitResult.status === 'fulfilled'
+    ? goTransitResult.value
+    : {
+      generated_at: Date.now(),
+      feed_timestamp: null,
+      vehicles: [],
+      fetch_error: true,
+    };
+
+  if (barrieResult.status === 'rejected') {
+    console.error('[barrie-transit] Vehicle feed unavailable:', barrieResult.reason && barrieResult.reason.message || barrieResult.reason);
+  }
+  if (northlandResult.status === 'rejected') {
+    console.error('[ontario-northland] Vehicle feed unavailable:', northlandResult.reason && northlandResult.reason.message || northlandResult.reason);
+  }
+  if (goTransitResult.status === 'rejected') {
+    console.error('[go-transit] Vehicle feed unavailable:', goTransitResult.reason && goTransitResult.reason.message || goTransitResult.reason);
+  }
+
+  const barrieFreshness = assessVehicleFeedFreshness(barriePayload, {
+    configured: Boolean(RT_URL),
+    delayedAfterMs: FEED_DELAYED_AFTER_MS,
+    offlineAfterMs: FEED_OFFLINE_AFTER_MS,
+  });
+  const northlandFreshness = assessVehicleFeedFreshness(northlandPayload, {
+    configured: ONTARIO_NORTHLAND_ENABLED,
+    delayedAfterMs: FEED_DELAYED_AFTER_MS,
+    offlineAfterMs: FEED_OFFLINE_AFTER_MS,
+  });
+  const goTransitFreshness = assessVehicleFeedFreshness(goTransitPayload, {
+    configured: GO_TRANSIT_ENABLED,
+    delayedAfterMs: FEED_DELAYED_AFTER_MS,
+    offlineAfterMs: FEED_OFFLINE_AFTER_MS,
+  });
+
+  const data = {
+    generated_at: Date.now(),
+    feed_timestamp: maxTimestamp([
+      barriePayload.feed_timestamp,
+      northlandPayload.feed_timestamp,
+      goTransitPayload.feed_timestamp,
+    ]),
+    vehicles: (barriePayload.vehicles || [])
+      .concat(northlandPayload.vehicles || [])
+      .concat(goTransitPayload.vehicles || []),
+    alerts: northlandPayload.alerts || [],
+    sources: {
+      barrie_transit: {
+        agency_name: 'Barrie Transit',
+        vehicle_count: (barriePayload.vehicles || []).length,
+        ...barrieFreshness,
+      },
+      ontario_northland: {
+        agency_name: 'Ontario Northland',
+        vehicle_count: (northlandPayload.vehicles || []).length,
+        ...northlandFreshness,
+      },
+      go_transit: {
+        agency_name: 'GO Transit',
+        vehicle_count: (goTransitPayload.vehicles || []).length,
+        ...goTransitFreshness,
+      },
+    },
+  };
+  const freshness = assessVehicleFeedFreshness(data, {
+    configured: Boolean(RT_URL) || ONTARIO_NORTHLAND_ENABLED || GO_TRANSIT_ENABLED,
+    delayedAfterMs: FEED_DELAYED_AFTER_MS,
+    offlineAfterMs: FEED_OFFLINE_AFTER_MS,
+  });
+  return { ...data, ...freshness };
+}
+
 const router = express.Router();
 const apiRouter = express.Router();
 
@@ -170,9 +367,7 @@ router.use(express.static(FRONTEND_DIR, {
 }));
 
 apiRouter.get('/routes.geojson', (req, res) => {
-  const fp = path.join(CACHE_DIR, 'routes.geojson');
-  if (!fs.existsSync(fp)) return res.status(404).json({ error: 'routes.geojson not built yet' });
-  sendCachedJson(res, fp, 60 * 60 * 24 * 7);
+  sendMergedRoutes(res);
 });
 
 apiRouter.get('/stops.geojson', (req, res) => {
@@ -194,7 +389,12 @@ apiRouter.get('/config', (req, res) => {
     tiles: MAPTILER_KEY
       ? `https://api.maptiler.com/maps/streets/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`
       : `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`,
-    rt_feed_configured: Boolean(RT_URL),
+    rt_feed_configured: Boolean(RT_URL) || ONTARIO_NORTHLAND_ENABLED || GO_TRANSIT_ENABLED,
+    transit_sources: {
+      barrie_transit: Boolean(RT_URL),
+      ontario_northland: ONTARIO_NORTHLAND_ENABLED,
+      go_transit: GO_TRANSIT_ENABLED,
+    },
   });
 });
 
@@ -242,15 +442,10 @@ apiRouter.get('/notices/pages/:documentId/:page.jpg', async (req, res) => {
 
 apiRouter.get('/vehicles.json', async (req, res) => {
   try {
-    const data = await fetchVehicles(RT_URL);
-    const freshness = assessVehicleFeedFreshness(data, {
-      configured: Boolean(RT_URL),
-      delayedAfterMs: FEED_DELAYED_AFTER_MS,
-      offlineAfterMs: FEED_OFFLINE_AFTER_MS,
-    });
+    const data = await getCombinedVehiclePayload();
     // allow short caching to reduce load; front end also polls every 10s
     res.setHeader('Cache-Control', 'public, max-age=5');
-    res.json({ ...data, ...freshness });
+    res.json(data);
   } catch (e) {
     res.status(502).json({
       generated_at: Date.now(),
@@ -267,13 +462,8 @@ apiRouter.get('/vehicles.json', async (req, res) => {
 // JSONP Endpoint (Bypasses Client XHR blocks)
 apiRouter.get('/vehicles.js', async (req, res) => {
   try {
-    // DEBUG: Hardcoded data to rule out Upstream Fetch issues
-    // const data = await fetchVehicles(RT_URL);
-    const vehicles = [
-      { lat: 44.373837, lon: -79.689279, route_id: '8A', direction_id: 0, id: 'TEST_BUS' }
-    ];
-
-    const json = JSON.stringify(vehicles);
+    const data = await getCombinedVehiclePayload();
+    const json = JSON.stringify(data.vehicles || []);
     const js = `
       if (typeof window.updateMapFromJSONP === 'function') {
         window.updateMapFromJSONP(${json});

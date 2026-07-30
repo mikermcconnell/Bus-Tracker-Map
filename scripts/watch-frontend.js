@@ -38,6 +38,20 @@ const entryPoints = [
     cssPath: path.join(srcDir, 'batt-map', 'styles.css'),
     templatePath: path.join(srcDir, 'batt-map', 'index.html'),
     outputHtml: 'batt.map.html'
+  },
+  {
+    key: 'platformMap',
+    entryPath: path.join(srcDir, 'platform-map', 'main.js'),
+    cssPath: path.join(srcDir, 'platform-map', 'styles.css'),
+    templatePath: path.join(srcDir, 'platform-map', 'index.html'),
+    outputHtml: 'platform.map.html'
+  },
+  {
+    key: 'notices',
+    entryPath: path.join(srcDir, 'notices', 'main.js'),
+    cssPath: path.join(srcDir, 'notices', 'styles.css'),
+    templatePath: path.join(srcDir, 'notices', 'index.html'),
+    outputHtml: 'notices.html'
   }
 ];
 
@@ -78,11 +92,30 @@ function copyBattMapAssets() {
   }
 }
 
-function copyTownAssets() {
-  const source = path.join(srcDir, 'assets', 'town-winter.png');
-  if (!fs.existsSync(source)) return;
-  const dest = path.join(assetsDir, 'town-winter.png');
-  fs.copyFileSync(source, dest);
+function copyPlatformMapAssets() {
+  const mapSource = path.join(srcDir, 'platform-map', 'map.png');
+  if (fs.existsSync(mapSource)) {
+    fs.copyFileSync(mapSource, path.join(assetsDir, 'map.png'));
+  }
+  const busSource = path.join(srcDir, 'platform-map', 'bus_icon.jpg');
+  if (fs.existsSync(busSource)) {
+    fs.copyFileSync(busSource, path.join(assetsDir, 'bus_icon.jpg'));
+  }
+}
+
+function copySharedAssets() {
+  const sharedAssetsDir = path.join(srcDir, 'assets');
+  [
+    'town-winter.png',
+    'town-summer-clean.png',
+    'agency-barrie-transit.png',
+    'agency-ontario-northland.png'
+  ].forEach((entry) => {
+    const source = path.join(sharedAssetsDir, entry);
+    if (fs.existsSync(source)) {
+      fs.copyFileSync(source, path.join(assetsDir, entry));
+    }
+  });
 }
 
 async function buildJs(entry) {
@@ -158,7 +191,8 @@ async function buildFrontend({ clean } = { clean: false }) {
 
   copyDataDirectory();
   copyBattMapAssets();
-  copyTownAssets();
+  copyPlatformMapAssets();
+  copySharedAssets();
 
   writeManifest(entryAssets);
   return entryAssets;

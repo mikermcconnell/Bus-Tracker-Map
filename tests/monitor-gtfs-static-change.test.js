@@ -20,10 +20,10 @@ function buildZip(feedVersion, options = {}) {
   if (options.transfers) {
     zip.addFile('transfers.txt', Buffer.from([
       'from_stop_id,to_stop_id,transfer_type,min_transfer_time',
-      '9003,9004,1,120',
-      '9004,9003,1,120',
-      '9005,9012,1,120',
-      '9012,9005,1,120',
+      '9003,9004,1,',
+      '9004,9003,1,',
+      '9005,9012,1,',
+      '9012,9005,1,',
       '',
     ].join('\n')));
   }

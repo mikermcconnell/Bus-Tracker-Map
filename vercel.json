@@ -51,11 +51,16 @@
   ],
   "env": {
     "GTFS_RT_VEHICLES_URL": "https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb",
+    "ONTARIO_NORTHLAND_ENABLED": "true",
+    "ONTARIO_NORTHLAND_GTFS_RT_VEHICLES_URL": "https://ontarionorthland.tmix.se/gtfs-realtime/vehicleupdates.pb",
+    "ONTARIO_NORTHLAND_GTFS_RT_TRIP_UPDATES_URL": "https://ontarionorthland.tmix.se/gtfs-realtime/tripupdates.pb",
+    "ONTARIO_NORTHLAND_GTFS_RT_ALERTS_URL": "https://ontarionorthland.tmix.se/gtfs-realtime/alerts.pb",
     "POLL_MS": "10000"
   },
   "build": {
     "env": {
-      "GTFS_STATIC_URL": "https://www.myridebarrie.ca/gtfs/google_transit.zip"
+      "GTFS_STATIC_URL": "https://www.myridebarrie.ca/gtfs/google_transit.zip",
+      "ONTARIO_NORTHLAND_GTFS_STATIC_URL": "https://ontarionorthland.tmix.se/gtfs/gtfs.zip"
     }
   }
 }

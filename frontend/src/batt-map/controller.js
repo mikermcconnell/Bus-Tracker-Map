@@ -1,3 +1,6 @@
+import feedFreshness from '../../../shared/feed-freshness.js';
+
+const { assessVehicleFeedFreshness, selectVehiclesForDisplay } = feedFreshness;
 const PLATFORM_IMAGE_URL = './assets/batt-platform-map.jpg';
 const PLATFORM_BOUNDS = [
   [44.375284, -79.692070], // Top Left (North West) - Shifted West ~10m
@@ -20,6 +23,8 @@ export function createBattMapController({ dataClient }) {
   let vehicleLayer = null;
   let statusEl = null;
   let pollMs = DEFAULT_POLL_MS;
+  let feedDelayedAfterMs = 2 * 60 * 1000;
+  let feedOfflineAfterMs = 15 * 60 * 1000;
   let pollTimer = null;
   let animationFrameHandle = null;
   let clockTimer = null;
@@ -93,6 +98,12 @@ export function createBattMapController({ dataClient }) {
               pollMs = parsed;
             }
           }
+          if (Number.isFinite(Number(cfg.feed_delayed_after_ms))) {
+            feedDelayedAfterMs = Number(cfg.feed_delayed_after_ms);
+          }
+          if (Number.isFinite(Number(cfg.feed_offline_after_ms))) {
+            feedOfflineAfterMs = Number(cfg.feed_offline_after_ms);
+          }
         }
       })
       .catch((err) => {
@@ -159,9 +170,25 @@ export function createBattMapController({ dataClient }) {
           if (data && data.error) {
             throw new Error(data.error);
           }
-          hideStatus();
-          const list = data && Array.isArray(data.vehicles) ? data.vehicles : [];
-          lastFetchTime = Date.now();
+          const freshness = assessVehicleFeedFreshness(data, {
+            delayedAfterMs: feedDelayedAfterMs,
+            offlineAfterMs: feedOfflineAfterMs
+          });
+          const list = selectVehiclesForDisplay(data, freshness, {
+            maxAgeMs: feedOfflineAfterMs
+          });
+          if (freshness.feed_status === 'offline') {
+            showStatus('Live vehicles unavailable — retrying…');
+          } else if (freshness.feed_status === 'empty') {
+            showStatus('No buses are currently reporting');
+          } else if (freshness.feed_status === 'delayed') {
+            showStatus('Live vehicle locations are delayed');
+          } else {
+            hideStatus();
+          }
+          lastFetchTime = freshness.latest_data_timestamp
+            ? Number(freshness.latest_data_timestamp) * 1000
+            : Date.now();
           updateVehicles(list);
         })
         .catch((err) => {
@@ -218,7 +245,7 @@ export function createBattMapController({ dataClient }) {
       const key = String(vehicle.id || vehicle.vehicle_id || vehicle.route_id || 'vehicle-' + i);
       seen[key] = true;
 
-      const routeMeta = resolveRouteMeta(vehicle.route_id);
+      const routeMeta = getVehicleDisplayMeta(vehicle, resolveRouteMeta(vehicle.route_id));
       let directionHint = vehicle.route_id || '';
       const routeKey = normalizeRouteKey(vehicle.route_id);
       if (routeKey && ROUTE_EIGHT_KEYS.has(routeKey)) {
@@ -378,6 +405,28 @@ export function createBattMapController({ dataClient }) {
       displayName: fallbackId,
       color: '#004E80',
       textColor: '#FFFFFF'
+    };
+  }
+
+  function getVehicleDisplayMeta(vehicle, routeMeta) {
+    if (!vehicle) return routeMeta;
+    if (vehicle.agency_id === 'go-transit') {
+      return {
+        ...routeMeta,
+        displayName: vehicle.route_label || (vehicle.route_mode === 'train' ? 'GO TRAIN' : 'GO BUS'),
+        longName: vehicle.route_long_name || routeMeta.longName || 'GO Transit',
+        color: vehicle.route_color || routeMeta.color,
+        textColor: vehicle.route_text_color || routeMeta.textColor
+      };
+    }
+    if (vehicle.agency_id !== 'ontario-northland') return routeMeta;
+    const sourceRouteId = vehicle.source_route_id ? String(vehicle.source_route_id).trim() : '';
+    return {
+      ...routeMeta,
+      displayName: sourceRouteId ? `ON ${sourceRouteId}` : 'ON',
+      longName: vehicle.route_long_name || routeMeta.longName || 'Ontario Northland',
+      color: vehicle.route_color || routeMeta.color,
+      textColor: vehicle.route_text_color || routeMeta.textColor
     };
   }
 

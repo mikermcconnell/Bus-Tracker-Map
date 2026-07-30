@@ -145,7 +145,7 @@ export function createMapController({ dataClient, ui }) {
     'ANNE STREET': { distanceMeters: 300, bearingDegrees: 180 },
     'YONGE STREET': { distanceMeters: 300, bearingDegrees: 135 }
   };
-  var DEFAULT_VISIBLE_ROUTE_IDS = ['7A', '7B', '8A', '8B', '12A', '12B'];
+  var DEFAULT_VISIBLE_ROUTE_IDS = ['7A', '7B', '8A', '8B', '12A', '12B', 'ONTC', 'GO-BUS', 'GO-TRAIN'];
   var DEFAULT_VISIBLE_ROUTE_KEYS = (function () {
     var map = Object.create(null);
     for (var i = 0; i < DEFAULT_VISIBLE_ROUTE_IDS.length; i++) {
@@ -1970,13 +1970,20 @@ export function createMapController({ dataClient, ui }) {
     var textColor = normalizeHexColor(textColorSource) || computeTextColor(color);
     var displayName = (props ? getRouteDisplayName(props, id) : existing && existing.displayName) || getRouteDisplayName({}, id);
     var longName = (props && props.route_long_name) || (existing && existing.longName) || null;
+    var agencyId = (props && props.agency_id) || (existing && existing.agencyId) || 'barrie-transit';
+    var agencyName = (props && props.agency_name) || (existing && existing.agencyName) ||
+      (agencyId === 'ontario-northland'
+        ? 'Ontario Northland'
+        : (agencyId === 'go-transit' ? 'GO Transit' : 'Barrie Transit'));
 
     var meta = {
       id: id,
       color: color,
       textColor: textColor,
       displayName: displayName,
-      longName: longName
+      longName: longName,
+      agencyId: agencyId,
+      agencyName: agencyName
     };
     meta.offsetMeters = getRouteLaneOffset(meta);
     routeMetadata[id] = meta;
@@ -2141,15 +2148,67 @@ export function createMapController({ dataClient, ui }) {
       var member = groupMembers[i];
       var vehicle = member.vehicle;
       var meta = member.meta;
-      var label = sanitizeVehicleText(meta.displayName || meta.longName || meta.id || 'Route');
-      var busId = vehicle && vehicle.id ? sanitizeVehicleText(vehicle.id) : 'Unknown bus';
-      var parts = ['Bus ' + busId, 'Route ' + label];
-      if (meta.longName) {
-        parts.push(sanitizeVehicleText(meta.longName));
+      var label = sanitizeVehicleText(vehicle && vehicle.route_label || meta.displayName || meta.longName || meta.id || 'Route');
+      var rawBusId = vehicle && vehicle.id ? String(vehicle.id).replace(/^ontario-northland:/, '') : '';
+      var busId = rawBusId ? sanitizeVehicleText(rawBusId) : 'Unknown bus';
+      var agencyName = vehicle && vehicle.agency_name ? sanitizeVehicleText(vehicle.agency_name) : '';
+      var sourceRouteId = vehicle && vehicle.source_route_id ? sanitizeVehicleText(vehicle.source_route_id) : '';
+      var routeDescription = vehicle && vehicle.route_long_name
+        ? sanitizeVehicleText(vehicle.route_long_name)
+        : (meta.longName ? sanitizeVehicleText(meta.longName) : '');
+      var parts = ['Bus ' + busId];
+      if (agencyName) {
+        parts.push(agencyName + (sourceRouteId ? ' ' + sourceRouteId : ''));
+      } else {
+        parts.push('Route ' + label);
+      }
+      if (routeDescription) {
+        parts.push(routeDescription);
+      }
+      if (vehicle && vehicle.trip_headsign) {
+        parts.push('To ' + sanitizeVehicleText(vehicle.trip_headsign));
+      }
+      if (vehicle && vehicle.terminal_arrival_time) {
+        var arrival = new Date(Number(vehicle.terminal_arrival_time) * 1000);
+        if (Number.isFinite(arrival.getTime())) {
+          parts.push('Allandale ' + sanitizeVehicleText(arrival.toLocaleTimeString([], {
+            hour: 'numeric',
+            minute: '2-digit'
+          })));
+        }
       }
       lines.push(parts.join(' — '));
     }
     return lines.join('<br/>');
+  }
+
+  function getVehicleDisplayMeta(vehicle, routeMeta) {
+    if (!routeMeta) return routeMeta;
+    if (!vehicle) return routeMeta;
+    if (vehicle.agency_id === 'go-transit') {
+      return {
+        id: routeMeta.id,
+        color: vehicle.route_color || routeMeta.color,
+        textColor: vehicle.route_text_color || routeMeta.textColor,
+        displayName: vehicle.route_label || (vehicle.route_mode === 'train' ? 'GO TRAIN' : 'GO BUS'),
+        longName: vehicle.route_long_name || routeMeta.longName || 'GO Transit',
+        agencyId: 'go-transit',
+        agencyName: 'GO Transit',
+        offsetMeters: routeMeta.offsetMeters || 0
+      };
+    }
+    if (vehicle.agency_id !== 'ontario-northland') return routeMeta;
+    var sourceRouteId = vehicle.source_route_id ? String(vehicle.source_route_id).trim() : '';
+    return {
+      id: routeMeta.id,
+      color: vehicle.route_color || routeMeta.color,
+      textColor: vehicle.route_text_color || routeMeta.textColor,
+      displayName: sourceRouteId ? 'ON ' + sourceRouteId : 'ON',
+      longName: vehicle.route_long_name || routeMeta.longName || 'Ontario Northland',
+      agencyId: 'ontario-northland',
+      agencyName: 'Ontario Northland',
+      offsetMeters: routeMeta.offsetMeters || 0
+    };
   }
 
   function createCombinedBusIcon(members) {
@@ -2161,7 +2220,7 @@ export function createMapController({ dataClient, ui }) {
 
     for (var i = 0; i < members.length; i++) {
       var member = members[i];
-      var key = member.routeId || (member.meta && member.meta.id) || member.key || ('route-' + i);
+      var key = member.displayRouteId || member.routeId || (member.meta && member.meta.id) || member.key || ('route-' + i);
       if (!bucketIndex[key]) {
         bucketIndex[key] = {
           routeId: member.routeId,
@@ -2767,6 +2826,23 @@ export function createMapController({ dataClient, ui }) {
             }
           }
           entry.meta = meta;
+          if (!entry.sourceRouteIds) {
+            entry.sourceRouteIds = [];
+          }
+          if (props.source_route_id) {
+            var sourceRouteId = String(props.source_route_id);
+            if (entry.sourceRouteIds.indexOf(sourceRouteId) === -1) {
+              entry.sourceRouteIds.push(sourceRouteId);
+              entry.sourceRouteIds.sort(function (a, b) {
+                var aNumber = Number(a);
+                var bNumber = Number(b);
+                if (Number.isFinite(aNumber) && Number.isFinite(bNumber)) {
+                  return aNumber - bNumber;
+                }
+                return String(a).localeCompare(String(b));
+              });
+            }
+          }
 
           if (!feat.geometry || !hasLineGeometry(feat.geometry)) {
             return;
@@ -2898,9 +2974,10 @@ export function createMapController({ dataClient, ui }) {
           continue;
         }
 
-        var routeMeta = getRouteMeta(resolved.id);
-        if (!routeMeta) continue;
+        var baseRouteMeta = getRouteMeta(resolved.id);
+        if (!baseRouteMeta) continue;
         if (!isRouteVisible(resolved.id)) continue;
+        var routeMeta = getVehicleDisplayMeta(vehicle, baseRouteMeta);
 
         visibleLatSum += vehicle.lat;
         visibleLonSum += vehicle.lon;
@@ -2915,6 +2992,10 @@ export function createMapController({ dataClient, ui }) {
           key: vehicleKey,
           vehicle: vehicle,
           routeId: resolved.id,
+          displayRouteId: (vehicle.agency_id === 'ontario-northland' || vehicle.agency_id === 'go-transit') &&
+            (vehicle.route_label || vehicle.source_route_id)
+            ? resolved.id + ':' + (vehicle.route_label || vehicle.source_route_id)
+            : resolved.id,
           meta: routeMeta,
           directionHint: directionHint
         });
@@ -2958,7 +3039,7 @@ export function createMapController({ dataClient, ui }) {
       for (var mIndex = 0; mIndex < members.length; mIndex++) {
         var member = members[mIndex];
         routeIds.push(member.routeId);
-        routeDescriptors.push(member.routeId + ':' + (member.meta.displayName || ''));
+        routeDescriptors.push((member.displayRouteId || member.routeId) + ':' + (member.meta.displayName || ''));
         vehicleIdsForSignature.push(member.key);
       }
 
@@ -3215,6 +3296,34 @@ export function createMapController({ dataClient, ui }) {
       }));
     }
 
+    function applySourceFeedState(payload) {
+      var sources = payload && payload.sources;
+      if (typeof ui.setSourceStatuses === 'function') {
+        ui.setSourceStatuses(sources || null);
+      }
+      if (!sources) return;
+
+      var problems = [];
+      [
+        { key: 'barrie_transit', label: 'Barrie Transit' },
+        { key: 'ontario_northland', label: 'Ontario Northland' }
+      ].forEach(function (sourceInfo) {
+        var source = sources[sourceInfo.key];
+        var status = source && source.feed_status;
+        if (status === 'offline') {
+          problems.push(sourceInfo.label + ' live locations are offline');
+        } else if (status === 'delayed') {
+          problems.push(sourceInfo.label + ' locations are delayed');
+        }
+      });
+
+      if (problems.length) {
+        ui.showBanner('vehicles', problems.join('. ') + '.');
+      } else {
+        ui.clearBanner('vehicles');
+      }
+    }
+
     // Reassess the actual data timestamp between polls so a frozen feed cannot
     // remain labelled LIVE just because HTTP requests continue to succeed.
     setInterval(function () {
@@ -3232,6 +3341,7 @@ export function createMapController({ dataClient, ui }) {
             requestFailed = false;
             var freshness = assessPayload(data);
             applyFeedState(freshness);
+            applySourceFeedState(data);
             renderPayload(data, freshness);
             if (typeof ui.updateLastUpdated === 'function' && freshness.latest_data_timestamp) {
               ui.updateLastUpdated(freshness.latest_data_timestamp);
@@ -3243,6 +3353,9 @@ export function createMapController({ dataClient, ui }) {
         .catch(function (err) {
           requestFailed = true;
           applyFeedState({ feed_status: 'offline', latest_data_timestamp: null });
+          if (typeof ui.setSourceStatuses === 'function') {
+            ui.setSourceStatuses(null);
+          }
           updateVehicles([]);
           console.warn('Vehicle poll failed', err);
         })

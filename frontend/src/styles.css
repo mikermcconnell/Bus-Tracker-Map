@@ -123,10 +123,10 @@ body {
   inset: 0;
   padding: 24px;
   padding: clamp(16px, 2vw, 36px);
-  padding-top: 72px;
-  padding-top: clamp(64px, 8vh, 80px);
-  padding-bottom: 48px;
-  padding-bottom: clamp(40px, 5vh, 80px);
+  padding-top: 92px;
+  padding-top: clamp(88px, 10vh, 108px);
+  padding-bottom: 68px;
+  padding-bottom: clamp(64px, 7.5vh, 84px);
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -156,9 +156,8 @@ body {
 .map-overlay-column--right {
   align-items: flex-end;
   margin-left: auto;
-  overflow-y: auto;
-  overflow-x: hidden;
-  gap: clamp(14px, 1.8vh, 24px);
+  overflow: hidden;
+  gap: 14px;
 }
 
 .map-overlay-column>* {
@@ -205,7 +204,7 @@ body {
 
 .map-title__main {
   font-family: var(--font-display);
-  font-size: clamp(20px, 2vw, 26px);
+  font-size: clamp(40px, 4vw, 52px);
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.04em;
@@ -218,11 +217,13 @@ body {
 .map-title__sub {
   display: inline-flex;
   align-items: center;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  opacity: 0.68;
+  opacity: 1;
   white-space: nowrap;
   margin-left: 4px;
   padding-left: 14px;
@@ -285,30 +286,91 @@ body {
 }
 
 .last-updated {
-  font-size: 14px;
-  opacity: 0.78;
+  font-size: 15px;
+  opacity: 0.86;
 }
 
-/* ── LIVE status pill ───────────────────────────────────────── */
+/* ── Per-agency live status ─────────────────────────────────── */
 
-.live-status-pill {
+.source-statuses {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 18px;
+  justify-content: center;
+  gap: 7px;
   margin-right: 10px;
+}
+
+.source-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 92px;
+  padding: 5px 10px;
   border-radius: 100px;
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   transition: all 0.3s ease;
+  box-sizing: border-box;
+}
+
+.source-status-code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 23px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.18);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.source-status-pill--northland .source-status-code {
+  color: #ffe08a;
+  background: rgba(0, 33, 77, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(230, 176, 18, 0.75);
+}
+
+.source-status-pill--go .source-status-code {
+  color: #ffffff;
+  background: #007a33;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+@media (min-width: 1400px) {
+  .map-title {
+    display: grid;
+    grid-template-columns: minmax(250px, 1fr) auto minmax(250px, 1fr);
+  }
+
+  .map-title__left {
+    grid-column: 2;
+    grid-row: 1;
+    justify-content: center;
+    flex: none;
+  }
+
+  .source-statuses {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+    margin-right: 0;
+  }
+
+  .map-title__right {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+  }
 }
 
 .live-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   transition: all 0.3s ease;
 }
@@ -362,18 +424,18 @@ body {
 
 .data-status-banner {
   position: fixed;
-  top: 82px;
+  top: 88px;
   left: 50%;
   transform: translateX(-50%);
-  width: min(920px, calc(100% - 40px));
+  width: min(760px, calc(100% - 40px));
   box-sizing: border-box;
-  padding: 14px 22px;
+  padding: 10px 18px;
   border: 2px solid #f59e0b;
   border-radius: 12px;
   background: rgba(120, 53, 15, 0.96);
   color: #ffffff;
   font-family: var(--font-display);
-  font-size: clamp(16px, 1.8vw, 23px);
+  font-size: clamp(15px, 1.45vw, 20px);
   font-weight: 700;
   line-height: 1.25;
   text-align: center;
@@ -481,11 +543,11 @@ body {
   position: relative;
   z-index: 1000;
   width: 100%;
-  max-width: 300px;
+  max-width: 340px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 20px 22px;
+  gap: 10px;
+  padding: 18px 20px;
   line-height: 1.4;
   overflow: visible;
   pointer-events: auto;
@@ -542,7 +604,7 @@ body {
 }
 
 .legend-section-title--terminal {
-  font-size: clamp(18px, 1.65vw, 22px);
+  font-size: clamp(20px, 1.6vw, 23px);
   line-height: 1.05;
   letter-spacing: 0.025em;
   text-transform: none;
@@ -602,6 +664,105 @@ body {
   padding-right: 0;
 }
 
+#routeList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.legend-agency {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.legend-agency + .legend-agency {
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 78, 128, 0.18);
+}
+
+.legend-agency-title {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--transit-blue);
+}
+
+.legend-agency-logo {
+  display: block;
+  max-width: 100%;
+  width: auto;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.legend-agency--barrie .legend-agency-logo {
+  height: 50px;
+}
+
+.legend-agency--barrie .legend-agency-title {
+  justify-content: center;
+}
+
+.legend-agency--northland .legend-agency-logo {
+  height: 26px;
+}
+
+.legend-agency--northland .legend-agency-title {
+  color: #00214d;
+}
+
+.legend-agency--northland .route-list {
+  display: block;
+}
+
+.legend-agency--go .legend-agency-title {
+  min-height: 24px;
+  color: #007a33;
+}
+
+.legend-agency--go .legend-agency-name {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+.legend-agency--go .route-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.route-item--go-transit {
+  display: flex;
+  justify-content: flex-start;
+  gap: 7px;
+  width: 100%;
+  padding: 7px 9px;
+  box-sizing: border-box;
+  background: rgba(0, 55, 103, 0.07);
+  border: 1px solid rgba(0, 55, 103, 0.14);
+}
+
+.route-item--go-transit .swatch {
+  width: 23px;
+  height: 23px;
+  border-width: 2px;
+}
+
+.route-item--go-transit .route-name {
+  flex: 1 1 auto;
+  font-size: 15px;
+  text-align: left;
+  white-space: nowrap;
+}
+
 .route-item {
   display: flex;
   align-items: center;
@@ -617,6 +778,47 @@ body {
 .route-item--display {
   background: rgba(0, 0, 0, 0.04);
   pointer-events: none;
+}
+
+.route-item--ontario-northland {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "swatch name"
+    "details details";
+  row-gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(0, 33, 77, 0.07);
+  border: 1px solid rgba(0, 33, 77, 0.12);
+  box-sizing: border-box;
+}
+
+.route-item--ontario-northland .swatch {
+  grid-area: swatch;
+  background: #00214d !important;
+  box-shadow: 0 0 0 2px rgba(230, 176, 18, 0.8);
+}
+
+.route-item--ontario-northland .route-name {
+  grid-area: name;
+  justify-self: start;
+  flex: 0 0 auto;
+  color: #00214d;
+}
+
+.route-details {
+  grid-area: details;
+  width: 100%;
+  margin-left: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .route-item:hover {
@@ -693,8 +895,8 @@ body {
   width: 100%;
   max-width: min(30vw, 400px);
   min-width: 240px;
-  height: 300px;
-  height: clamp(240px, 30vh, 400px);
+  height: 250px;
+  height: clamp(210px, 25vh, 280px);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1001,7 +1203,7 @@ body {
   border: none;
   border-radius: 999px;
   color: var(--brand-primary);
-  font: 600 11px/1.2 var(--font-body);
+  font: 700 13px/1.2 var(--font-body);
   letter-spacing: 0.04em;
   padding: 4px 11px;
   text-align: center;
@@ -1060,8 +1262,8 @@ body {
 
 .stop-highlight-note {
   font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: none;
   opacity: 0.9;
@@ -1069,7 +1271,7 @@ body {
 
 .stop-highlight[data-stop="9005"] .stop-highlight-note,
 .stop-highlight[data-stop="9002"] .stop-highlight-note {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 /* Enhanced BATT Stop Styling */
@@ -1109,7 +1311,7 @@ body {
 .stop-highlight[data-stop="9005"] .stop-highlight-note {
   color: #ffffff;
   font-weight: 800;
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: 0.1em;
   margin-top: 4px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
@@ -1122,12 +1324,12 @@ body {
   bottom: 0;
   left: 0;
   width: 100%;
-  padding: 20px 28px;
+  padding: 14px 24px;
   background: linear-gradient(90deg, var(--transit-blue), var(--transit-blue-dark));
   border-top: 3px solid var(--brand-accent);
   color: #ffffff;
   font-family: var(--font-display);
-  font-size: 36px;
+  font-size: clamp(27px, 2.2vw, 32px);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: none;
@@ -1183,8 +1385,8 @@ body {
 
 .town-image-container {
   width: 100%;
-  max-width: 300px;
-  aspect-ratio: 1365 / 922;
+  max-width: 340px;
+  aspect-ratio: 16 / 9;
   border-radius: var(--radius-lg);
   overflow: hidden;
   background: rgba(255, 255, 255, 0.42);
@@ -1197,6 +1399,45 @@ body {
   position: relative;
   flex-shrink: 0;
   animation: panel-reveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.4s both;
+}
+
+.map-coverage-badge {
+  position: absolute;
+  left: 50%;
+  bottom: 78px;
+  z-index: 455;
+  transform: translateX(-50%);
+  max-width: calc(100% - 760px);
+  padding: 9px 18px;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  background: rgba(0, 78, 128, 0.94);
+  color: #ffffff;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.map-coverage-badge span,
+.map-coverage-badge small {
+  display: block;
+}
+
+.map-coverage-badge small {
+  margin-top: 3px;
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.15;
+  text-transform: none;
 }
 
 .town-image {
@@ -1244,8 +1485,8 @@ body {
 
 @media (max-height: 860px) {
   .map-overlay-frame {
-    padding-top: clamp(58px, 6vh, 68px);
-    padding-bottom: clamp(20px, 3vh, 32px);
+    padding-top: 84px;
+    padding-bottom: 64px;
   }
 
   .stop-legend {
@@ -1269,11 +1510,11 @@ body {
   }
 
   .stop-legend-list dt {
-    font-size: 20px;
+    font-size: 21px;
   }
 
   .stop-legend-list dd {
-    font-size: 15px;
+    font-size: 16px;
   }
 
   .mini-map {
@@ -1284,6 +1525,7 @@ body {
   .mini-map__title {
     font-size: clamp(16px, 1.6vw, 20px);
   }
+
 }
 
 @media (max-width: 900px) {

@@ -1,6 +1,6 @@
-# Barrie Transit Lightweight Live Map
+# Allandale Lightweight Live Transit Map
 
-A single-page Leaflet app that shows Barrie Transit routes, stops, and live vehicle positions. It is tuned for a limited Smart TV browser, so everything stays lightweight and simple.
+A single-page Leaflet app that shows Barrie Transit routes and live vehicle positions, Ontario Northland buses serving Barrie Allandale Terminal, and GO Transit route 68 buses and Barrie line trains while they are in the Barrie map area. It is tuned for a limited Smart TV browser, so everything stays lightweight and simple.
 
 ## Requirements
 - Node.js 22
@@ -11,6 +11,8 @@ A single-page Leaflet app that shows Barrie Transit routes, stops, and live vehi
 2. Edit `.env` and update the values:
    - Keep `GTFS_STATIC_URL=https://www.myridebarrie.ca/gtfs/google_transit.zip`.
    - Set `GTFS_RT_VEHICLES_URL` to your exact Vehicle Positions protobuf URL (for example `https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb`).
+   - Keep the four `ONTARIO_NORTHLAND_*` feed URLs from `.env.example`; set `ONTARIO_NORTHLAND_ENABLED=false` only if that source must be disabled.
+   - Set `METROLINX_API_KEY` to the server-side Metrolinx Open Data API key and leave `GO_TRANSIT_ENABLED=true`.
    - Leave `MAPTILER_KEY` blank to use OpenStreetMap tiles, or supply your MapTiler key if you have one.
    - Leave `POLL_MS=10000` unless you need a different polling interval.
    - Optional: set `BASE_PATH` if the app is hosted from a subdirectory (for example `/transit`).
@@ -28,9 +30,9 @@ npm install
 ```bash
 npm run build
 ```
-This bundles the frontend into `frontend/dist/` (hashed assets for long-lived caching) and downloads the GTFS ZIP to regenerate cached GeoJSON in `cache/`.
+This bundles the frontend into `frontend/dist/` (hashed assets for long-lived caching), refreshes Barrie GTFS GeoJSON, creates a compact Ontario Northland layer containing only the routes that serve Barrie, and creates GO bus/train layers containing only trips serving Allandale stops `08049` and `AD`.
 
-> Tip: Run `npm run build:data -- --force-refresh` if you only need to refresh the GTFS cache. `npm run build:frontend` rebuilds the SPA bundle by itself.
+> Tip: Run `npm run build:northland` to refresh only Ontario Northland data, `npm run build:go` to refresh only GO Allandale data, or `npm run build:frontend` to rebuild the SPA bundle by itself.
 
 ## 4. Start the server
 ```bash
@@ -49,9 +51,18 @@ This builds any missing GeoJSON caches, starts the frontend watcher, and launche
 Open [http://localhost:3000](http://localhost:3000) in a browser (or on the Smart TV). You should see:
 - Colored routes immediately after the page loads. Use the legend checkboxes (or the Show All / Hide All buttons) to control which routes are visible.
 - Bus markers appear after the first realtime poll (default ~10 seconds) once `GTFS_RT_VEHICLES_URL` is set.
+- Ontario Northland buses on routes 101, 102, 201, and 202 appear with an **ON** badge. Their popup keeps the exact intercity route, destination, and live Allandale arrival when supplied by the trip-update feed.
+- GO route 68 buses and Barrie line trains appear only while they are inside the Barrie map bounds. Other GO routes, stops, and vehicles are excluded.
 - Highlighted stops display short codes on the map; use the left-side panel to see the full stop names those abbreviations represent.
 - When buses stack at the same location (for example the downtown terminal), the icon consolidates into a combined pill that lists every route present, keeping the map readable.
 - A banner if the realtime feed is temporarily unavailable (bus icons are hidden while it is offline).
+- Ontario Northland service alerts are intentionally neither requested nor published; this map is focused on route and live-vehicle tracking.
+
+The terminal-focused displays are available at `/platform.map` and `/batt.map`. Both consume the same merged, freshness-checked vehicle endpoint and show Ontario Northland and GO vehicles when they enter the calibrated Allandale platform area.
+
+### Metrolinx data notice
+
+Data used in this product or service is provided with the permission of Metrolinx. Metrolinx makes no representations or warranties of any kind, express or implied, with respect to the Data and assumes no responsibility for the accuracy or currency of the data used in this product or service.
 
 ## Service notice TV display
 
@@ -69,6 +80,8 @@ For the terminal TV, disable its sleep/screensaver setting and bookmark the prod
 ## Useful scripts
 - `npm run build` - bundle the frontend and rebuild GeoJSON caches.
 - `npm run build:data` - regenerate the cached GeoJSON from the latest GTFS ZIP.
+- `npm run build:northland` - refresh the Barrie-serving Ontario Northland route and trip metadata.
+- `npm run build:go` - refresh only GO route 68 and Barrie line data serving Allandale.
 - `npm run build:frontend` - produce hashed frontend assets in `frontend/dist/`.
 - `npm run watch:frontend` - development watcher that rebuilds the frontend bundle on changes.
 - `npm start` - run the Express server.
@@ -85,9 +98,13 @@ barrie-bus/
   scripts/
     build-frontend.js # Bundles the SPA and fingerprints static assets
     build-geojson.js  # Downloads GTFS static feed and writes GeoJSON caches
+    build-ontario-northland.js # Builds the clipped Ontario Northland layer
+    build-go-transit.js # Builds GO layers limited to Allandale-serving trips
   server/
     server.js        # Express server, REST endpoints, static hosting
     vehicles.js      # Optional GTFS-Realtime fetch/convert helper
+    ontario-northland.js # Ontario Northland vehicles, trip updates, and alerts
+    go-transit.js  # Metrolinx vehicles filtered to Allandale routes and Barrie bounds
   cache/             # Generated GeoJSON (routes/stops) after build:data
   .env               # Local configuration (ignored by Git)
   .env.example       # Template for the environment variables
@@ -98,6 +115,7 @@ barrie-bus/
 
 ## Realtime feed notes
 - The map checks the timestamps inside the feed instead of treating every HTTP 200 response as live.
+- `/api/vehicles.json` reports per-agency status under `sources.barrie_transit`, `sources.ontario_northland`, and `sources.go_transit`.
 - Data older than `FEED_DELAYED_AFTER_MIN` (default 2 minutes) is labelled **DELAYED**. Data older than `FEED_STALE_AFTER_MIN` (default 15 minutes), a failed request, or a missing timestamp is labelled **OFFLINE**.
 - If the realtime feed is delayed, the map dims the vehicle markers and shows their actual last-reported time. If the feed is offline, all bus icons are hidden. In both cases the map displays a warning banner and retries automatically.
 - Buses that do not update for 60 seconds are removed automatically.
@@ -107,6 +125,7 @@ barrie-bus/
 - Set `BASE_PATH` to match the subdirectory where the app is hosted so all frontend fetches resolve correctly (for example `/apps/bus-map`).
 - Populate `ALLOWED_ORIGINS` with the canonical production origins (e.g. `https://kiosk.example.com`) when exposing the API publicly; requests from other origins will be rejected with HTTP 403.
 - Use `npm run build` during CI/CD to generate both the frontend bundle and GeoJSON caches before deploying static artifacts.
+- Configure `METROLINX_API_KEY` as a runtime secret. Never place it in `vercel.json` or commit it to the repository.
 - The Express API honours `CACHE_DIR` (advanced) allowing alternate cache storage paths in containerized or test environments.
 - The bus monitor's scheduled production runner is Railway Cron (`railway.json`), which runs at `3,13,23,33,43,53 * * * *` UTC. The Railway service must use a persistent volume mounted at `/app/monitor/cache` so missing-bus state survives between runs.
 - `.github/workflows/bus-monitor.yml` is now a manual backup only. Do not re-enable its schedule unless Railway is disabled first, otherwise duplicate notification emails can be sent.

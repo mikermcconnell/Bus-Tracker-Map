@@ -1,0 +1,4 @@
+interface:
+  display_name: "GTFS Expert"
+  short_description: "Audit, model, validate, and deploy GTFS feeds"
+  default_prompt: "Use $gtfs-expert to diagnose and safely validate this GTFS feed issue."
