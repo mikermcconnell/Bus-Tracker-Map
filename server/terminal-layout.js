@@ -16,6 +16,7 @@ const BARRIE_PLATFORM_LABELS = Object.freeze({
   '6|7B': 'Bear Creek',
   '12|8B': 'Crosstown Northbound',
   '13|12A': 'Georgian Mall',
+  '14|12B': 'Barrie South GO',
 });
 
 function cleanHeadsign(value, agencyId) {
@@ -67,12 +68,53 @@ function normalizeRoute(agencyId, trip, stopId) {
   };
 }
 
-function collectAssignments(metadata, agencyId, agencyName) {
+function localServiceDateKeys(nowMs, timeZone = TERMINAL_TIME_ZONE) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(nowMs));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const localDateAsUtc = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day)
+  );
+
+  return NEXT_DEPARTURE_DAY_OFFSETS.map((offset) => {
+    const date = new Date(localDateAsUtc + offset * 24 * 60 * 60 * 1000);
+    return [
+      date.getUTCFullYear(),
+      String(date.getUTCMonth() + 1).padStart(2, '0'),
+      String(date.getUTCDate()).padStart(2, '0'),
+    ].join('');
+  });
+}
+
+function nextDepartureForStop(metadata, trip, stop, nowSeconds, serviceDateKeys) {
+  const departureTime = stop && (stop.departure_time || stop.arrival_time);
+  if (!departureTime) return null;
+  let nextDeparture = null;
+  serviceDateKeys.forEach((serviceDate) => {
+    if (!isServiceActiveOnDate(metadata, trip && trip.service_id, serviceDate)) return;
+    const candidate = scheduledTimeToEpochSeconds(
+      serviceDate,
+      departureTime,
+      TERMINAL_TIME_ZONE
+    );
+    if (!Number.isFinite(candidate) || candidate < nowSeconds) return;
+    if (nextDeparture === null || candidate < nextDeparture) nextDeparture = candidate;
+  });
+  return nextDeparture;
+}
+
+function collectAssignments(metadata, agencyId, agencyName, nowSeconds) {
   const platformByStop = agencyId === 'barrie-transit'
     ? readStopPlatformMap(metadata)
     : PLATFORM_BY_EXTERNAL_STOP[agencyId] || {};
-  const assignments = [];
-  const seen = new Set();
+  const assignmentsByKey = new Map();
+  const serviceDateKeys = localServiceDateKeys(nowSeconds * 1000);
 
   Object.values(metadata && metadata.trips || {}).forEach((trip) => {
     (Array.isArray(trip && trip.terminal_stops) ? trip.terminal_stops : []).forEach((stop) => {
@@ -81,22 +123,40 @@ function collectAssignments(metadata, agencyId, agencyName) {
       if (!platform) return;
       const route = normalizeRoute(agencyId, trip, stopId);
       const key = [platform, agencyId, route.route_id].join('|');
-      if (seen.has(key)) return;
-      seen.add(key);
+      let assignment = assignmentsByKey.get(key);
+      if (!assignment) {
+        const configuredLabel = BARRIE_PLATFORM_LABELS[`${platform}|${route.route_id}`];
+        assignment = {
+          platform,
+          stop_id: stopId,
+          agency_id: agencyId,
+          agency_name: agencyName,
+          ...route,
+          destination: configuredLabel || route.destination || cleanHeadsign(trip.headsign, agencyId),
+          next_departure_time: null,
+          next_departure_source: null,
+        };
+        assignmentsByKey.set(key, assignment);
+      }
 
-      const configuredLabel = BARRIE_PLATFORM_LABELS[`${platform}|${route.route_id}`];
-      assignments.push({
-        platform,
-        stop_id: stopId,
-        agency_id: agencyId,
-        agency_name: agencyName,
-        ...route,
-        destination: configuredLabel || route.destination || cleanHeadsign(trip.headsign, agencyId),
-      });
+      const departure = nextDepartureForStop(
+        metadata,
+        trip,
+        stop,
+        nowSeconds,
+        serviceDateKeys
+      );
+      if (
+        departure !== null &&
+        (assignment.next_departure_time === null || departure < assignment.next_departure_time)
+      ) {
+        assignment.next_departure_time = departure;
+        assignment.next_departure_source = 'static';
+      }
     });
   });
 
-  return assignments;
+  return Array.from(assignmentsByKey.values());
 }
 
 function newestGeneratedAt(metadataList) {
@@ -110,12 +170,16 @@ function buildTerminalLayout({
   barrie = {},
   ontarioNorthland = {},
   goTransit = {},
+  now = Date.now(),
 } = {}) {
+  const parsedNow = now instanceof Date ? now.getTime() : Number(now);
+  const nowMs = Number.isFinite(parsedNow) ? parsedNow : Date.parse(now);
+  const nowSeconds = Number.isFinite(nowMs) ? nowMs / 1000 : Date.now() / 1000;
   const metadataList = [barrie, ontarioNorthland, goTransit];
   const assignments = []
-    .concat(collectAssignments(barrie, 'barrie-transit', 'Barrie Transit'))
-    .concat(collectAssignments(ontarioNorthland, 'ontario-northland', 'Ontario Northland'))
-    .concat(collectAssignments(goTransit, 'go-transit', 'GO Transit'))
+    .concat(collectAssignments(barrie, 'barrie-transit', 'Barrie Transit', nowSeconds))
+    .concat(collectAssignments(ontarioNorthland, 'ontario-northland', 'Ontario Northland', nowSeconds))
+    .concat(collectAssignments(goTransit, 'go-transit', 'GO Transit', nowSeconds))
     .sort((a, b) => (
       Number(a.platform) - Number(b.platform) ||
       a.agency_id.localeCompare(b.agency_id) ||
@@ -139,4 +203,10 @@ module.exports = {
   PLATFORM_BY_EXTERNAL_STOP,
   buildTerminalLayout,
   cleanHeadsign,
+  localServiceDateKeys,
 };
+const { scheduledTimeToEpochSeconds } = require('./terminal-progress');
+const { isServiceActiveOnDate } = require('../shared/gtfs-service-calendar');
+
+const TERMINAL_TIME_ZONE = 'America/Toronto';
+const NEXT_DEPARTURE_DAY_OFFSETS = Object.freeze([-1, 0, 1, 2, 3, 4, 5, 6, 7]);

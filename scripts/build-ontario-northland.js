@@ -6,13 +6,17 @@ const fetch = require('node-fetch');
 const AdmZip = require('adm-zip');
 const { parse } = require('csv-parse/sync');
 const bboxClip = require('@turf/bbox-clip').default;
+const { buildServiceCalendarMetadata } = require('../shared/gtfs-service-calendar');
 require('dotenv').config();
 
 const DEFAULT_STATIC_URL = 'https://ontarionorthland.tmix.se/gtfs/gtfs.zip';
 
-function readCsv(zip, name) {
+function readCsv(zip, name, options = {}) {
   const entry = zip.getEntry(name);
-  if (!entry) throw new Error(`${name} missing in Ontario Northland GTFS zip`);
+  if (!entry) {
+    if (options.optional) return [];
+    throw new Error(`${name} missing in Ontario Northland GTFS zip`);
+  }
   return parse(zip.readAsText(entry), {
     columns: true,
     skip_empty_lines: true,
@@ -70,6 +74,10 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
   const stopTimes = readCsv(zip, 'stop_times.txt');
   const trips = readCsv(zip, 'trips.txt');
   const shapes = readCsv(zip, 'shapes.txt');
+  const serviceCalendarMetadata = buildServiceCalendarMetadata(
+    readCsv(zip, 'calendar.txt', { optional: true }),
+    readCsv(zip, 'calendar_dates.txt', { optional: true })
+  );
 
   const barrieStops = stops.filter((stop) => {
     return /\bBARRIE\b/i.test(`${stop.stop_name || ''} ${stop.stop_desc || ''}`);
@@ -100,6 +108,8 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
     terminalStopsByTrip[tripId].push({
       stop_id: stopId,
       stop_sequence: stopSequence,
+      arrival_time: stopTime.arrival_time || null,
+      departure_time: stopTime.departure_time || stopTime.arrival_time || null,
     });
   });
 
@@ -133,6 +143,7 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
   barrieTrips.forEach((trip) => {
     tripMetadata[String(trip.trip_id)] = {
       route_id: String(trip.route_id),
+      service_id: String(trip.service_id || ''),
       headsign: trip.trip_headsign || null,
       shape_id: trip.shape_id || null,
       terminal_stops: (terminalStopsByTrip[String(trip.trip_id)] || [])
@@ -195,6 +206,7 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
       agency,
       barrie_stop_ids: Array.from(barrieStopIds).sort(),
       barrie_route_ids: Array.from(barrieRouteIds).sort(),
+      ...serviceCalendarMetadata,
       routes: routeMetadata,
       trips: tripMetadata,
     },

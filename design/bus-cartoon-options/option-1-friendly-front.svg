@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="300" viewBox="0 0 360 300" role="img" aria-labelledby="t d">
+  <title id="t">Friendly front-view cartoon bus</title><desc id="d">A rounded blue and white city bus viewed from the front.</desc>
+  <g stroke="#102d3c" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="180" cy="267" rx="105" ry="13" fill="#102d3c" opacity=".13" stroke="none"/>
+    <path d="M83 91c0-36 26-60 61-60h72c35 0 61 24 61 60v134c0 25-20 45-45 45H128c-25 0-45-20-45-45V91Z" fill="#f8fbfc" stroke-width="8"/>
+    <path d="M83 96h194v70H83Z" fill="#0d6795" stroke="none"/>
+    <path d="M105 60h150c8 9 13 20 16 34H89c3-14 8-25 16-34Z" fill="#0d6795" stroke="none"/>
+    <rect x="107" y="68" width="146" height="27" rx="11" fill="#172932" stroke-width="5"/>
+    <text x="180" y="88" fill="#ffd24b" stroke="none" font-family="Arial,sans-serif" font-size="18" font-weight="900" text-anchor="middle">CITY BUS</text>
+    <path d="M101 109c0-8 6-14 14-14h55v65h-69v-51Zm89-14h55c8 0 14 6 14 14v51h-69V95Z" fill="#8fd8ed" stroke-width="6"/>
+    <path d="m110 113 42-13-38 56m86-43 42-13-38 56" fill="none" stroke="#dff7ff" stroke-width="9" opacity=".8"/>
+    <path d="M112 181h136c11 0 20 9 20 20v23H92v-23c0-11 9-20 20-20Z" fill="#e8f1f4" stroke-width="6"/>
+    <rect x="124" y="191" width="112" height="20" rx="10" fill="#0d6795" stroke-width="5"/>
+    <path d="M143 229c16 10 58 10 74 0" fill="none" stroke-width="7"/>
+    <circle cx="110" cy="219" r="14" fill="#ffe16b" stroke-width="5"/><circle cx="250" cy="219" r="14" fill="#ffe16b" stroke-width="5"/>
+    <rect x="99" y="254" width="40" height="25" rx="10" fill="#253944" stroke-width="6"/><rect x="221" y="254" width="40" height="25" rx="10" fill="#253944" stroke-width="6"/>
+  </g>
+</svg>

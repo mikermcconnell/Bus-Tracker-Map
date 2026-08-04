@@ -1,10 +1,12 @@
 import AdmZip from 'adm-zip';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import {
   buildArtifactsFromZip,
 } from '../scripts/build-go-transit.js';
 import {
+  fetchGoTransitRealtime,
   parseVehicleFeed,
+  resetGoTransitCache,
 } from '../server/go-transit.js';
 
 function createStaticZip() {
@@ -53,6 +55,16 @@ function createStaticZip() {
       'other-shape,43.6500,-79.3700,2',
       '',
     ],
+    'calendar.txt': [
+      'service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date',
+      'weekday,1,1,1,1,1,0,0,20260701,20260831',
+      '',
+    ],
+    'calendar_dates.txt': [
+      'service_id,date,exception_type',
+      'weekday,20260803,2',
+      '',
+    ],
   };
   Object.entries(files).forEach(([name, lines]) => {
     zip.addFile(name, Buffer.from(lines.join('\n'), 'utf8'));
@@ -61,6 +73,111 @@ function createStaticZip() {
 }
 
 describe('GO Transit Allandale integration', () => {
+  test('can use a server-side proxy when the Metrolinx key is unavailable locally', async () => {
+    resetGoTransitCache();
+    const fetchImpl = async () => ({
+      ok: true,
+      json: async () => ({
+        feed_timestamp: 1785502325,
+        sources: { go_transit: { latest_data_timestamp: 1785502320 } },
+        vehicles: [
+          { id: 'go-transit:8451', agency_id: 'go-transit', route_label: 'GO 68' },
+          { id: 'barrie:1', agency_id: 'barrie-transit', route_id: '8B' },
+        ],
+      }),
+    });
+
+    const result = await fetchGoTransitRealtime({
+      enabled: true,
+      proxyUrl: 'https://example.test/api/vehicles.json',
+      fetchImpl,
+    });
+
+    expect(result.configured).toBe(true);
+    expect(result.feed_timestamp).toBe(1785502320);
+    expect(result.vehicles).toHaveLength(1);
+    expect(result.vehicles[0]).toMatchObject({
+      id: 'go-transit:8451',
+      agency_id: 'go-transit',
+      route_label: 'GO 68',
+    });
+    resetGoTransitCache();
+  });
+
+  test('treats a successful proxy poll as available when a stationary GO bus has old GPS data', async () => {
+    resetGoTransitCache();
+    const nowMs = 1785504165000;
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    const result = await fetchGoTransitRealtime({
+      enabled: true,
+      proxyUrl: 'https://example.test/api/vehicles.json',
+      fetchImpl: async () => ({
+        ok: true,
+        json: async () => ({
+          generated_at: nowMs,
+          sources: {
+            go_transit: {
+              feed_status: 'offline',
+              status_reason: 'stale',
+              latest_data_timestamp: 1785503186,
+            },
+          },
+          vehicles: [{
+            id: 'go-transit:8451',
+            agency_id: 'go-transit',
+            route_label: 'GO 68',
+            last_reported: 1785503186,
+          }],
+        }),
+      }),
+    });
+
+    expect(result.feed_timestamp).toBe(1785504165);
+    expect(result.vehicles[0].last_reported).toBe(1785503186);
+    nowSpy.mockRestore();
+    resetGoTransitCache();
+  });
+
+  test('uses the last successful GO response during a brief proxy failure', async () => {
+    resetGoTransitCache();
+    let nowMs = 1785504165000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => nowMs);
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      if (calls > 1) throw new Error('temporary proxy timeout');
+      return {
+        ok: true,
+        json: async () => ({
+          generated_at: nowMs,
+          sources: { go_transit: { feed_status: 'live', status_reason: 'fresh' } },
+          vehicles: [],
+        }),
+      };
+    };
+
+    const first = await fetchGoTransitRealtime({
+      enabled: true,
+      proxyUrl: 'https://example.test/api/vehicles.json',
+      fetchImpl,
+    });
+    nowMs += 6000;
+    const fallback = await fetchGoTransitRealtime({
+      enabled: true,
+      proxyUrl: 'https://example.test/api/vehicles.json',
+      fetchImpl,
+    });
+
+    expect(fallback).toMatchObject({
+      feed_timestamp: first.feed_timestamp,
+      stale_if_error: true,
+      configured: true,
+    });
+    expect(calls).toBe(2);
+    nowSpy.mockRestore();
+    resetGoTransitCache();
+  });
+
   test('static build keeps only trips serving the two Allandale records', () => {
     const barrieRoutes = {
       type: 'FeatureCollection',
@@ -86,11 +203,24 @@ describe('GO Transit Allandale integration', () => {
       mode: 'train',
     });
     expect(result.metadata.trips['bus-trip'].terminal_stops).toEqual([
-      { stop_id: '08049', stop_sequence: 1 },
+      {
+        stop_id: '08049',
+        stop_sequence: 1,
+        arrival_time: '12:00:00',
+        departure_time: '12:05:00',
+      },
     ]);
     expect(result.metadata.trips['train-trip'].terminal_stops).toEqual([
-      { stop_id: 'AD', stop_sequence: 1 },
+      {
+        stop_id: 'AD',
+        stop_sequence: 1,
+        arrival_time: '13:00:00',
+        departure_time: '13:05:00',
+      },
     ]);
+    expect(result.metadata.trips['bus-trip'].service_id).toBe('weekday');
+    expect(result.metadata.service_calendars.weekday.friday).toBe(true);
+    expect(result.metadata.service_exceptions['20260803'].weekday).toBe(2);
     expect(result.routes.features.map((feature) => feature.properties.route_id).sort())
       .toEqual(['GO-BUS', 'GO-TRAIN']);
   });

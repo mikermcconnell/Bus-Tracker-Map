@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460" height="280" viewBox="0 0 460 280" role="img" aria-labelledby="t d">
+  <title id="t">Side-profile cartoon bus</title><desc id="d">A cheerful streamlined blue and white city bus viewed from the side.</desc>
+  <g stroke="#102d3c" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="230" cy="242" rx="176" ry="15" fill="#102d3c" opacity=".13" stroke="none"/>
+    <path d="M55 72c0-19 15-34 34-34h248c34 0 62 20 73 51l17 49v65c0 18-14 32-32 32H66c-18 0-32-14-32-32V100c0-16 7-28 21-28Z" fill="#f9fcfd" stroke-width="8"/>
+    <path d="M38 142h383v52H38Z" fill="#0d6795" stroke="none"/>
+    <path d="m107 145 48 46h31l-48-46h-31Zm58 0 48 46h20l-48-46h-20Z" fill="#72c7e5" stroke="none"/>
+    <path d="M69 60h252c27 0 48 15 58 38H60V70c0-6 3-10 9-10Z" fill="#8fd8ed" stroke-width="6"/>
+    <path d="M121 61v82M195 61v82M269 61v82M337 70v73" fill="none" stroke-width="6"/>
+    <path d="m77 70 34-8-41 67m70-59 34-8-41 67m83-59 34-8-41 67" fill="none" stroke="#ddf7ff" stroke-width="10" opacity=".75"/>
+    <rect x="327" y="56" width="59" height="31" rx="11" fill="#172932" stroke-width="5"/>
+    <text x="356.5" y="78" fill="#ffd24b" stroke="none" font-family="Arial,sans-serif" font-size="17" font-weight="900" text-anchor="middle">BUS</text>
+    <path d="M45 194h372v22c0 11-9 19-20 19H65c-11 0-20-8-20-19v-22Z" fill="#e8f1f4" stroke-width="6"/>
+    <circle cx="113" cy="226" r="29" fill="#253944" stroke-width="7"/><circle cx="113" cy="226" r="11" fill="#9eb0b8" stroke-width="5"/>
+    <circle cx="353" cy="226" r="29" fill="#253944" stroke-width="7"/><circle cx="353" cy="226" r="11" fill="#9eb0b8" stroke-width="5"/>
+    <path d="M405 151h19v30h-19" fill="#ffe16b" stroke-width="5"/>
+  </g>
+</svg>

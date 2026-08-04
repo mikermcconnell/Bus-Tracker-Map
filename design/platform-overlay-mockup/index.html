@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Platform Map — Coded Map Labels Mockup</title>
+  <style>
+    :root{color-scheme:dark;--cyan:#00a8c8;--live:#58dd91;--warning:#f4c84c;--line:#294652;--navy:#071722}
+    *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#0f172a;color:#fff;font-family:"Segoe UI",Arial,sans-serif}
+    .screen{width:calc(100vw - 48px);height:calc(100vh - 48px);margin:24px;display:grid;grid-template-rows:94px 56px minmax(0,1fr) 60px;overflow:hidden;background:#fff;box-shadow:0 18px 50px #0008}
+    .topbar{padding:0 30px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;color:#fff;background:#030b11;border-bottom:2px solid var(--cyan)}
+    .eyebrow{color:#75d8ea;font-size:12px;font-weight:900;letter-spacing:.15em;text-transform:uppercase}.topbar h1{margin:4px 0 0;font-size:34px;line-height:1}.live{padding:9px 28px;border:1px solid #5f717a;border-radius:999px;color:var(--live);background:#ffffff12;font-weight:900;letter-spacing:.08em}.live::before{content:"";display:inline-block;width:10px;height:10px;margin-right:9px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor}.clock{text-align:right}.clock strong{display:block;font-size:34px;line-height:1}.clock span{color:#b9d5e4;font-size:11px;font-weight:800;letter-spacing:.06em}
+    .health{padding:0 28px;display:flex;align-items:center;gap:8px;color:#fff;background:#0a2637;border-bottom:1px solid #476b7b}.health span{padding:5px 10px;border:1px solid #67808c;border-radius:999px;font-size:11px;font-weight:800}.health i{display:inline-block;width:8px;height:8px;margin-right:5px;border-radius:50%;background:var(--live)}.health .off i{background:#fa7185}
+    .workspace{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 420px;background:#071722}
+    .map-stage{position:relative;min-width:0;overflow:hidden;background:#071722}.map-plane{position:absolute;top:-20%;left:calc(50% + 24px);height:145%;aspect-ratio:11659/9010;transform:translateX(-50%)}.map-plane>img{position:absolute;inset:0;width:100%;height:100%}
+    .scrub{position:absolute;z-index:2;border-radius:4px;background:#dce3e5f5;box-shadow:0 0 0 5px #dce3e588;backdrop-filter:blur(13px) saturate(.15)}
+    .platform{position:absolute;z-index:4;width:106px;min-width:0;overflow:visible;border:1px solid #4b7387;border-left:4px solid #7596a5;border-radius:7px;color:#fff;background:#071722f7;box-shadow:0 5px 12px #0006;transform:translateY(-1px)}
+    .platform::before{content:"";position:absolute;top:100%;left:50%;width:12px;height:21px;background:linear-gradient(#405965,#405965) top center/1px 15px no-repeat,radial-gradient(circle,#123343 0 3px,#fff 3px 5px,transparent 5px) bottom center/11px 11px no-repeat;transform:translateX(-50%);pointer-events:none}.platform[data-state="arriving"]{border-left-color:var(--warning)}.platform[data-state="here"]{border-left-color:var(--live)}
+    .platform-head{padding:6px 7px 5px 8px;display:flex;align-items:center;justify-content:space-between;gap:7px;border-radius:5px 5px 0 0;background:#004e80;border-bottom:1px solid #5f91aa}.platform-no{font-size:16px;font-weight:900;line-height:1}.state-dot{width:8px;height:8px;border-radius:50%;background:#a9c7d7}.platform[data-state="arriving"] .state-dot{background:var(--warning);box-shadow:0 0 7px #f4c84c99}.platform[data-state="here"] .state-dot{background:var(--live);box-shadow:0 0 7px #58dd9199}
+    .routes{padding:5px 7px 4px 8px;display:flex;flex-wrap:wrap;gap:4px}.route{min-width:30px;padding:4px 6px;border-radius:4px;color:#fff;background:#075f86;font-size:12px;font-weight:900;line-height:1;text-align:center}.route.black{background:#080808}.route.orange{background:#f58220}.route.pink{color:#111;background:#f49ac1}.route.green{background:#007a33}.route.on{color:#f4c126;background:#00214d}
+    .platform-status{padding:0 7px 6px 8px;color:#b7ced9;font-size:10px;font-weight:900;letter-spacing:.035em;line-height:1.05;text-transform:uppercase;white-space:nowrap}.platform[data-state="arriving"] .platform-status{color:#ffe07d}.platform[data-state="here"] .platform-status{color:#8ff0b9}
+    .platform--go{border-color:#75c998;border-left-color:#75c998;background:#062719f7}.platform--go .platform-head{border-color:#74bd91;background:#007a33}.platform--go .platform-status{color:#caefda}
+    .platform--northland{border-color:#e6b012;border-left-color:#e6b012;background:#06172df7;box-shadow:0 0 0 1px #e6b01266,0 5px 12px #0006}.platform--northland .platform-head{border-color:#b58d17;background:#00214d}.platform--northland .platform-no,.platform--northland .platform-status{color:#f2c533}
+    .stem{position:absolute;z-index:3;width:1px;height:18px;background:#405965;transform:translateX(-50%)}.stem::after{content:"";position:absolute;left:50%;bottom:-3px;width:7px;height:7px;border:2px solid #fff;border-radius:50%;background:#123343;transform:translateX(-50%)}
+    .directory{min-height:0;display:flex;flex-direction:column;color:#fff;background:#071722;border-left:1px solid #34505e}.directory>header{padding:17px 22px 12px;border-bottom:1px solid #294652}.directory h2{margin:0;font-size:28px}.directory header p{margin:2px 0 0;color:#90a8b2;font-size:12px}.rows{min-height:0;flex:1;display:grid;grid-template-rows:repeat(10,minmax(0,1fr))}.row{min-height:0;padding:6px 16px;display:grid;grid-template-columns:70px 1fr;align-items:center;gap:10px;border-bottom:1px solid #203846}.row.active{background:#0c2b24;box-shadow:inset 4px 0 #38c878}.row.arriving{background:#2a2517;box-shadow:inset 4px 0 #e8b72f}.row strong{font-size:18px}.row small{display:block;margin-top:2px;color:#8ca3ad;font-size:10px;font-weight:900;text-transform:uppercase}.service{display:grid;grid-template-columns:42px minmax(0,1fr);align-items:center;gap:9px;font-size:13px;font-weight:750}.service+.service{margin-top:3px}.directory-note{padding:8px 16px;color:#88a0aa;background:#06131c;font-size:10px}
+    .footer{padding:0 30px;display:flex;align-items:center;gap:18px;color:#fff;background:#00658a;border-top:2px solid var(--cyan);font-weight:800}.footer b{padding:6px 12px;border-radius:999px;color:#062235;background:#9ce8f3;font-size:12px}
+    /* Existing image-label masks and replacement positions, all relative to the undistorted map. */
+    .s12{left:5.8%;top:34.8%;width:18.8%;height:10.6%}.p12{left:5.8%;top:34.8%}.p13{left:15.2%;top:34.8%}.s6{left:27.3%;top:26.8%;width:11.3%;height:9.1%}.p6{left:27.3%;top:26.8%}.s7{left:38.1%;top:26.8%;width:11.8%;height:7.8%}.p7{left:39%;top:26.8%}.s8{left:49.3%;top:26.8%;width:11.3%;height:7.8%}.p8{left:50.8%;top:26.8%}.s5{left:27.4%;top:60.7%;width:10.6%;height:6.6%}.p5{left:27%;top:60.7%}.s4{left:37.6%;top:60.7%;width:10.2%;height:6.6%}.p4{left:37.8%;top:60.7%}.s3{left:47.3%;top:60.7%;width:10.2%;height:6.6%}.p3{left:48.4%;top:60.7%}.s1{left:75.6%;top:51.1%;width:13.4%;height:5.5%}.p1{left:75.7%;top:51.1%;width:124px}.s14{left:2.2%;top:71.3%;width:13.6%;height:7.9%}.p14{left:2.2%;top:71.3%;width:132px}
+    @media(max-width:1300px){.screen{margin:16px;width:calc(100vw - 32px);height:calc(100vh - 32px)}.workspace{grid-template-columns:minmax(0,1fr) 320px}.map-plane{left:calc(50% + 50px);height:115%;top:-14%}.platform{width:86px}.p1{width:102px}.p14{width:108px}.platform-no{font-size:13px}.route{min-width:25px;padding:3px 4px;font-size:10px}.platform-status{font-size:9px;letter-spacing:0}.directory>header{padding:12px 14px 9px}.directory h2{font-size:21px}.row{padding:5px 10px;grid-template-columns:57px 1fr}.row strong{font-size:14px}.service{grid-template-columns:34px 1fr;gap:6px;font-size:10px}.row small{font-size:8px}}
+  </style>
+</head>
+<body>
+<main class="screen">
+  <header class="topbar"><div><div class="eyebrow">Live terminal display</div><h1>Barrie Allandale Terminal</h1></div><div class="live">LIVE</div><div class="clock"><strong>1:14 PM</strong><span>UPDATED JUST NOW</span></div></header>
+  <div class="health"><span><i></i>BT Live</span><span><i></i>GO Live</span><span><i></i>ON Live</span><span class="off"><i></i>LINX locations unavailable</span></div>
+  <section class="workspace">
+    <div class="map-stage"><div class="map-plane">
+      <img src="../../frontend/src/platform-map/map.png" alt="Barrie Allandale terminal map">
+      <i class="scrub s12"></i><i class="scrub s6"></i><i class="scrub s7"></i><i class="scrub s8"></i><i class="scrub s5"></i><i class="scrub s4"></i><i class="scrub s3"></i><i class="scrub s1"></i><i class="scrub s14"></i>
+      <section class="platform p12" data-state="here"><div class="platform-head"><b class="platform-no">P12</b><i class="state-dot"></i></div><div class="routes"><b class="route black">8B</b></div><div class="platform-status">Departs 2 min</div></section>
+      <section class="platform p13"><div class="platform-head"><b class="platform-no">P13</b><i class="state-dot"></i></div><div class="routes"><b class="route pink">12A</b></div><div class="platform-status">Scheduled</div></section>
+      <section class="platform p6" data-state="arriving"><div class="platform-head"><b class="platform-no">P6</b><i class="state-dot"></i></div><div class="routes"><b class="route orange">7A</b><b class="route orange">7B</b></div><div class="platform-status">Arriving</div></section>
+      <section class="platform p7"><div class="platform-head"><b class="platform-no">P7</b><i class="state-dot"></i></div><div class="routes"><b class="route green">68</b></div><div class="platform-status">Scheduled</div></section>
+      <section class="platform platform--northland p8"><div class="platform-head"><b class="platform-no">P8</b><i class="state-dot"></i></div><div class="routes"><b class="route on">ON</b></div><div class="platform-status">Scheduled</div></section>
+      <section class="platform p5"><div class="platform-head"><b class="platform-no">P5</b><i class="state-dot"></i></div><div class="routes"><b class="route black">8A</b></div><div class="platform-status">Scheduled</div></section>
+      <section class="platform p4"><div class="platform-head"><b class="platform-no">P4</b><i class="state-dot"></i></div><div class="routes"><b class="route black">8B</b></div><div class="platform-status">Scheduled</div></section>
+      <section class="platform p3" data-state="arriving"><div class="platform-head"><b class="platform-no">P3</b><i class="state-dot"></i></div><div class="routes"><b class="route black">8A</b></div><div class="platform-status">Arriving</div></section>
+      <section class="platform platform--go p1"><div class="platform-head"><b class="platform-no">P1</b><i class="state-dot"></i></div><div class="routes"><b class="route green">TRAIN</b></div><div class="platform-status">Scheduled</div></section>
+      <section class="platform p14"><div class="platform-head"><b class="platform-no">STOP 14</b><i class="state-dot"></i></div><div class="routes"><b class="route pink">12B</b><b class="route">KP1</b></div><div class="platform-status">Scheduled</div></section>
+    </div></div>
+    <aside class="directory"><header><h2>Platforms</h2><p>Full service details and live terminal activity</p></header><div class="rows">
+      <div class="row active"><div><strong>P12</strong><small>At platform</small></div><div class="service"><b class="route black">8B</b><span>Crosstown Northbound · Departs in 2 min</span></div></div>
+      <div class="row arriving"><div><strong>P6</strong><small>Arriving</small></div><div><div class="service"><b class="route orange">7A</b><span>Grove</span></div><div class="service"><b class="route orange">7B</b><span>Bear Creek</span></div></div></div>
+      <div class="row"><div><strong>P13</strong><small>Scheduled</small></div><div class="service"><b class="route pink">12A</b><span>Georgian Mall</span></div></div>
+      <div class="row"><div><strong>P7</strong><small>Scheduled</small></div><div class="service"><b class="route green">68</b><span>Aurora / East Gwillimbury</span></div></div>
+      <div class="row"><div><strong>P8</strong><small>Scheduled</small></div><div class="service"><b class="route on">ON</b><span>Ontario Northland</span></div></div>
+      <div class="row"><div><strong>P5</strong><small>Scheduled</small></div><div class="service"><b class="route black">8A</b><span>RVH Northbound</span></div></div>
+      <div class="row"><div><strong>P4</strong><small>Scheduled</small></div><div class="service"><b class="route black">8B</b><span>Essa Southbound</span></div></div>
+      <div class="row arriving"><div><strong>P3</strong><small>Arriving</small></div><div class="service"><b class="route black">8A</b><span>Yonge Southbound</span></div></div>
+      <div class="row"><div><strong>P1</strong><small>Scheduled</small></div><div class="service"><b class="route green">TRAIN</b><span>Toronto / Union Station</span></div></div>
+      <div class="row"><div><strong>Stop 14</strong><small>Scheduled</small></div><div><div class="service"><b class="route pink">12B</b><span>Barrie South GO</span></div><div class="service"><b class="route">KP1</b><span>Kempenfest Shuttle North</span></div></div></div>
+    </div><div class="directory-note">Map labels provide quick status. The directory retains complete service details.</div></aside>
+  </section>
+  <footer class="footer"><b>SERVICE UPDATE</b><span>Sunday schedules on Monday, August 3.</span></footer>
+</main>
+</body>
+</html>

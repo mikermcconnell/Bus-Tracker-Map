@@ -6,15 +6,19 @@ const fetch = require('node-fetch');
 const AdmZip = require('adm-zip');
 const { parse } = require('csv-parse/sync');
 const bboxClip = require('@turf/bbox-clip').default;
+const { buildServiceCalendarMetadata } = require('../shared/gtfs-service-calendar');
 require('dotenv').config();
 
 const DEFAULT_STATIC_URL =
   'https://assets.metrolinx.com/raw/upload/Documents/Metrolinx/Open%20Data/GO-GTFS.zip';
 const ALLANDALE_STOP_IDS = new Set(['08049', 'AD']);
 
-function readCsv(zip, name) {
+function readCsv(zip, name, options = {}) {
   const entry = zip.getEntry(name);
-  if (!entry) throw new Error(`${name} missing in GO Transit GTFS zip`);
+  if (!entry) {
+    if (options.optional) return [];
+    throw new Error(`${name} missing in GO Transit GTFS zip`);
+  }
   return parse(zip.readAsText(entry), {
     columns: true,
     skip_empty_lines: true,
@@ -77,6 +81,10 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
   const stopTimes = readCsv(zip, 'stop_times.txt');
   const trips = readCsv(zip, 'trips.txt');
   const shapes = readCsv(zip, 'shapes.txt');
+  const serviceCalendarMetadata = buildServiceCalendarMetadata(
+    readCsv(zip, 'calendar.txt', { optional: true }),
+    readCsv(zip, 'calendar_dates.txt', { optional: true })
+  );
 
   const allandaleStops = stops.filter((stop) => {
     return ALLANDALE_STOP_IDS.has(String(stop.stop_id)) &&
@@ -108,6 +116,8 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
     terminalStopsByTrip[tripId].push({
       stop_id: stopId,
       stop_sequence: stopSequence,
+      arrival_time: stopTime.arrival_time || null,
+      departure_time: stopTime.departure_time || stopTime.arrival_time || null,
     });
   });
   const routeById = Object.fromEntries(routes.map((route) => [String(route.route_id), route]));
@@ -143,6 +153,7 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
   allandaleTrips.forEach((trip) => {
     tripMetadata[String(trip.trip_id)] = {
       route_id: String(trip.route_id),
+      service_id: String(trip.service_id || ''),
       headsign: trip.trip_headsign || null,
       shape_id: trip.shape_id || null,
       terminal_stops: (terminalStopsByTrip[String(trip.trip_id)] || [])
@@ -215,6 +226,7 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
       })),
       allandale_route_ids: Array.from(allandaleRouteIds).sort(),
       map_bounds: clipBounds,
+      ...serviceCalendarMetadata,
       routes: routeMetadata,
       trips: tripMetadata,
     },

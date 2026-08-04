@@ -27,6 +27,8 @@ test('main map loads its locally bundled Leaflet runtime', async ({ page }) => {
 
   await expect(page).toHaveTitle(/Find Your Bus/);
   await expect(page.locator('#map')).toHaveClass(/leaflet-container/);
+  await expect(page.locator('.leaflet-map-pane')).toHaveCSS('position', 'absolute');
+  await expect(page.locator('.leaflet-tile-pane')).toHaveCSS('position', 'absolute');
   await expect(page.locator('.map-title__main')).toHaveText('Find Your Bus');
   await expect(page.locator('.service-notice__heading')).toHaveText('Upcoming Holiday Service -');
   await expect(page.locator('.service-notice__text')).toContainText(
@@ -101,4 +103,96 @@ test('main map clears last-known vehicles when polling fails', async ({ page }) 
   failVehiclePolls = true;
   await expect(page.locator('.vehicle-bubble')).toHaveCount(0, { timeout: 8000 });
   await expect(page.locator('#banner')).toContainText('Bus icons are hidden');
+});
+
+test('terminal board shows a GO train departure countdown at Allandale', async ({ page }) => {
+  const errors = captureRuntimeErrors(page);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const transparentTile = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+
+  await page.route('**/review-tile/**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'image/png',
+    body: transparentTile,
+  }));
+  await page.route('**/api/config', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      poll_ms: 5000,
+      feed_delayed_after_ms: 120000,
+      feed_offline_after_ms: 900000,
+      base_path: '/',
+      tiles: '/review-tile/{z}/{x}/{y}.png',
+      rt_feed_configured: true,
+    }),
+  }));
+  await page.route('**/api/routes.geojson*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        properties: {
+          route_id: 'GO-TRAIN',
+          route_short_name: 'GO TRAIN',
+          route_long_name: 'Barrie',
+          route_color: '#003767',
+          route_text_color: '#FFFFFF',
+          route_mode: 'train',
+          agency_id: 'go-transit',
+          agency_name: 'GO Transit',
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: [[-79.69, 44.374], [-79.68, 44.373]],
+        },
+      }],
+    }),
+  }));
+  await page.route('**/api/vehicles.json?*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      generated_at: Date.now(),
+      feed_timestamp: nowSeconds,
+      latest_data_timestamp: nowSeconds,
+      feed_status: 'live',
+      vehicles: [{
+        id: 'go-train-allandale',
+        route_id: 'GO-TRAIN',
+        route_label: 'GO TRAIN',
+        route_mode: 'train',
+        agency_id: 'go-transit',
+        agency_name: 'GO Transit',
+        trip_headsign: 'Union Station GO',
+        lat: 44.3740170437343,
+        lon: -79.6899831810679,
+        last_reported: nowSeconds,
+        terminal_progress_status: 'departed',
+        terminal_departure_time: nowSeconds + 300,
+      }],
+      sources: {
+        go_transit: {
+          feed_status: 'delayed',
+          latest_data_timestamp: nowSeconds,
+          data_age_seconds: 0,
+        },
+      },
+    }),
+  }));
+
+  await page.goto('/');
+
+  const trainRow = page.locator('.nearby-bus[data-vehicle-id="go-train-allandale"]');
+  await expect(trainRow).toBeVisible();
+  await expect(trainRow.locator('.nearby-bus__route-agency')).toHaveText('GO');
+  await expect(trainRow.locator('.nearby-bus__distance-main')).toHaveText('At the terminal');
+  await expect(trainRow.locator('.nearby-bus__departure')).toHaveText('Departs in 5 min');
+  await expect(page.locator('#banner')).toBeHidden();
+  expect(errors).toEqual([]);
 });

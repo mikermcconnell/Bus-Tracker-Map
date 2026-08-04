@@ -158,8 +158,9 @@ describe('API smoke tests', () => {
     writeJson(path.join(cacheDir, 'barrie-transit.json'), {
       generated_at: '2026-07-30T18:42:08.922Z',
       source_url: 'https://example.test/google_transit.zip',
-      terminal_stop_ids: ['9003', '9013'],
+      terminal_stop_ids: ['14', '9003', '9013'],
       terminal_stops: [
+        { id: '14', name: 'Essa at Gowan', platform_code: '14' },
         { id: '9003', platform_code: '3' },
         { id: '9013', platform_code: '13' }
       ],
@@ -173,6 +174,11 @@ describe('API smoke tests', () => {
           route_id: '12A',
           headsign: 'GEORGIAN MALL',
           terminal_stops: [{ stop_id: '9013', stop_sequence: 20 }]
+        },
+        route12b: {
+          route_id: '12B',
+          headsign: 'BARRIE SOUTH GO',
+          terminal_stops: [{ stop_id: '14', stop_sequence: 1 }]
         }
       }
     });
@@ -183,9 +189,9 @@ describe('API smoke tests', () => {
     expect(res.headers['cache-control']).toContain('max-age=300');
     expect(res.body.assignments).toEqual([
       expect.objectContaining({ platform: '3', route_id: '8A', destination: 'Yonge Southbound' }),
-      expect.objectContaining({ platform: '13', route_id: '12A', destination: 'Georgian Mall' })
+      expect.objectContaining({ platform: '13', route_id: '12A', destination: 'Georgian Mall' }),
+      expect.objectContaining({ platform: '14', stop_id: '14', route_id: '12B', destination: 'Barrie South GO' })
     ]);
-    expect(res.body.assignments.some((entry) => entry.platform === '14')).toBe(false);
   });
 
   test('returns configured feed freshness thresholds to the browser', async () => {

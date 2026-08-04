@@ -90,11 +90,15 @@ function parseTripUpdates(feed, terminalStopIds) {
     });
     if (!terminalUpdate) return;
 
-    const event = terminalUpdate.arrival || terminalUpdate.departure || null;
+    const arrivalEvent = terminalUpdate.arrival || terminalUpdate.departure || null;
+    const departureEvent = terminalUpdate.departure || terminalUpdate.arrival || null;
     updates[String(tripId)] = {
       stop_id: String(terminalUpdate.stopId || ''),
-      arrival_time: readLong(event && event.time),
-      delay_seconds: event && Number.isFinite(Number(event.delay)) ? Number(event.delay) : null,
+      arrival_time: readLong(arrivalEvent && arrivalEvent.time),
+      departure_time: readLong(departureEvent && departureEvent.time),
+      delay_seconds: departureEvent && Number.isFinite(Number(departureEvent.delay))
+        ? Number(departureEvent.delay)
+        : null,
       stop_sequence: Number.isFinite(Number(terminalUpdate.stopSequence))
         ? Number(terminalUpdate.stopSequence)
         : null,
@@ -120,14 +124,21 @@ function parseAlerts(feed) {
     });
     if (!isActive) return;
 
+    const header = readTranslation(alert.headerText) || 'Ontario Northland service alert';
+    const description = readTranslation(alert.descriptionText);
+    const effect = Number.isFinite(Number(alert.effect)) ? Number(alert.effect) : null;
+    const cancellationText = `${header} ${description}`;
+    const isCancellation = effect === 1 || /\b(?:cancel(?:led|ed|lation)?|no service)\b/i.test(cancellationText);
+    if (!isCancellation) return;
+
     alerts.push({
       id: String(entity.id || `ontario-northland-alert-${alerts.length + 1}`),
       agency_id: 'ontario-northland',
       agency_name: 'Ontario Northland',
-      header: readTranslation(alert.headerText) || 'Ontario Northland service alert',
-      description: readTranslation(alert.descriptionText),
+      header,
+      description,
       cause: Number.isFinite(Number(alert.cause)) ? Number(alert.cause) : null,
-      effect: Number.isFinite(Number(alert.effect)) ? Number(alert.effect) : null,
+      effect,
     });
   });
 
@@ -160,6 +171,7 @@ function qualifyVehicle(vehicle, metadata, tripUpdates) {
     route_text_color: agency.text_color || '#E6B012',
     terminal_stop_id: terminalUpdate && terminalUpdate.stop_id || null,
     terminal_arrival_time: terminalUpdate && terminalUpdate.arrival_time || null,
+    terminal_departure_time: terminalUpdate && terminalUpdate.departure_time || null,
     terminal_delay_seconds: terminalUpdate && terminalUpdate.delay_seconds,
   }, {
     terminalStopIds: metadata.barrie_stop_ids,

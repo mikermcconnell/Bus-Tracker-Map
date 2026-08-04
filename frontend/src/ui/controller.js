@@ -119,14 +119,31 @@ export function createUiController() {
     const distance = document.createElement('strong');
     distance.className = 'nearby-bus__distance';
 
+    const distanceMain = document.createElement('span');
+    distanceMain.className = 'nearby-bus__distance-main';
+
+    const departure = document.createElement('small');
+    departure.className = 'nearby-bus__departure';
+
     details.appendChild(title);
     details.appendChild(agency);
+    distance.appendChild(distanceMain);
+    distance.appendChild(departure);
     route.appendChild(routeAgency);
     route.appendChild(routeCode);
     item.appendChild(route);
     item.appendChild(details);
     item.appendChild(distance);
-    item.__nearbyParts = { route, routeAgency, routeCode, title, agency, distance };
+    item.__nearbyParts = {
+      route,
+      routeAgency,
+      routeCode,
+      title,
+      agency,
+      distance,
+      distanceMain,
+      departure,
+    };
     return item;
   }
 
@@ -145,11 +162,17 @@ export function createUiController() {
     parts.routeCode.textContent = String(entry.routeCode || entry.routeLabel || 'Bus');
     parts.route.style.setProperty('--route-color', String(entry.color || '#004e80'));
     parts.route.style.setProperty('--route-text-color', String(entry.textColor || '#ffffff'));
-    parts.title.textContent = entry.destination
+    const destination = entry.destination
       ? String(entry.destination)
       : String(entry.agencyLabel || 'Live bus');
-    parts.agency.textContent = String(entry.serviceLabel || entry.agencyLabel || 'Live vehicle');
-    parts.distance.textContent = String(entry.distanceLabel || '');
+    const serviceLabel = String(entry.serviceLabel || entry.agencyLabel || 'Live vehicle');
+    parts.title.textContent = destination;
+    parts.agency.textContent = entry.directionLabel
+      ? `${String(entry.directionLabel)} · ${serviceLabel}`
+      : serviceLabel;
+    parts.distanceMain.textContent = String(entry.distanceLabel || '');
+    parts.departure.textContent = String(entry.departureLabel || '');
+    parts.departure.hidden = !entry.departureLabel;
   }
 
   function renderNearbyVehicles(rows) {

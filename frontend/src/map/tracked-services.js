@@ -166,6 +166,8 @@ export function buildNearbyRenderSignature(rows) {
       terminalStatus: String(entry && entry.terminalStatus || ''),
       distanceMeters: Math.round(Number(entry && entry.distanceMeters) || 0),
       distanceLabel: String(entry && entry.distanceLabel || ''),
+      departureLabel: String(entry && entry.departureLabel || ''),
+      directionLabel: String(entry && entry.directionLabel || ''),
       color: String(entry && entry.color || ''),
       textColor: String(entry && entry.textColor || '')
     }))

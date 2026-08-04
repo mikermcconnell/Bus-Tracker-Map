@@ -147,7 +147,8 @@ const ONTARIO_NORTHLAND_TRIP_UPDATES_URL =
 const ONTARIO_NORTHLAND_ALERTS_URL =
   process.env.ONTARIO_NORTHLAND_GTFS_RT_ALERTS_URL || DEFAULT_ONTARIO_NORTHLAND_ALERTS_URL;
 const METROLINX_API_KEY = String(process.env.METROLINX_API_KEY || '').trim();
-const GO_TRANSIT_ENABLED = Boolean(METROLINX_API_KEY) && !/^(?:0|false|no|off)$/i.test(
+const GO_TRANSIT_PROXY_URL = String(process.env.GO_TRANSIT_PROXY_URL || '').trim();
+const GO_TRANSIT_ENABLED = Boolean(METROLINX_API_KEY || GO_TRANSIT_PROXY_URL) && !/^(?:0|false|no|off)$/i.test(
   String(process.env.GO_TRANSIT_ENABLED || 'true').trim()
 );
 const METROLINX_API_BASE =
@@ -263,6 +264,7 @@ async function getCombinedVehiclePayload() {
   const goTransitPromise = fetchGoTransitRealtime({
     enabled: GO_TRANSIT_ENABLED,
     apiKey: METROLINX_API_KEY,
+    proxyUrl: GO_TRANSIT_PROXY_URL,
     apiBase: METROLINX_API_BASE,
     cacheDir: CACHE_DIR,
   });
@@ -323,6 +325,7 @@ async function getCombinedVehiclePayload() {
     configured: GO_TRANSIT_ENABLED,
     delayedAfterMs: FEED_DELAYED_AFTER_MS,
     offlineAfterMs: FEED_OFFLINE_AFTER_MS,
+    preferFeedTimestamp: true,
   });
 
   const data = {

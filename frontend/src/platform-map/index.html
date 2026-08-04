@@ -31,12 +31,26 @@
         <div id="terminal-empty" class="terminal-empty" role="status" hidden>No live vehicles in the terminal area</div>
       </section>
 
-      <div class="map-stage">
-        <div class="map-plane">
-          <img src="./assets/map.png" alt="Barrie Allandale Transit Terminal platform layout" class="map-image" id="map-image">
-          <section id="assignment-layer" class="assignment-layer" aria-label="Scheduled platform assignments"></section>
-          <div id="bus-layer" class="bus-layer" aria-label="Live vehicles"></div>
+      <div class="platform-workspace">
+        <div class="map-stage">
+          <div class="map-plane">
+            <object
+              data="./assets/allandale-basemap.svg"
+              type="image/svg+xml"
+              aria-label="Barrie Allandale Transit Terminal platform layout"
+              class="map-image"
+              id="map-image"
+            >Barrie Allandale Transit Terminal platform layout</object>
+            <section id="map-platform-layer" class="map-platform-layer" aria-label="Platform locations and scheduled routes"></section>
+            <div id="bus-layer" class="bus-layer" aria-label="Live vehicles"></div>
+          </div>
         </div>
+        <aside class="platform-directory" aria-labelledby="platform-directory-title">
+          <header class="platform-directory__header">
+            <h2 id="platform-directory-title">Departures by platform</h2>
+          </header>
+          <section id="assignment-layer" class="assignment-layer" aria-label="Scheduled platform assignments"></section>
+        </aside>
       </div>
 
       <footer class="platform-footer">
