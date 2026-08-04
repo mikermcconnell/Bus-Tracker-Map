@@ -127,7 +127,26 @@ h1,
   text-overflow: ellipsis;
 }
 
-.departure-time { font-variant-numeric: tabular-nums; }
+.departure-time {
+  gap: clamp(5px, .55vw, 10px);
+  font-variant-numeric: tabular-nums;
+}
+
+.departure-status {
+  flex: 0 0 auto;
+  padding: clamp(3px, .35vh, 5px) clamp(4px, .35vw, 7px);
+  border: 2px solid #4d4f50;
+  border-radius: 3px;
+  color: #222;
+  font: 700 clamp(10px, .78vw, 15px)/1 Arial, sans-serif;
+  letter-spacing: .035em;
+}
+
+.departure-time--live .departure-status {
+  border-color: #087844;
+  background: #087844;
+  color: #fff;
+}
 
 .platform {
   justify-content: center;

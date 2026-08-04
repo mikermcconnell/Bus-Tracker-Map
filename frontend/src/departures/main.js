@@ -57,8 +57,19 @@ function scheduledDeparture(row) {
   return Number(row.scheduled_departure_time || row.expected_departure_time);
 }
 
+function displayedDeparture(row) {
+  const expected = Number(row.expected_departure_time);
+  const live = row.departure_source === 'realtime' && Number.isFinite(expected);
+  return {
+    time: live ? expected : scheduledDeparture(row),
+    live,
+    label: live ? 'LIVE' : 'SCHED',
+    description: live ? 'Live prediction' : 'Scheduled time',
+  };
+}
+
 function compareDepartures(left, right) {
-  return scheduledDeparture(left) - scheduledDeparture(right) ||
+  return displayedDeparture(left).time - displayedDeparture(right).time ||
     Number(left.platform) - Number(right.platform) ||
     String(left.route_label || '').localeCompare(String(right.route_label || ''));
 }
@@ -75,13 +86,16 @@ function renderDepartures(rows) {
     const agencyKey = String(row.agency_id || '').replace(/-/g, '_');
     const agency = AGENCIES[agencyKey] || { name: row.agency_name, short: row.agency_name, logo: '' };
     const bay = platform(row);
-    const displayedDeparture = scheduledDeparture(row);
+    const departure = displayedDeparture(row);
     const logo = agency.logo ? `<img src="${asset(agency.logo)}" alt="">` : '';
     return `<li class="departure agency-${escapeHtml(agencyKey)}">
       <div class="agency-logo">${logo}<span class="visually-hidden">${escapeHtml(agency.name)}</span></div>
       <div class="route">${escapeHtml(row.route_label)}</div>
       <div class="destination">${escapeHtml(String(row.destination || 'Destination unavailable').toUpperCase())}</div>
-      <div class="departure-time" data-departure-time="${displayedDeparture}">${departureLabel(displayedDeparture)}</div>
+      <div class="departure-time departure-time--${departure.live ? 'live' : 'scheduled'}">
+        <span class="departure-status" aria-label="${departure.description}">${departure.label}</span>
+        <span data-departure-time="${departure.time}">${departureLabel(departure.time)}</span>
+      </div>
       <div class="platform"><span>${escapeHtml(bay.label)}</span><strong>${escapeHtml(bay.number)}</strong></div>
     </li>`;
   }).join('');

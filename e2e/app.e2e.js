@@ -145,7 +145,7 @@ test('departures board shows every departure in the one-hour window without scro
           platform: index === 0 ? '1' : index === 10 ? '7' : index === 5 ? '8' : '3',
           platform_type: 'platform',
           scheduled_departure_time: nowSeconds + (index + 1) * 300,
-          expected_departure_time: nowSeconds + (index + 1) * 300,
+          expected_departure_time: nowSeconds + (index + 1) * 300 + (index === 0 ? 120 : 0),
           departure_source: index % 2 ? 'scheduled' : 'realtime',
         })).reverse(),
         sources: {
@@ -163,6 +163,9 @@ test('departures board shows every departure in the one-hour window without scro
   await expect(page.locator('.departure')).toHaveCount(11);
   await expect(page.locator('.destination').first()).toContainText('TORONTO');
   await expect(page.locator('.platform strong').first()).toHaveText('01');
+  await expect(page.locator('.departure').first().locator('.departure-status')).toHaveText('LIVE');
+  await expect(page.locator('.departure').first().locator('[data-departure-time]')).toHaveAttribute('data-departure-time', String(nowSeconds + 420));
+  await expect(page.locator('.departure').nth(1).locator('.departure-status')).toHaveText('SCHED');
   await expect(page.locator('.departure').nth(10).locator('.route')).toHaveText('68');
   await expect(page.locator('.departure').nth(10).locator('.destination')).toHaveText('BARRIE / NEWMARKET');
   await expect(page.locator('.departure').first()).toHaveCSS('background-color', 'rgb(217, 217, 216)');
