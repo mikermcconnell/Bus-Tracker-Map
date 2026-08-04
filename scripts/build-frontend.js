@@ -47,6 +47,7 @@ const entryPoints = [
     key: 'platformMap',
     entryPath: path.join(srcDir, 'platform-map', 'main.js'),
     cssPath: path.join(srcDir, 'platform-map', 'styles.css'),
+    includeLeafletCss: true,
     templatePath: path.join(srcDir, 'platform-map', 'index.html'),
     outputHtml: 'platform.map.html'
   },

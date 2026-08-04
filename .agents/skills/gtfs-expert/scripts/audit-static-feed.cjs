@@ -25,6 +25,7 @@ Options:
   --station <stop id-or-name>           Show station children and route usage
   --routes <route ids-or-short-names>   Comma-separated route filter
   --expect-transfer <from,to,type,min>  Require a transfer row; repeatable
+  --google                              Enforce Google Transit compatibility
   --json                                Emit JSON
   --help                                Show this help`);
 }
@@ -32,6 +33,7 @@ Options:
 function parseArgs(argv) {
   const args = {
     expectedTransfers: [],
+    google: false,
     json: false,
   };
 
@@ -82,6 +84,9 @@ function parseArgs(argv) {
       }
       case "--json":
         args.json = true;
+        break;
+      case "--google":
+        args.google = true;
         break;
       case "--help":
       case "-h":
@@ -311,7 +316,7 @@ function analyzeFeed(source, buffer, options) {
         `Transfer ${transfer.from_stop_id}->${transfer.to_stop_id} has invalid min_transfer_time`,
       );
     }
-    if (transferType === "1" && minTransferTime !== "") {
+    if (options.google && transferType === "1" && minTransferTime !== "") {
       errors.push(
         `Google Transit requires blank min_transfer_time for timed transfer ${transfer.from_stop_id}->${transfer.to_stop_id}`,
       );

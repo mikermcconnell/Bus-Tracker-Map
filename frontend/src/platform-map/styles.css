@@ -62,7 +62,7 @@ body {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(560px, 37%, 740px);
+  grid-template-columns: minmax(0, 1fr) clamp(620px, 43%, 860px);
   overflow: hidden;
   background: #dce6e9;
 }
@@ -94,6 +94,38 @@ body {
   border: 0;
   object-fit: fill;
   pointer-events: none;
+}
+
+.platform-basemap {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  overflow: hidden;
+  background: transparent;
+  pointer-events: none;
+}
+
+.platform-basemap .leaflet-control-attribution {
+  margin: 0;
+  padding: 2px 5px;
+  color: #213845;
+  background: rgba(255, 255, 255, 0.86);
+  font-size: 9px;
+  line-height: 1.15;
+}
+
+.platform-basemap .leaflet-control-attribution a {
+  color: #075f7b;
+}
+
+.map-plane--live-basemap .map-image {
+  opacity: 0;
+}
+
+.map-plane--live-basemap .map-platform-scrub,
+.map-plane--live-basemap .map-landmark-scrub,
+.map-plane--live-basemap .map-edge-mask {
+  display: none;
 }
 
 .platform-header {
@@ -656,13 +688,13 @@ body {
 
 .platform-directory__header {
   flex: 0 0 auto;
-  padding: clamp(8px, 0.5vw, 10px) clamp(16px, 1.2vw, 24px);
+  padding: clamp(10px, 0.65vw, 13px) clamp(18px, 1.25vw, 26px);
   border-bottom: 1px solid #243d4a;
 }
 
 .platform-directory__header h2 {
   margin: 0;
-  font-size: clamp(27px, 1.75vw, 36px);
+  font-size: clamp(32px, 1.95vw, 40px);
   font-weight: 800;
   letter-spacing: -0.015em;
   line-height: 1;
@@ -698,12 +730,12 @@ body {
 .platform-card {
   position: relative;
   min-width: 0;
-  min-height: clamp(48px, 4.9vh, 54px);
-  padding: 2px clamp(14px, 0.95vw, 19px);
+  min-height: clamp(56px, 5.6vh, 62px);
+  padding: 3px clamp(14px, 1.05vw, 22px);
   display: grid;
-  grid-template-columns: clamp(100px, 5.8vw, 112px) minmax(0, 1fr);
+  grid-template-columns: clamp(94px, 5.6vw, 112px) clamp(70px, 4.6vw, 82px) minmax(0, 1fr);
   align-items: center;
-  gap: clamp(7px, 0.7vw, 12px);
+  gap: clamp(10px, 0.75vw, 14px);
   overflow: hidden;
   color: #f8fafc;
   background: #0a1c27;
@@ -718,10 +750,28 @@ body {
   gap: 0.25em;
 }
 
+.platform-card__agency {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+}
+
+.platform-card__agency-logo {
+  display: block;
+  width: clamp(64px, 4.2vw, 76px);
+  height: clamp(32px, 3.7vh, 40px);
+  padding: 4px 5px;
+  border-radius: 5px;
+  background: #fff;
+  object-fit: contain;
+}
+
 .platform-card__title {
   margin: 0;
   min-width: 0;
-  font-size: clamp(27px, 1.58vw, 33px);
+  font-size: clamp(31px, 1.75vw, 36px);
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
@@ -729,9 +779,9 @@ body {
 
 .platform-card__state {
   color: #90a4ad;
-  font-size: clamp(16px, 0.88vw, 18px);
+  font-size: clamp(17px, 0.96vw, 20px);
   font-weight: 800;
-  letter-spacing: 0.055em;
+  letter-spacing: 0.04em;
   line-height: 1;
   text-transform: uppercase;
   white-space: nowrap;
@@ -740,28 +790,28 @@ body {
 .platform-card__services {
   min-width: 0;
   display: grid;
-  gap: clamp(2px, 0.2vw, 4px);
+  gap: clamp(3px, 0.25vw, 6px);
 }
 
 .platform-card--multi-service .platform-card__service {
-  font-size: clamp(18px, 1.1vw, 22px);
+  font-size: clamp(20px, 1.16vw, 24px);
 }
 
 .platform-card--multi-service .platform-card__service-countdown {
-  font-size: clamp(18px, 1.08vw, 22px);
+  font-size: clamp(22px, 1.3vw, 27px);
 }
 
 .platform-card--multi-service .platform-card__service-scheduled {
-  font-size: clamp(9px, 0.62vw, 13px);
+  font-size: clamp(13px, 0.76vw, 16px);
 }
 
 .platform-card__service {
   min-width: 0;
   display: grid;
-  grid-template-columns: clamp(64px, 4vw, 82px) minmax(0, 1fr) clamp(104px, 6vw, 116px);
+  grid-template-columns: clamp(70px, 4.2vw, 88px) minmax(0, 1fr) clamp(108px, 6.3vw, 126px);
   align-items: center;
-  gap: clamp(6px, 0.55vw, 9px);
-  font-size: clamp(20px, 1.16vw, 24px);
+  gap: clamp(8px, 0.62vw, 12px);
+  font-size: clamp(22px, 1.3vw, 27px);
   line-height: 1.12;
 }
 
@@ -788,7 +838,7 @@ body {
   min-width: 0;
   overflow: hidden;
   color: #eef5f7;
-  font-weight: 760;
+  font-weight: 790;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -800,15 +850,19 @@ body {
   align-items: flex-end;
   justify-content: center;
   gap: 0.12em;
+  overflow: hidden;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
 .platform-card__service-countdown {
+  max-width: 100%;
+  overflow: hidden;
   color: #f8fafc;
-  font-size: clamp(20px, 1.18vw, 25px);
+  font-size: clamp(24px, 1.45vw, 30px);
   font-weight: 850;
   line-height: 1;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -819,14 +873,17 @@ body {
 .platform-card__service-countdown[data-departure-state="unavailable"],
 .platform-card__service-countdown[data-departure-state="past"] {
   color: #a8bbc4;
-  font-size: clamp(12px, 0.78vw, 16px);
+  font-size: clamp(14px, 0.9vw, 18px);
 }
 
 .platform-card__service-scheduled {
+  max-width: 100%;
+  overflow: hidden;
   color: #a8bbc4;
-  font-size: clamp(10px, 0.68vw, 14px);
+  font-size: clamp(14px, 0.82vw, 17px);
   font-weight: 750;
   line-height: 1;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -854,7 +911,7 @@ body {
 }
 
 .platform-connections {
-  min-height: 54px;
+  min-height: 60px;
   margin-top: auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -865,11 +922,11 @@ body {
 
 .platform-connection {
   min-width: 0;
-  padding: 5px clamp(8px, 0.65vw, 13px);
+  padding: 6px clamp(10px, 0.72vw, 15px);
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: auto clamp(44px, 3.2vw, 54px) auto minmax(0, 1fr);
   align-items: center;
-  gap: clamp(5px, 0.45vw, 9px);
+  gap: clamp(7px, 0.5vw, 10px);
 }
 
 .platform-connection + .platform-connection {
@@ -877,8 +934,17 @@ body {
 }
 
 .platform-connection__platform {
-  font-size: clamp(20px, 1.25vw, 26px);
+  font-size: clamp(24px, 1.45vw, 30px);
   line-height: 1;
+}
+
+.platform-connection__agency-logo {
+  width: clamp(40px, 2.8vw, 48px);
+  height: clamp(26px, 3vh, 32px);
+  padding: 3px 4px;
+  border-radius: 4px;
+  background: #fff;
+  object-fit: contain;
 }
 
 .platform-connection__route {
@@ -887,7 +953,7 @@ body {
   border-radius: 0.32em;
   color: #fff;
   background: #00658c;
-  font-size: clamp(15px, 0.92vw, 19px);
+  font-size: clamp(18px, 1.06vw, 22px);
   line-height: 1;
   text-align: center;
 }
@@ -896,23 +962,18 @@ body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  line-height: 1.05;
+  line-height: 1;
 }
 
 .platform-connection__stop {
   overflow: hidden;
-  font-size: clamp(14px, 0.84vw, 17px);
+  font-size: clamp(16px, 0.95vw, 20px);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .platform-connection__agency {
-  overflow: hidden;
-  color: #a8bbc4;
-  font-size: clamp(10px, 0.62vw, 13px);
-  font-weight: 750;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: none;
 }
 
 .platform-card--inactive {
@@ -922,6 +983,7 @@ body {
 
 .platform-card__inactive-text {
   min-width: 0;
+  grid-column: 3;
   color: #8fa2aa;
   font-size: clamp(8px, 0.65vw, 12px);
   font-weight: 700;
@@ -1240,7 +1302,7 @@ body {
 
 @media (max-aspect-ratio: 4/3) {
   .platform-workspace {
-    grid-template-columns: minmax(0, 1fr) 440px;
+    grid-template-columns: minmax(0, 1fr) clamp(520px, 46vw, 620px);
   }
 
   .map-stage {
@@ -1374,6 +1436,14 @@ body {
   .platform-card {
     min-height: 40px;
     padding-block: 1px;
+    grid-template-columns: 82px 58px minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .platform-card__agency-logo {
+    width: 54px;
+    height: 28px;
+    padding: 2px 3px;
   }
 
   .platform-card__title {
@@ -1385,21 +1455,23 @@ body {
   }
 
   .platform-card__service {
+    grid-template-columns: 62px minmax(0, 1fr) 96px;
+    gap: 6px;
     font-size: 18px;
   }
 
   .platform-card__service-countdown,
   .platform-card--multi-service .platform-card__service-countdown {
-    font-size: 18px;
+    font-size: 20px;
   }
 
   .platform-card--multi-service .platform-card__service {
-    font-size: 16px;
+    font-size: 17px;
   }
 
   .platform-card__service-scheduled,
   .platform-card--multi-service .platform-card__service-scheduled {
-    font-size: 9px;
+    display: none;
   }
 
   .platform-connections {
@@ -1411,19 +1483,15 @@ body {
   }
 
   .platform-connection__platform {
-    font-size: 18px;
+    font-size: 19px;
   }
 
   .platform-connection__route {
-    font-size: 14px;
+    font-size: 15px;
   }
 
   .platform-connection__stop {
-    font-size: 12px;
-  }
-
-  .platform-connection__agency {
-    font-size: 9px;
+    font-size: 14px;
   }
 }
 

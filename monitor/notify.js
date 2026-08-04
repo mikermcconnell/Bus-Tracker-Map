@@ -55,7 +55,7 @@ async function sendViaResend(config, message) {
   try {
     parsed = JSON.parse(body);
   } catch (_) {
-    parsed = null;
+    // Resend can return a successful response without a JSON body.
   }
 
   const messageId = parsed && parsed.id ? parsed.id : 'unknown';
@@ -64,18 +64,33 @@ async function sendViaResend(config, message) {
 }
 
 async function sendMail(config, message) {
+  let info;
   if (config.resendApiKey && config.resendFromEmail) {
-    return sendViaResend(config, message);
+    info = await sendViaResend(config, message);
+  } else {
+    const transport = createTransport(config);
+    info = await transport.sendMail({
+      from: `"Barrie Transit Monitor" <${config.smtpUser}>`,
+      to: config.recipient,
+      subject: message.subject,
+      html: message.html,
+      text: message.text,
+    });
   }
 
-  const transport = createTransport(config);
-  const info = await transport.sendMail({
-    from: `"Barrie Transit Monitor" <${config.smtpUser}>`,
-    to: config.recipient,
-    subject: message.subject,
-    html: message.html,
-    text: message.text,
-  });
+  if (typeof config.onDelivered === 'function') {
+    try {
+      await config.onDelivered({
+        sentAt: new Date(),
+        category: message.category || 'uncategorized',
+        subject: message.subject,
+        messageId: info && info.messageId ? info.messageId : null,
+      });
+    } catch (err) {
+      console.error('[notify] Post-delivery tracking failed:', err.message || err);
+    }
+  }
+
   return info;
 }
 
@@ -123,7 +138,10 @@ function buildGtfsStaticChangeMessage(change) {
 }
 
 async function sendGtfsStaticChangeAlert(config, change) {
-  return sendMail(config, buildGtfsStaticChangeMessage(change));
+  return sendMail(config, {
+    ...buildGtfsStaticChangeMessage(change),
+    category: 'gtfs_static_change',
+  });
 }
 
 function formatAlertTimestamp(value) {
@@ -169,6 +187,12 @@ function buildMonitorSubject(code, summary) {
   return `Barrie Transit Watchdog Alert | ${normalizedCode} | ${summary}`;
 }
 
+function buildGtfsIntegritySubject(code, summary) {
+  const normalizedCode = code || 'GTFS_DATA_INCORRECT';
+  if (!summary) return `Barrie Transit GTFS Integrity Alert | ${normalizedCode}`;
+  return `Barrie Transit GTFS Integrity Alert | ${normalizedCode} | ${summary}`;
+}
+
 function buildSystemSubject(payload) {
   switch (payload.kind) {
     case 'recovered':
@@ -192,6 +216,10 @@ function buildSystemSubject(payload) {
         payload.code || 'POSSIBLE_SERVICE_CALENDAR_MISMATCH',
         'Expected service may not match holiday or special-day service'
       );
+    case 'gtfs_integrity':
+      return buildGtfsIntegritySubject(payload.code || 'GTFS_DATA_INCORRECT', 'Review required');
+    case 'gtfs_integrity_recovered':
+      return buildGtfsIntegritySubject(payload.code || 'GTFS_DATA_RECOVERED', 'Integrity restored');
     case 'all_buses_not_tracking':
       return buildTaggedSubject(payload.code || 'ALL_BUSES_NOT_TRACKING', 'Fleet-wide GPS reporting gap');
     case 'runtime_failure':
@@ -213,6 +241,42 @@ function buildSystemDescriptor(payload) {
   const checkedAt = formatAlertTimestamp(payload.checkedAt || new Date());
 
   switch (payload.kind) {
+    case 'gtfs_integrity': {
+      const integrityIssues = Array.isArray(payload.issues) ? payload.issues : [];
+      const issueText = integrityIssues.length
+        ? integrityIssues.map((value) => `${value.code}: ${value.summary}`).join(' | ')
+        : (payload.details || 'The GTFS integrity check found a problem.');
+      return {
+        banner: '#6B21A8',
+        title: 'BARRIE TRANSIT GTFS INTEGRITY ALERT',
+        rows: [
+          ['Alert ID', payload.code || 'GTFS_DATA_INCORRECT'],
+          ['Checked at', checkedAt],
+          ['Summary', `${integrityIssues.length || 1} GTFS integrity problem${integrityIssues.length === 1 ? '' : 's'} detected.`],
+          ['Feed version', payload.feedVersion || 'unknown'],
+          ['Feed service dates', `${payload.feedStartDate || 'unknown'} to ${payload.feedEndDate || 'unknown'}`],
+          ['Problems found', issueText],
+          ['Static counts', payload.staticCounts || 'unknown'],
+          ['Realtime linkage', payload.realtimeSummary || 'not checked'],
+          ['Source feed', payload.feedUrl || 'unknown'],
+          ['Operational impact', 'Trip planning, holiday service, timed transfers, live predictions, or monitoring may be incorrect until static and realtime data agree.'],
+          ['Recommended action', 'Review the listed IDs or files, correct the source GTFS, apply the Allandale manual patch when required, validate the resulting ZIP, and confirm realtime IDs match before publishing.'],
+          ['More details', payload.details || 'See the problems listed above.'],
+        ],
+      };
+    }
+    case 'gtfs_integrity_recovered':
+      return {
+        banner: '#166534',
+        title: 'BARRIE TRANSIT GTFS INTEGRITY RESTORED',
+        rows: [
+          ['Alert ID', payload.code || 'GTFS_DATA_RECOVERED'],
+          ['Checked at', checkedAt],
+          ['Summary', 'The previously reported GTFS integrity problem is no longer present.'],
+          ['Previous issue', payload.previousCode || 'GTFS_DATA_INCORRECT'],
+          ['More details', payload.details || 'Static and realtime GTFS checks are passing again.'],
+        ],
+      };
     case 'vehicle_feed_stale':
       return {
         banner: '#7F1D1D',
@@ -483,7 +547,7 @@ async function sendAlert(config, report) {
   const html = buildHtml(report);
   const text = buildPlainText(report);
   const subject = buildAlertSubject(report);
-  const info = await sendMail(config, { subject, html, text });
+  const info = await sendMail(config, { subject, html, text, category: 'operational_alert' });
   return info;
 }
 
@@ -492,14 +556,17 @@ async function sendAlert(config, report) {
  */
 async function sendSystemAlert(config, payload) {
   const message = buildSystemMessage(payload);
-  const info = await sendMail(config, message);
+  const category = payload && payload.kind === 'gtfs_integrity'
+    ? 'gtfs_integrity'
+    : 'operational_alert';
+  const info = await sendMail(config, { ...message, category });
   console.log('[notify] System email sent:', info.messageId);
   return info;
 }
 
 async function sendHealthCheck(config, payload) {
   const message = buildHealthCheckMessage(payload);
-  const info = await sendMail(config, message);
+  const info = await sendMail(config, { ...message, category: 'health_check' });
   console.log('[notify] Health check email sent:', info.messageId);
   return info;
 }
@@ -548,10 +615,58 @@ async function sendTestAlert(config, payload) {
     `Checked at: ${timestamp}`,
     `Details: ${details}`,
   ].join('\n');
-  const info = await sendMail(config, { subject, html, text });
+  const info = await sendMail(config, { subject, html, text, category: 'test' });
 
   console.log('[notify] Test email sent:', info.messageId);
   return info;
+}
+
+function buildEmailVolumeMessage(payload) {
+  const checkedAt = formatAlertTimestamp(payload.checkedAt || new Date());
+  const count = Number(payload.count) || 0;
+  const windowMinutes = Number(payload.windowMinutes) || 60;
+  const recentSubjects = Array.isArray(payload.recentSubjects) ? payload.recentSubjects : [];
+  const subject = `Barrie Transit Email Volume Alert | ABNORMAL_ALERT_VOLUME | ${count} alerts in ${windowMinutes} minutes`;
+  const rows = [
+    ['Checked at', checkedAt],
+    ['Alert emails sent', String(count)],
+    ['Rolling window', `${windowMinutes} minutes`],
+    ['Configured threshold', String(payload.threshold || 'unknown')],
+    ['Cooldown', `${payload.cooldownMinutes || 'unknown'} minutes`],
+    ['Recent subjects', recentSubjects.length ? recentSubjects.join(' | ') : 'unavailable'],
+    ['Recommended action', 'Review the monitor logs and GTFS service calendar first. Confirm only the Railway schedule is active and the GitHub backup schedule remains disabled.'],
+  ];
+  const rowHtml = rows.map(([label, value]) => `
+    <tr>
+      <td style="padding:8px;border:1px solid #D1D5DB;font-weight:bold;vertical-align:top">${escapeHtml(label)}</td>
+      <td style="padding:8px;border:1px solid #D1D5DB">${escapeHtml(String(value))}</td>
+    </tr>
+  `).join('');
+  const html = `
+    <div style="font-family:Arial,sans-serif;color:#111827;max-width:720px">
+      <div style="background:#B45309;color:#FFFFFF;padding:16px;font-size:18px;font-weight:bold">
+        BARRIE TRANSIT EMAIL VOLUME ALERT
+      </div>
+      <p>The monitor has sent an abnormal number of operational alert emails in a short period.</p>
+      <table style="border-collapse:collapse;width:100%">${rowHtml}</table>
+      <p>This warning has its own cooldown and is not counted as another operational alert.</p>
+    </div>
+  `;
+  const text = [
+    subject,
+    '',
+    ...rows.map(([label, value]) => `${label}: ${value}`),
+    '',
+    'This warning has its own cooldown and is not counted as another operational alert.',
+  ].join('\n');
+  return { subject, html, text };
+}
+
+async function sendEmailVolumeAlert(config, payload) {
+  return sendMail(
+    { ...config, onDelivered: null },
+    { ...buildEmailVolumeMessage(payload), category: 'email_volume' }
+  );
 }
 
 function buildAlertSubject(report) {
@@ -697,16 +812,19 @@ module.exports = {
   sendAlert,
   sendSystemAlert,
   sendGtfsStaticChangeAlert,
+  sendEmailVolumeAlert,
   sendHealthCheck,
   sendTestAlert,
   buildAlertSubject,
   buildSystemSubject,
   buildSystemMessage,
   buildGtfsStaticChangeMessage,
+  buildEmailVolumeMessage,
   buildHealthCheckSubject,
   buildHealthCheckMessage,
   buildTaggedSubject,
   buildMonitorSubject,
+  buildGtfsIntegritySubject,
   formatAlertTimestamp,
   formatIsoTimestamp,
   escapeHtml,

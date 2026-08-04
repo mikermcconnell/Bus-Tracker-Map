@@ -1,3 +1,4 @@
+import L from 'leaflet';
 import { createDataClient } from '../data/client.js';
 import { BATT_COORDS, getTerminalListStatus } from '../map/nearby-vehicles.js';
 import { clusterVehicles, distanceBetweenMeters } from '../map/vehicle-groups.js';
@@ -17,6 +18,8 @@ const DEFAULT_POLL_MS = 10000;
 const CLUSTER_DISTANCE_METERS = 8;
 const APPROACHING_WINDOW_MS = 5 * 60 * 1000;
 const APPROACHING_DISTANCE_METERS = 500;
+const PLATFORM_MAP_CENTER = Object.freeze([44.373974, -79.689423]);
+const PLATFORM_MAP_ZOOM = 18.1;
 const SOURCE_DEFINITIONS = Object.freeze([
   Object.freeze({ key: 'barrie_transit', agencyId: 'barrie-transit', label: 'Barrie Transit', short: 'BT' }),
   Object.freeze({ key: 'go_transit', agencyId: 'go-transit', label: 'GO Transit', short: 'GO' }),
@@ -50,7 +53,12 @@ const AGENCY_BRANDING = Object.freeze({
   }),
 });
 
-const PLATFORM_DISPLAY_ORDER = Object.freeze(['12', '6', '13', '5', '4', '3', '14', '1', '7', '8']);
+// Keep the departure directory in the same numeric order riders see on the
+// platform signs.  The map itself still uses its calibrated physical layout.
+const PLATFORM_DISPLAY_ORDER = Object.freeze([
+  '1', '2', '3', '4', '5', '6', '7',
+  '8', '9', '10', '11', '12', '13', '14',
+]);
 const PLATFORM_MAP_POSITIONS = Object.freeze({
   '1': Object.freeze({ left: 73.8, top: 52, scrubLeft: 75.6, scrubWidth: 13.4, scrubHeight: 5.5, wide: true }),
   '3': Object.freeze({ left: 48.4, top: 60.7, scrubLeft: 47.3, scrubWidth: 10.2, scrubHeight: 6.6 }),
@@ -140,6 +148,83 @@ function createElement(tag, className, text) {
   return element;
 }
 
+function tileHasVisiblePixels(tile) {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 24;
+    canvas.height = 24;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return true;
+    context.drawImage(tile, 0, 0, canvas.width, canvas.height);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let index = 3; index < pixels.length; index += 4) {
+      if (pixels[index] > 8) return true;
+    }
+    return false;
+  } catch (_err) {
+    // A provider without CORS-safe tiles can still be displayed; only pixel
+    // inspection is unavailable in that case.
+    return true;
+  }
+}
+
+function setupPlatformBasemap(config) {
+  const container = document.getElementById('platform-basemap');
+  const mapPlane = container && container.closest('.map-plane');
+  const basemap = config && (config.platform_basemap || config.basemap);
+  if (!container || !mapPlane || !basemap || !basemap.url) return null;
+
+  const map = L.map(container, {
+    attributionControl: true,
+    zoomControl: false,
+    dragging: false,
+    touchZoom: false,
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    boxZoom: false,
+    keyboard: false,
+    tap: false,
+    zoomSnap: 0.1,
+    fadeAnimation: false,
+    zoomAnimation: false,
+  });
+  map.attributionControl.setPrefix(false);
+  map.setView(PLATFORM_MAP_CENTER, PLATFORM_MAP_ZOOM, { animate: false });
+
+  let activeLayer = null;
+  let tileErrors = 0;
+  let fallbackStarted = false;
+
+  function mountLayer(url, options = {}) {
+    const layer = L.tileLayer(url, {
+      tileSize: Number(options.tile_size) || 256,
+      zoomOffset: Number(options.zoom_offset) || 0,
+      maxZoom: Number(options.max_zoom) || 19,
+      opacity: Number.isFinite(Number(options.opacity)) ? Number(options.opacity) : 1,
+      attribution: options.attribution || '',
+      crossOrigin: true,
+    });
+    layer.on('tileload', (event) => {
+      if (tileHasVisiblePixels(event.tile)) mapPlane.classList.add('map-plane--live-basemap');
+    });
+    layer.on('tileerror', () => {
+      tileErrors += 1;
+      if (fallbackStarted || tileErrors < 3 || !basemap.fallback_url) return;
+      fallbackStarted = true;
+      if (activeLayer) map.removeLayer(activeLayer);
+      activeLayer = mountLayer(basemap.fallback_url, {
+        attribution: basemap.fallback_attribution,
+      });
+    });
+    layer.addTo(map);
+    return layer;
+  }
+
+  activeLayer = mountLayer(basemap.url, basemap);
+  requestAnimationFrame(() => map.invalidateSize(false));
+  return map;
+}
+
 function formatFeedTime(timestampSeconds) {
   const date = new Date(Number(timestampSeconds) * 1000);
   if (!Number.isFinite(date.getTime())) return '';
@@ -192,12 +277,12 @@ function departureDisplay(timestampSeconds, nowMs = Date.now()) {
   const timestamp = Number(timestampSeconds);
   const departure = new Date(timestamp * 1000);
   if (!Number.isFinite(timestamp) || timestamp <= 0 || !Number.isFinite(departure.getTime())) {
-    return { primary: 'No upcoming time', secondary: '', state: 'unavailable' };
+    return { primary: 'No time', secondary: '', state: 'unavailable' };
   }
 
   const differenceMs = departure.getTime() - nowMs;
   if (differenceMs < -60000) {
-    return { primary: 'No upcoming time', secondary: '', state: 'past' };
+    return { primary: 'No time', secondary: '', state: 'past' };
   }
 
   const scheduledTime = formatScheduledDeparture(timestamp);
@@ -207,7 +292,7 @@ function departureDisplay(timestampSeconds, nowMs = Date.now()) {
     const minutes = Math.max(0, Math.ceil(differenceMs / 60000));
     return {
       primary: minutes === 0 ? 'Due now' : `${minutes} min`,
-      secondary: `${scheduledTime} scheduled`,
+      secondary: scheduledTime,
       state: minutes <= 10 ? 'soon' : 'today',
     };
   }
@@ -221,7 +306,7 @@ function departureDisplay(timestampSeconds, nowMs = Date.now()) {
     }).format(departure);
   return {
     primary: dayLabel,
-    secondary: `${scheduledTime} scheduled`,
+    secondary: scheduledTime,
     state: 'future-day',
   };
 }
@@ -490,6 +575,7 @@ function setupPlatformApp() {
   let lastDataTimestamp = null;
   let pollTimer = null;
   let layoutTimer = null;
+  let platformBasemap = null;
 
   const busLayer = document.getElementById('bus-layer');
   const statusEl = document.getElementById('platform-status');
@@ -591,9 +677,9 @@ function setupPlatformApp() {
       const badge = card.querySelector('.platform-card__state');
       if (!badge) return;
       badge.textContent = state === 'occupied'
-        ? `${activeRoute} at platform`
+        ? 'At platform'
         : state === 'approaching'
-          ? `${activeRoute} arriving`
+          ? 'Arriving'
           : '';
       badge.hidden = !badge.textContent;
     });
@@ -804,6 +890,10 @@ function setupPlatformApp() {
       state.hidden = true;
       heading.appendChild(state);
       card.appendChild(heading);
+      const brand = platformAgencyBrand(platform, assignments);
+      const agency = createElement('div', 'platform-card__agency');
+      agency.appendChild(createAgencyLogo(brand, 'platform-card__agency-logo'));
+      card.appendChild(agency);
       const services = createElement('div', 'platform-card__services');
       assignments.forEach((assignment) => {
         const row = createElement('div', 'platform-card__service');
@@ -852,26 +942,36 @@ function setupPlatformApp() {
       heading.appendChild(createElement('h2', 'platform-card__title', 'Stop 14'));
       heading.appendChild(createElement('span', 'platform-card__state', 'Assignment unavailable'));
       retired.appendChild(heading);
+      const agency = createElement('div', 'platform-card__agency');
+      agency.appendChild(createAgencyLogo(
+        platformAgencyBrand('14', []),
+        'platform-card__agency-logo'
+      ));
+      retired.appendChild(agency);
       retired.appendChild(createElement('div', 'platform-card__inactive-text', 'Scheduled service data is unavailable'));
       assignmentLayerEl.appendChild(retired);
     }
     const connectionStrip = createElement('section', 'platform-connections');
     connectionStrip.setAttribute('aria-label', 'Other terminal services');
-    MAP_CONNECTIONS.forEach((connection) => {
-      const item = createElement('div', 'platform-connection');
-      item.dataset.platform = connection.platform;
-      item.appendChild(createElement('strong', 'platform-connection__platform', `P${connection.platform}`));
-      item.appendChild(createElement(
-        'strong',
-        'platform-connection__route',
-        connection.routes.map((route) => route.label).join('/')
-      ));
-      const copy = createElement('span', 'platform-connection__copy');
-      copy.appendChild(createElement('strong', 'platform-connection__stop', connection.stop));
-      copy.appendChild(createElement('span', 'platform-connection__agency', connection.serviceLabel));
-      item.appendChild(copy);
-      connectionStrip.appendChild(item);
-    });
+    MAP_CONNECTIONS
+      .slice()
+      .sort((a, b) => Number(a.platform) - Number(b.platform))
+      .forEach((connection) => {
+        const item = createElement('div', 'platform-connection');
+        item.dataset.platform = connection.platform;
+        item.appendChild(createElement('strong', 'platform-connection__platform', `P${connection.platform}`));
+        item.appendChild(createAgencyLogo(connection.brand, 'platform-connection__agency-logo'));
+        item.appendChild(createElement(
+          'strong',
+          'platform-connection__route',
+          connection.routes.map((route) => route.label).join('/')
+        ));
+        const copy = createElement('span', 'platform-connection__copy');
+        copy.appendChild(createElement('strong', 'platform-connection__stop', connection.stop));
+        copy.appendChild(createElement('span', 'platform-connection__agency', connection.serviceLabel));
+        item.appendChild(copy);
+        connectionStrip.appendChild(item);
+      });
     assignmentLayerEl.appendChild(connectionStrip);
     Object.keys(PLATFORM_MAP_POSITIONS).forEach((platform) => {
       renderMapPlatformCard(platform, grouped[platform] || []);
@@ -994,6 +1094,7 @@ function setupPlatformApp() {
       if (Number(config && config.poll_ms) > 0) pollMs = Number(config.poll_ms);
       if (Number(config && config.feed_delayed_after_ms) > 0) delayedAfterMs = Number(config.feed_delayed_after_ms);
       if (Number(config && config.feed_offline_after_ms) > 0) offlineAfterMs = Number(config.feed_offline_after_ms);
+      platformBasemap = setupPlatformBasemap(config);
     })
     .catch((err) => {
       console.warn('Using default platform-map configuration:', err);
@@ -1027,6 +1128,7 @@ function setupPlatformApp() {
     destroy() {
       if (pollTimer) clearTimeout(pollTimer);
       if (layoutTimer) clearInterval(layoutTimer);
+      if (platformBasemap) platformBasemap.remove();
     },
   };
 }

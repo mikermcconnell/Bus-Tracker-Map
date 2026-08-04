@@ -79,4 +79,19 @@ describe('monitor health check helpers', () => {
       ],
     ]));
   });
+
+  test('shows which schedule source selected expected service', () => {
+    const rows = buildHealthRows(null, {
+      expectedBuses: 18,
+      expectedRoutes: 11,
+      scheduleSource: 'gtfs_calendar_dates',
+      totalVehicles: 17,
+      recentVehicles: 17,
+      vehicleFeedTimestamp: Date.parse('2026-08-03T16:39:00Z') / 1000,
+      vehicleFeedAgeMin: 0,
+      tripUpdatesTimestamp: Date.parse('2026-08-03T16:39:00Z') / 1000,
+    });
+
+    expect(rows).toContainEqual(['Schedule source', 'gtfs_calendar_dates']);
+  });
 });

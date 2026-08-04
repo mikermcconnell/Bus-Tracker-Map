@@ -141,6 +141,9 @@ async function getTransitFeedStatus(now) {
   return {
     expectedBuses: expected.totalExpected,
     expectedRoutes: expected.byRoute.size,
+    scheduleSource: expected.scheduleSources && expected.scheduleSources.today
+      ? expected.scheduleSources.today.source
+      : null,
     totalVehicles: vehicles.length,
     recentVehicles,
     vehicleFeedTimestamp: vehicleData.feed_timestamp,
@@ -210,6 +213,7 @@ function buildHealthRows(workflowStatus, transitStatus, errors = []) {
   if (transitStatus) {
     rows.push(['Expected buses now', transitStatus.expectedBuses]);
     rows.push(['Expected routes now', transitStatus.expectedRoutes]);
+    rows.push(['Schedule source', transitStatus.scheduleSource || 'unknown']);
     rows.push(['Vehicles in feed', transitStatus.totalVehicles]);
     rows.push(['Vehicles with recent GPS', transitStatus.recentVehicles]);
     rows.push(['Vehicle feed time', formatIsoTimestamp(transitStatus.vehicleFeedTimestamp)]);
@@ -259,6 +263,7 @@ async function main() {
     transitStatus = await getTransitFeedStatus(checkedAt);
     logEvent('monitor_transit_feed_status', {
       expectedBuses: transitStatus.expectedBuses,
+      scheduleSource: transitStatus.scheduleSource,
       totalVehicles: transitStatus.totalVehicles,
       recentVehicles: transitStatus.recentVehicles,
       vehicleFeedAgeMin: transitStatus.vehicleFeedAgeMin,

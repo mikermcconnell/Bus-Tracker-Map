@@ -283,7 +283,7 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(page.locator('.platform-directory #assignment-layer')).toBeVisible();
   await expect(page.locator('.platform-card[data-platform="3"]')).toContainText('Yonge Southbound');
   await expect(page.locator('.platform-card[data-platform="3"]')).toContainText('Essa Southbound');
-  await expect(page.locator('.platform-card[data-platform="3"] .platform-card__state')).toHaveText('8A arriving');
+  await expect(page.locator('.platform-card[data-platform="3"] .platform-card__state')).toHaveText('Arriving');
   const arrivingRow = page.locator('.platform-card[data-platform="3"] .platform-card__service[data-route-id="8A"]');
   await expect(arrivingRow).toHaveClass(/platform-card__service--active/);
   await expect(arrivingRow.locator('.platform-card__service-countdown')).toHaveText('4 min');
@@ -297,11 +297,11 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(inactiveRow.locator('.platform-card__service-countdown'))
     .toHaveText('20 min');
   await expect(inactiveRow.locator('.platform-card__service-scheduled'))
-    .toHaveText(`${inactiveScheduledTime} scheduled`);
+    .toHaveText(inactiveScheduledTime);
   const pastDepartureRow = page.locator('.platform-card[data-platform="5"] .platform-card__service');
-  await expect(pastDepartureRow.locator('.platform-card__service-countdown')).toHaveText('No upcoming time');
+  await expect(pastDepartureRow.locator('.platform-card__service-countdown')).toHaveText('No time');
   await expect(pastDepartureRow).not.toContainText('9:32 AM');
-  await expect(page.locator('.platform-card[data-platform="7"] .platform-card__state')).toHaveText('68 at platform');
+  await expect(page.locator('.platform-card[data-platform="7"] .platform-card__state')).toHaveText('At platform');
   const trainRouteBadge = page.locator('.platform-card[data-platform="1"] .platform-card__route');
   await expect(trainRouteBadge).toHaveText('TRAIN');
   expect(await trainRouteBadge.evaluate((badge) => badge.scrollWidth <= badge.clientWidth)).toBe(true);
@@ -310,6 +310,12 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(page.locator('.platform-card[data-platform="14"]')).toContainText('12B');
   await expect(page.locator('.platform-card[data-platform="14"]')).toContainText('Barrie South GO');
   await expect(page.locator('.platform-card[data-platform="14"] .platform-card__route').first()).toHaveCSS('background-color', 'rgb(244, 154, 193)');
+  await expect(page.locator('.platform-card[data-platform="1"] .platform-card__agency-logo'))
+    .toHaveAttribute('src', './assets/agency-go-transit.svg');
+  await expect(page.locator('.platform-card[data-platform="3"] .platform-card__agency-logo'))
+    .toHaveAttribute('src', './assets/agency-barrie-transit.png');
+  await expect(page.locator('.platform-connection[data-platform="2"] .platform-connection__agency-logo'))
+    .toHaveAttribute('src', './assets/agency-simcoe-linx.png');
   await expect(page.locator('#map-platform-layer .map-platform-card')).toHaveCount(10);
   await expect(page.locator('.map-platform-card .map-platform-card__logo')).toHaveCount(0);
   await expect(page.locator('.map-platform-card[data-platform="6"] .map-platform-card__brand')).toHaveText('BT');

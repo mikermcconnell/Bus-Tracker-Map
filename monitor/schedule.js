@@ -195,18 +195,36 @@ function resolveServiceDayForDate(date, serviceOverride = null) {
 }
 
 /**
- * Parse calendar.txt + calendar_dates.txt to find active service IDs for a date.
+ * Resolve active service IDs and record which calendar source won.
+ *
+ * Local no-service entries are hard overrides. A local service-day entry is a
+ * fallback only: when GTFS publishes calendar_dates rows for the target date,
+ * those explicit exceptions remain authoritative and the fallback is ignored.
  */
-function getActiveServiceIds(zip, date, serviceOverride = null) {
+function getActiveServiceSelection(zip, date, serviceOverride = null) {
   const getText = (name) => {
     const entry = zip.getEntry(name);
     return entry ? zip.readAsText(entry) : null;
   };
 
-  const dayOfWeek = resolveServiceDayForDate(date, serviceOverride);
-  if (!dayOfWeek) return new Set();
-
   const dateStr = formatDate(date); // YYYYMMDD
+  if (serviceOverride && serviceOverride.mode === 'no_service') {
+    return {
+      serviceIds: new Set(),
+      source: 'local_no_service',
+      date: dateStr,
+      calendarDateExceptionCount: 0,
+    };
+  }
+
+  const datesTxt = getText('calendar_dates.txt');
+  const dateExceptions = datesTxt
+    ? parse(datesTxt, { columns: true, skip_empty_lines: true })
+      .filter((row) => row.date === dateStr)
+    : [];
+  const hasGtfsDateExceptions = dateExceptions.length > 0;
+  const effectiveOverride = hasGtfsDateExceptions ? null : serviceOverride;
+  const dayOfWeek = resolveServiceDayForDate(date, effectiveOverride);
 
   const activeIds = new Set();
 
@@ -223,21 +241,34 @@ function getActiveServiceIds(zip, date, serviceOverride = null) {
     }
   }
 
-  // 2. Apply calendar_dates.txt overrides
-  const datesTxt = getText('calendar_dates.txt');
-  if (datesTxt) {
-    const rows = parse(datesTxt, { columns: true, skip_empty_lines: true });
-    for (const row of rows) {
-      if (row.date !== dateStr) continue;
-      if (row.exception_type === '1') {
-        activeIds.add(row.service_id); // Service added
-      } else if (row.exception_type === '2') {
-        activeIds.delete(row.service_id); // Service removed
-      }
+  // 2. Apply explicit calendar_dates.txt exceptions for this date.
+  for (const row of dateExceptions) {
+    if (row.exception_type === '1') {
+      activeIds.add(row.service_id); // Service added
+    } else if (row.exception_type === '2') {
+      activeIds.delete(row.service_id); // Service removed
     }
   }
 
-  return activeIds;
+  const source = hasGtfsDateExceptions
+    ? 'gtfs_calendar_dates'
+    : (effectiveOverride && effectiveOverride.mode === 'service_day'
+      ? 'local_service_day'
+      : 'gtfs_calendar');
+
+  return {
+    serviceIds: activeIds,
+    source,
+    date: dateStr,
+    calendarDateExceptionCount: dateExceptions.length,
+  };
+}
+
+/**
+ * Parse calendar.txt + calendar_dates.txt to find active service IDs for a date.
+ */
+function getActiveServiceIds(zip, date, serviceOverride = null) {
+  return getActiveServiceSelection(zip, date, serviceOverride).serviceIds;
 }
 
 /**
@@ -471,15 +502,15 @@ async function getExpectedBuses(gtfsUrl, cachePath, maxAgeHours = 24, layoverGra
 
   // Today's service
   const todayServiceOverride = getServiceOverrideForDate(serviceOverrides, today);
-  const todayServiceIds = getActiveServiceIds(zip, today, todayServiceOverride);
-  const todayTripSpans = getTripTimeSpans(zip, todayServiceIds);
+  const todayServiceSelection = getActiveServiceSelection(zip, today, todayServiceOverride);
+  const todayTripSpans = getTripTimeSpans(zip, todayServiceSelection.serviceIds);
   const todaySpans = applyLayoverGrace(todayTripSpans, layoverGraceSecs);
   const todayResult = getActiveTripsNow(todaySpans, nowSecs);
 
   // Yesterday's service for midnight rollover (trips with times >24:00:00)
   const yesterdayServiceOverride = getServiceOverrideForDate(serviceOverrides, yesterday);
-  const yesterdayServiceIds = getActiveServiceIds(zip, yesterday, yesterdayServiceOverride);
-  const yesterdayTripSpans = getTripTimeSpans(zip, yesterdayServiceIds);
+  const yesterdayServiceSelection = getActiveServiceSelection(zip, yesterday, yesterdayServiceOverride);
+  const yesterdayTripSpans = getTripTimeSpans(zip, yesterdayServiceSelection.serviceIds);
   const yesterdaySpans = applyLayoverGrace(yesterdayTripSpans, layoverGraceSecs);
   // For yesterday's late-night trips, add 86400 to current time
   const rolloverSecs = nowSecs + 86400;
@@ -492,7 +523,24 @@ async function getExpectedBuses(gtfsUrl, cachePath, maxAgeHours = 24, layoverGra
   }
   const totalExpected = todayResult.totalExpected + yesterdayResult.totalExpected;
 
-  return { byRoute, totalExpected };
+  return {
+    byRoute,
+    totalExpected,
+    scheduleSources: {
+      today: {
+        source: todayServiceSelection.source,
+        date: todayServiceSelection.date,
+        calendarDateExceptionCount: todayServiceSelection.calendarDateExceptionCount,
+        activeServiceIdCount: todayServiceSelection.serviceIds.size,
+      },
+      yesterday: {
+        source: yesterdayServiceSelection.source,
+        date: yesterdayServiceSelection.date,
+        calendarDateExceptionCount: yesterdayServiceSelection.calendarDateExceptionCount,
+        activeServiceIdCount: yesterdayServiceSelection.serviceIds.size,
+      },
+    },
+  };
 }
 
 /* ── Helpers ── */
@@ -523,6 +571,7 @@ module.exports = {
   normalizeServiceOverrideEntry,
   getServiceOverrideForDate,
   resolveServiceDayForDate,
+  getActiveServiceSelection,
   getActiveServiceIds,
   getTripTimeSpans,
   applyLayoverGrace,

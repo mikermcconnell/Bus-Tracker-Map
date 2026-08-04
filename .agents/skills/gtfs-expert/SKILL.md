@@ -46,6 +46,7 @@ Run from the repository root:
 node .agents/skills/gtfs-expert/scripts/audit-static-feed.cjs `
   --feed C:\path\to\candidate.zip `
   --baseline https://www.myridebarrie.ca/gtfs/google_transit.zip `
+  --google `
   --station "Barrie Allandale Transit Terminal" `
   --routes 8A,8B
 ```
@@ -57,6 +58,7 @@ transfer rows with repeatable flags. Keep `min_transfer_time` blank for
 ```powershell
 node .agents/skills/gtfs-expert/scripts/audit-static-feed.cjs `
   --feed C:\path\to\candidate.zip `
+  --google `
   --expect-transfer "9003,9004,1," `
   --expect-transfer "9004,9003,1," `
   --expect-transfer "9005,9012,1," `
@@ -74,7 +76,37 @@ Use `--json` for machine-readable output. The script is read-only and exits nonz
 - The documented static feed is `https://www.myridebarrie.ca/gtfs/google_transit.zip`.
 - Do not treat `cache/routes.geojson` or `cache/stops.geojson` as the GTFS source of truth.
 - Recheck Allandale stop IDs and route/platform usage in every new production feed before reusing transfer rows.
+- MVT static exports do not contain Barrie's manual Allandale parent-station hierarchy or timed-transfer rules. Never upload a fresh MVT ZIP directly to Google. Preserve the raw export and generate a separate Google candidate with `scripts/patch-allandale-google-feed.cjs`.
 - Keep GTFS Schedule corrections separate from Vehicle Positions, Trip Updates, and Service Alerts.
+
+## Barrie Allandale Google patch
+
+For every new MVT static export, keep the source ZIP unchanged and create a
+derived Google-upload ZIP:
+
+```powershell
+node .agents/skills/gtfs-expert/scripts/patch-allandale-google-feed.cjs `
+  --input D:\google_transit.zip `
+  --output D:\google_transit-google-upload.zip `
+  --json
+```
+
+The patch script performs only Barrie's durable Google-facing additions:
+
+- restores the `Barrie Allandale Transit Terminal` parent station;
+- assigns Platforms 3, 4, 5, 6, 12, and 13 to that parent and restores their `platform_code` values;
+- upserts the four approved bidirectional timed-transfer rows for 9003/9004 and 9005/9012;
+- leaves `min_transfer_time` blank for every `transfer_type=1` row;
+- preserves every unrelated source table and any unrelated existing transfer rows.
+
+After patching, run the deterministic audit with `--google`, all four
+`--expect-transfer` flags, the Allandale station check, and a production
+baseline. Then run the canonical validator and compare current scheduled
+GTFS-Realtime `trip_id`, `route_id`, and `stop_id` values with the derived ZIP.
+Read [references/google-transit.md](references/google-transit.md) for the exact
+handoff and upload checklist. Never carry `trips.txt`, `stop_times.txt`,
+calendars, routes, shapes, or stops from the previous Google ZIP into the new
+MVT export.
 
 ## Evidence and handoff
 

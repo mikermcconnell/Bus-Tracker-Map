@@ -60,6 +60,7 @@ describe('GTFS static change monitor', () => {
       fetchImpl: async () => response(buildZip('v1'), { etag: '"v1"' }),
     });
     expect(result.status).toBe('baseline');
+    expect(Buffer.isBuffer(result.buffer)).toBe(true);
     expect(JSON.parse(fs.readFileSync(stateFile, 'utf8')).feedVersion).toBe('v1');
   });
 

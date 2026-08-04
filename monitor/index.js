@@ -11,8 +11,16 @@ const {
   sendTestAlert,
   sendSystemAlert,
   sendGtfsStaticChangeAlert,
+  sendEmailVolumeAlert,
 } = require('./notify');
 const { checkGtfsStaticChange, saveGtfsStaticState } = require('./gtfs-static-change');
+const {
+  inspectStaticGtfsFile,
+  collectVehicleReferences,
+  inspectRealtimeLinkage,
+  decodeTripUpdatesBuffer,
+} = require('./gtfs-integrity');
+const { recordEmailDelivery, markEmailVolumeAlertSent } = require('./email-volume');
 const { normalizeRouteId } = require('./routes');
 
 const GTFS_STATIC_URL = process.env.GTFS_STATIC_URL;
@@ -30,6 +38,10 @@ const SILENCE_THRESHOLD_MIN = parseInt(process.env.SILENCE_THRESHOLD_MIN || '5',
 const ALERT_AFTER_MIN = parseInt(process.env.ALERT_AFTER_MIN || '20', 10);
 const FEED_STALE_AFTER_MIN = parseInt(process.env.FEED_STALE_AFTER_MIN || String(Math.max(SILENCE_THRESHOLD_MIN + 5, 15)), 10);
 const ISSUE_RESEND_MIN = parseInt(process.env.ISSUE_RESEND_MIN || '30', 10);
+const GTFS_INTEGRITY_RESEND_MIN = parseInt(process.env.GTFS_INTEGRITY_RESEND_MIN || '720', 10);
+const EMAIL_VOLUME_WINDOW_MIN = parseInt(process.env.EMAIL_VOLUME_WINDOW_MIN || '60', 10);
+const EMAIL_VOLUME_ALERT_THRESHOLD = parseInt(process.env.EMAIL_VOLUME_ALERT_THRESHOLD || '4', 10);
+const EMAIL_VOLUME_ALERT_COOLDOWN_MIN = parseInt(process.env.EMAIL_VOLUME_ALERT_COOLDOWN_MIN || '180', 10);
 const GTFS_CACHE_MAX_AGE_HOURS = parseInt(process.env.GTFS_CACHE_MAX_AGE_HOURS || '24', 10);
 const LAYOVER_GRACE_MIN = parseInt(process.env.LAYOVER_GRACE_MIN || '10', 10);
 const WATCHDOG_MAX_AGE_MIN = parseInt(process.env.WATCHDOG_MAX_AGE_MIN || '90', 10);
@@ -49,6 +61,8 @@ const STATE_FILE = path.join(CACHE_DIR, 'state.json');
 const HEARTBEAT_FILE = path.join(CACHE_DIR, 'heartbeat.json');
 const ISSUE_STATE_FILE = path.join(CACHE_DIR, 'issue-state.json');
 const GTFS_STATIC_STATE_FILE = path.join(CACHE_DIR, 'gtfs-static-state.json');
+const EMAIL_VOLUME_STATE_FILE = path.join(CACHE_DIR, 'email-volume-state.json');
+const GTFS_CACHE_FILE = path.join(CACHE_DIR, 'google_transit.zip');
 
 function writeJsonFile(filePath, data) {
   const dir = path.dirname(filePath);
@@ -115,7 +129,7 @@ function saveIssueState(state) {
 }
 
 function buildEmailConfig() {
-  return {
+  const config = {
     smtpHost: SMTP_HOST,
     smtpPort: SMTP_PORT,
     smtpUser: SMTP_USER,
@@ -125,6 +139,28 @@ function buildEmailConfig() {
     resendApiKey: RESEND_API_KEY,
     resendFromEmail: RESEND_FROM_EMAIL,
   };
+
+  config.onDelivered = async (delivery) => {
+    const volume = recordEmailDelivery(EMAIL_VOLUME_STATE_FILE, delivery, {
+      windowMinutes: EMAIL_VOLUME_WINDOW_MIN,
+      threshold: EMAIL_VOLUME_ALERT_THRESHOLD,
+      cooldownMinutes: EMAIL_VOLUME_ALERT_COOLDOWN_MIN,
+    });
+    if (!volume.shouldAlert) return;
+
+    console.warn(
+      '[monitor] Abnormal email volume detected: %d alerts in %d minutes.',
+      volume.count,
+      volume.windowMinutes
+    );
+    await sendEmailVolumeAlert(config, {
+      ...volume,
+      checkedAt: delivery.sentAt,
+    });
+    markEmailVolumeAlertSent(EMAIL_VOLUME_STATE_FILE, delivery.sentAt);
+  };
+
+  return config;
 }
 
 function deriveTripUpdatesUrl(vehicleUrl) {
@@ -146,6 +182,67 @@ function formatErrorText(err) {
   if (!err) return 'Unknown error';
   if (err.code && err.message) return `${err.code}: ${err.message}`;
   return err.message || String(err);
+}
+
+async function fetchTripUpdateIntegritySnapshot(url, fetchImpl = fetch) {
+  if (!url) return null;
+  const response = await fetchImpl(url, { timeout: 10000 });
+  if (!response.ok) {
+    throw new Error(`GTFS-RT trip updates fetch failed: ${response.status}`);
+  }
+  const references = decodeTripUpdatesBuffer(await response.buffer());
+  return {
+    ...references,
+    lastModified: response.headers.get('last-modified') || null,
+    etag: response.headers.get('etag') || null,
+  };
+}
+
+function formatStaticCounts(counts) {
+  if (!counts) return 'unknown';
+  return `${counts.routes} routes, ${counts.trips} trips, ${counts.stops} stops, ${counts.stopTimes} stop times, ${counts.transfers} transfers`;
+}
+
+function formatRealtimeLinkage(metrics) {
+  const rows = [];
+  for (const [sourceName, source] of Object.entries(metrics || {})) {
+    const fields = ['tripIds', 'routeIds', 'stopIds']
+      .map((field) => {
+        const value = source[field];
+        if (!value) return null;
+        return `${field.replace('Ids', '')} ${value.matched}/${value.references}`;
+      })
+      .filter(Boolean);
+    rows.push(`${sourceName}: ${fields.join(', ')}`);
+  }
+  return rows.length ? rows.join(' | ') : 'not checked';
+}
+
+function buildGtfsIntegrityPayload(staticInspection, realtimeInspection, now) {
+  const staticIssues = staticInspection && Array.isArray(staticInspection.issues)
+    ? staticInspection.issues
+    : [];
+  const realtimeIssues = realtimeInspection && Array.isArray(realtimeInspection.issues)
+    ? realtimeInspection.issues
+    : [];
+  const issues = [...staticIssues, ...realtimeIssues];
+  if (!issues.length) return null;
+
+  return {
+    kind: 'gtfs_integrity',
+    code: 'GTFS_DATA_INCORRECT',
+    severity: 'Critical',
+    checkedAt: now,
+    resendMinutes: GTFS_INTEGRITY_RESEND_MIN,
+    feedUrl: GTFS_STATIC_URL,
+    feedVersion: staticInspection && staticInspection.feedVersion,
+    feedStartDate: staticInspection && staticInspection.feedStartDate,
+    feedEndDate: staticInspection && staticInspection.feedEndDate,
+    staticCounts: formatStaticCounts(staticInspection && staticInspection.counts),
+    realtimeSummary: formatRealtimeLinkage(realtimeInspection && realtimeInspection.metrics),
+    issues,
+    details: issues.map((value) => `${value.code}: ${value.details || value.summary}`).join(' | '),
+  };
 }
 
 async function pingHeartbeat() {
@@ -471,7 +568,10 @@ function shouldSendIssueAlert(previous, checkedAt, resendMinutes) {
 async function triggerIssueAlert(emailConfig, issueState, activeIssueCodes, payload) {
   activeIssueCodes.add(payload.code);
   const previous = recordIssueState(issueState, payload);
-  if (!shouldSendIssueAlert(previous, payload.checkedAt, ISSUE_RESEND_MIN)) return false;
+  const resendMinutes = Number.isFinite(Number(payload.resendMinutes))
+    ? Number(payload.resendMinutes)
+    : ISSUE_RESEND_MIN;
+  if (!shouldSendIssueAlert(previous, payload.checkedAt, resendMinutes)) return false;
   await sendSystemAlert(emailConfig, payload);
   issueState.active[payload.code].lastSentAt = payload.checkedAt.toISOString();
   return true;
@@ -486,9 +586,10 @@ async function sendRecoveryAlerts(emailConfig, issueState, activeIssueCodes, che
     if (code === 'MONITOR_WATCHDOG_DOWN') continue;
 
     const previous = active[code];
+    const isGtfsIntegrity = previous && previous.kind === 'gtfs_integrity';
     await sendSystemAlert(emailConfig, {
-      kind: 'issue_recovered',
-      code: 'SYSTEM_RECOVERED',
+      kind: isGtfsIntegrity ? 'gtfs_integrity_recovered' : 'issue_recovered',
+      code: isGtfsIntegrity ? 'GTFS_DATA_RECOVERED' : 'SYSTEM_RECOVERED',
       severity: 'Info',
       checkedAt,
       lastSuccessAt: checkedAt,
@@ -570,6 +671,10 @@ async function main() {
         fetchImpl: fetch,
         now,
       });
+      if (gtfsChange.buffer) {
+        fs.mkdirSync(CACHE_DIR, { recursive: true });
+        fs.writeFileSync(GTFS_CACHE_FILE, gtfsChange.buffer);
+      }
       if (gtfsChange.status === 'baseline') {
         console.log(
           '[monitor] GTFS static baseline recorded: %s',
@@ -598,7 +703,26 @@ async function main() {
       LAYOVER_GRACE_MIN
     );
 
+    let staticIntegrity;
+    try {
+      staticIntegrity = inspectStaticGtfsFile(GTFS_CACHE_FILE, { now });
+    } catch (err) {
+      staticIntegrity = {
+        issues: [{
+          code: 'GTFS_STATIC_UNREADABLE',
+          summary: 'The cached GTFS Schedule ZIP could not be inspected',
+          details: formatErrorText(err),
+        }],
+        identifiers: { tripIds: new Set(), routeIds: new Set(), stopIds: new Set() },
+        counts: null,
+      };
+    }
+
     if (expected.totalExpected === 0) {
+      const gtfsPayload = buildGtfsIntegrityPayload(staticIntegrity, null, now);
+      if (gtfsPayload) {
+        await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, gtfsPayload);
+      }
       console.log('[monitor] No buses expected at this time. Exiting.');
       saveState({});
       saveIssueState(issueState);
@@ -607,6 +731,15 @@ async function main() {
     }
 
     console.log('[monitor] Expected: %d buses across %d routes', expected.totalExpected, expected.byRoute.size);
+    if (expected.scheduleSources && expected.scheduleSources.today) {
+      console.log(
+        '[monitor] Schedule source: %s (%s, %d calendar_dates rows, %d active service IDs)',
+        expected.scheduleSources.today.source,
+        expected.scheduleSources.today.date,
+        expected.scheduleSources.today.calendarDateExceptionCount,
+        expected.scheduleSources.today.activeServiceIdCount
+      );
+    }
 
     let vehicleData;
     try {
@@ -614,6 +747,10 @@ async function main() {
     } catch (err) {
       const errorText = formatErrorText(err);
       console.error('[monitor] Vehicle positions fetch failed:', errorText);
+      const gtfsPayload = buildGtfsIntegrityPayload(staticIntegrity, null, now);
+      if (gtfsPayload) {
+        await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, gtfsPayload);
+      }
       await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, {
         kind: 'vehicle_feed_unreachable',
         code: 'VEHICLE_FEED_UNREACHABLE',
@@ -630,6 +767,25 @@ async function main() {
     }
 
     const vehicles = vehicleData.vehicles || [];
+    let tripUpdatesSnapshot = null;
+    if (GTFS_RT_TRIP_UPDATES_URL) {
+      try {
+        tripUpdatesSnapshot = await fetchTripUpdateIntegritySnapshot(GTFS_RT_TRIP_UPDATES_URL);
+      } catch (err) {
+        console.warn('[monitor] Trip updates integrity check failed:', formatErrorText(err));
+      }
+    }
+
+    const realtimeIntegrity = inspectRealtimeLinkage(staticIntegrity.identifiers, {
+      trip_updates: tripUpdatesSnapshot,
+      vehicle_positions: collectVehicleReferences(vehicles),
+    });
+    const gtfsPayload = buildGtfsIntegrityPayload(staticIntegrity, realtimeIntegrity, now);
+    if (gtfsPayload) {
+      console.warn('[monitor] GTFS integrity issue detected: %s', gtfsPayload.details);
+      await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, gtfsPayload);
+    }
+
     const thresholdSecs = SILENCE_THRESHOLD_MIN * 60;
     const nowEpoch = Math.floor(now.getTime() / 1000);
 
@@ -668,8 +824,10 @@ async function main() {
 
     const candidateFeedIssue = getFeedAlertContext(vehicleData, null, now, FEED_STALE_AFTER_MIN);
     if (candidateFeedIssue) {
-      let tripUpdatesMeta = null;
-      if (GTFS_RT_TRIP_UPDATES_URL) {
+      let tripUpdatesMeta = tripUpdatesSnapshot
+        ? { header_timestamp: tripUpdatesSnapshot.headerTimestamp }
+        : null;
+      if (GTFS_RT_TRIP_UPDATES_URL && !tripUpdatesMeta) {
         try {
           tripUpdatesMeta = await fetchGtfsRtFeedMeta(GTFS_RT_TRIP_UPDATES_URL);
         } catch (err) {
@@ -809,6 +967,10 @@ module.exports = {
   getNoRecentGpsAlertContext,
   selectGpsAlertContext,
   shouldSendIssueAlert,
+  fetchTripUpdateIntegritySnapshot,
+  formatStaticCounts,
+  formatRealtimeLinkage,
+  buildGtfsIntegrityPayload,
   formatErrorText,
   formatDuration,
   normalizeMissingSinceEntry,

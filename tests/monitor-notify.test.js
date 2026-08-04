@@ -8,6 +8,8 @@ const {
   buildSystemSubject,
   buildSystemMessage,
   buildGtfsStaticChangeMessage,
+  buildGtfsIntegritySubject,
+  buildEmailVolumeMessage,
   buildHealthCheckSubject,
   buildHealthCheckMessage,
   formatIsoTimestamp,
@@ -37,6 +39,50 @@ describe('buildGtfsStaticChangeMessage', () => {
     expect(text).toContain('transfers.txt is missing');
     expect(text).toContain('Do not re-upload the previous patched ZIP');
     expect(html).toContain('BARRIE TRANSIT GTFS STATIC CHANGED');
+  });
+});
+
+describe('GTFS integrity and email volume subjects', () => {
+  test('uses a GTFS-specific subject that will not match GPS alert rules', () => {
+    const subject = buildGtfsIntegritySubject('GTFS_DATA_INCORRECT', 'Review required');
+    expect(subject).toBe('Barrie Transit GTFS Integrity Alert | GTFS_DATA_INCORRECT | Review required');
+    expect(subject).not.toContain('Barrie Transit GPS Alert');
+  });
+
+  test('renders GTFS problems under the distinct integrity subject', () => {
+    const message = buildSystemMessage({
+      kind: 'gtfs_integrity',
+      code: 'GTFS_DATA_INCORRECT',
+      checkedAt: new Date('2026-08-04T14:00:00Z'),
+      feedVersion: 'v2',
+      feedStartDate: '20260802',
+      feedEndDate: '20261031',
+      staticCounts: '15 routes, 1976 trips, 558 stops, 78398 stop times, 4 transfers',
+      realtimeSummary: 'trip_updates: trip 132/132, route 132/132, stop 5945/5971',
+      issues: [{
+        code: 'GTFS_RT_STOP_ID_MISMATCH',
+        summary: 'Trip updates contain 2 unknown stop IDs',
+      }],
+      details: 'Two realtime stop IDs are absent from static GTFS.',
+    });
+
+    expect(message.subject).toBe('Barrie Transit GTFS Integrity Alert | GTFS_DATA_INCORRECT | Review required');
+    expect(message.text).toContain('GTFS_RT_STOP_ID_MISMATCH');
+    expect(message.text).toContain('Recommended action: Review the listed IDs or files');
+  });
+
+  test('uses a separate subject for abnormal alert volume', () => {
+    const message = buildEmailVolumeMessage({
+      checkedAt: new Date('2026-08-04T14:00:00Z'),
+      count: 4,
+      threshold: 4,
+      windowMinutes: 60,
+      cooldownMinutes: 180,
+      recentSubjects: ['Alert 1', 'Alert 2', 'Alert 3', 'Alert 4'],
+    });
+    expect(message.subject).toBe('Barrie Transit Email Volume Alert | ABNORMAL_ALERT_VOLUME | 4 alerts in 60 minutes');
+    expect(message.subject).not.toContain('Barrie Transit GPS Alert');
+    expect(message.text).toContain('Recent subjects: Alert 1 | Alert 2 | Alert 3 | Alert 4');
   });
 });
 

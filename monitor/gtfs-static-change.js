@@ -117,20 +117,21 @@ async function checkGtfsStaticChange(options) {
     throw new Error(`GTFS static request failed with HTTP ${response.status}`);
   }
 
-  const inspection = inspectGtfsBuffer(await response.buffer());
+  const buffer = await response.buffer();
+  const inspection = inspectGtfsBuffer(buffer);
   const current = stateFromInspection(inspection, response, now);
 
   if (!previous || !previous.fingerprint) {
     writeJsonFile(stateFile, current);
-    return { status: 'baseline', previous: null, current };
+    return { status: 'baseline', previous: null, current, buffer };
   }
 
   if (previous.fingerprint === current.fingerprint) {
     writeJsonFile(stateFile, current);
-    return { status: 'unchanged', previous, current };
+    return { status: 'unchanged', previous, current, buffer };
   }
 
-  return { status: 'changed', previous, current };
+  return { status: 'changed', previous, current, buffer };
 }
 
 function saveGtfsStaticState(stateFile, state) {
