@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   classifyTerminalProgress,
   enrichTerminalProgress,
+  enrichTerminalProgressWithFallback,
   inferScheduledDepartureEpochSeconds,
   scheduledTimeToEpochSeconds,
 } from '../server/terminal-progress.js';
@@ -77,6 +78,47 @@ describe('BATT trip progress classification', () => {
       terminalStops,
       terminalStopIds,
     }).status).toBe('approaching');
+  });
+
+  test('uses an unambiguous route-direction-stop fallback when realtime trip ids differ', () => {
+    const enriched = enrichTerminalProgressWithFallback({
+      route_id: '8A',
+      direction_id: 1,
+      stop_id: '114',
+      current_stop_sequence: 42,
+    }, {
+      terminalStopIds,
+      terminalStops: [],
+      terminalApproachFallbacks: {
+        '8A|1|114': {
+          terminal_stop_ids: ['9006'],
+          candidate_trip_count: 116,
+        },
+      },
+    });
+
+    expect(enriched).toMatchObject({
+      terminal_progress_status: 'approaching',
+      terminal_stop_id: '9006',
+      terminal_progress_source: 'route_direction_stop_fallback',
+      terminal_departure_time: null,
+    });
+  });
+
+  test('does not apply a terminal fallback to a different direction', () => {
+    const enriched = enrichTerminalProgressWithFallback({
+      route_id: '8A',
+      direction_id: 0,
+      stop_id: '114',
+    }, {
+      terminalStopIds,
+      terminalStops: [],
+      terminalApproachFallbacks: {
+        '8A|1|114': { terminal_stop_ids: ['9006'] },
+      },
+    });
+
+    expect(enriched.terminal_progress_status).toBe('not_serving');
   });
 
   test('keeps a bus currently at a BATT platform', () => {
@@ -162,6 +204,37 @@ describe('BATT trip progress classification', () => {
       terminalStopIds: ['AD'],
       inboundHeadsignPattern: /Allandale Waterfront/i,
     }).status).toBe('approaching');
+  });
+
+  test('keeps an upstream inbound GO vehicle when the feed omits stop sequence', () => {
+    const result = classifyTerminalProgress({
+      current_stop_sequence: null,
+      current_status: null,
+      stop_id: '02688',
+      trip_headsign: 'Allandale Waterfront GO',
+    }, {
+      terminalStops: [{ stop_id: '08049', stop_sequence: 39 }],
+      terminalStopIds: ['08049'],
+      inboundHeadsignPattern: /Allandale Waterfront/i,
+    });
+
+    expect(result).toMatchObject({
+      status: 'approaching',
+      terminalStop: { stop_id: '08049', stop_sequence: 39 },
+    });
+  });
+
+  test('does not treat an upstream outbound GO vehicle as approaching without a stop sequence', () => {
+    expect(classifyTerminalProgress({
+      current_stop_sequence: null,
+      current_status: null,
+      stop_id: '02688',
+      trip_headsign: 'East Gwillimbury GO',
+    }, {
+      terminalStops: [{ stop_id: '08049', stop_sequence: 1 }],
+      terminalStopIds: ['08049'],
+      inboundHeadsignPattern: /Allandale Waterfront/i,
+    }).status).toBe('unknown');
   });
 
   test('rejects an outbound GO vehicle whose trip starts at Allandale', () => {

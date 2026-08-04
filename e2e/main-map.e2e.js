@@ -105,6 +105,60 @@ test('main map clears last-known vehicles when polling fails', async ({ page }) 
   await expect(page.locator('#banner')).toContainText('Bus icons are hidden');
 });
 
+test('main map falls back from Mapbox without restoring floating road labels', async ({ page }) => {
+  let mapboxRequests = 0;
+  let fallbackRequests = 0;
+  let majorRoadRequests = 0;
+  const transparentTile = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+
+  await page.route('**/mock-mapbox/**', (route) => {
+    mapboxRequests += 1;
+    return route.abort('failed');
+  });
+  await page.route('**/fallback-tile/**', (route) => {
+    fallbackRequests += 1;
+    return route.fulfill({ status: 200, contentType: 'image/png', body: transparentTile });
+  });
+  await page.route('**/data/major-roads.geojson', (route) => {
+    majorRoadRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ type: 'FeatureCollection', features: [] }),
+    });
+  });
+  await page.route('**/api/config', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      poll_ms: 5000,
+      base_path: '/',
+      basemap: {
+        provider: 'mapbox',
+        url: '/mock-mapbox/{z}/{x}/{y}.png',
+        tile_size: 512,
+        zoom_offset: -1,
+        max_zoom: 19,
+        opacity: 1,
+        attribution: 'Mapbox',
+        fallback_url: '/fallback-tile/{z}/{x}/{y}.png',
+        fallback_attribution: 'OpenStreetMap',
+      },
+      rt_feed_configured: false,
+    }),
+  }));
+
+  await page.goto('/');
+
+  await expect.poll(() => mapboxRequests).toBeGreaterThanOrEqual(3);
+  await expect.poll(() => fallbackRequests).toBeGreaterThan(0);
+  await expect(page.locator('.major-road-label')).toHaveCount(0);
+  expect(majorRoadRequests).toBe(0);
+});
+
 test('terminal board shows a GO train departure countdown at Allandale', async ({ page }) => {
   const errors = captureRuntimeErrors(page);
   const nowSeconds = Math.floor(Date.now() / 1000);
@@ -191,7 +245,13 @@ test('terminal board shows a GO train departure countdown at Allandale', async (
   const trainRow = page.locator('.nearby-bus[data-vehicle-id="go-train-allandale"]');
   await expect(trainRow).toBeVisible();
   await expect(trainRow.locator('.nearby-bus__route-agency')).toHaveText('GO');
-  await expect(trainRow.locator('.nearby-bus__distance-main')).toHaveText('At the terminal');
+  await expect(trainRow.locator('.nearby-bus__agency-logo')).toHaveAttribute(
+    'src',
+    './assets/agency-go-transit.svg'
+  );
+  await expect(trainRow.locator('.nearby-bus__proximity')).toHaveText('At the terminal');
+  await expect(trainRow.locator('.nearby-bus__platform-type')).toHaveText('PLATFORM');
+  await expect(trainRow.locator('.nearby-bus__platform-number')).toHaveText('1');
   await expect(trainRow.locator('.nearby-bus__departure')).toHaveText('Departs in 5 min');
   await expect(page.locator('#banner')).toBeHidden();
   expect(errors).toEqual([]);

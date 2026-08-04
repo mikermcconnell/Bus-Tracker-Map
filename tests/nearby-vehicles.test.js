@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import {
   BATT_COORDS,
+  formatTerminalArrival,
   formatTerminalDeparture,
   formatTerminalDistance,
+  getTerminalEventTime,
   getTerminalDisplayStatus,
   getRouteEightDirectionLabel,
   getTerminalListStatus,
@@ -85,7 +87,7 @@ describe('nearest BATT vehicle selection', () => {
     expect(getRouteEightDirectionLabel('7B', 0)).toBe('');
   });
 
-  test('sorts valid vehicles by distance from the terminal', () => {
+  test('sorts valid vehicles without realtime events by distance from the terminal', () => {
     const vehicles = [
       { id: 'far', route_id: '8A', terminal_progress_status: 'approaching', lat: 44.3894, lon: -79.6903 },
       { id: 'terminal', route_id: '7B', terminal_progress_status: 'at_terminal', lat: BATT_COORDS.lat, lon: BATT_COORDS.lon },
@@ -97,6 +99,83 @@ describe('nearest BATT vehicle selection', () => {
 
     expect(selected.map((entry) => entry.vehicle.id)).toEqual(['terminal', 'near', 'far']);
     expect(selected[0].distanceMeters).toBeCloseTo(0, 3);
+  });
+
+  test('puts terminal buses first, then sorts each status by its next event', () => {
+    const now = Date.parse('2026-08-04T15:00:00Z');
+    const vehicles = [
+      {
+        id: 'near-later-arrival',
+        terminal_progress_status: 'approaching',
+        terminal_arrival_time: now / 1000 + 12 * 60,
+        lat: 44.38,
+        lon: -79.69
+      },
+      {
+        id: 'terminal-next-departure',
+        terminal_progress_status: 'at_terminal',
+        terminal_departure_time: now / 1000 + 5 * 60,
+        lat: BATT_COORDS.lat,
+        lon: BATT_COORDS.lon
+      },
+      {
+        id: 'far-first-arrival',
+        terminal_progress_status: 'approaching',
+        terminal_arrival_time: now / 1000 + 2 * 60,
+        lat: 44.3894,
+        lon: -79.6903
+      },
+      {
+        id: 'unknown-time',
+        terminal_progress_status: 'approaching',
+        lat: 44.378,
+        lon: -79.69
+      }
+    ];
+
+    expect(selectNearestVehicles(vehicles, { nowMs: now }).map((entry) => entry.vehicle.id))
+      .toEqual([
+        'terminal-next-departure',
+        'far-first-arrival',
+        'near-later-arrival',
+        'unknown-time'
+      ]);
+  });
+
+  test('sorts a physically near approaching bus as arriving now', () => {
+    const now = Date.parse('2026-08-04T15:00:00Z');
+    const vehicles = [
+      {
+        id: 'far-feed-first',
+        terminal_progress_status: 'approaching',
+        terminal_arrival_time: now / 1000 + 60,
+        lat: 44.38,
+        lon: -79.69
+      },
+      {
+        id: 'near-feed-later',
+        terminal_progress_status: 'approaching',
+        terminal_arrival_time: now / 1000 + 7 * 60,
+        lat: 44.3749,
+        lon: -79.69
+      }
+    ];
+
+    expect(selectNearestVehicles(vehicles, { nowMs: now }).map((entry) => entry.vehicle.id))
+      .toEqual(['near-feed-later', 'far-feed-first']);
+  });
+
+  test('treats stale and GPS-contradicted due event times as unknown', () => {
+    const now = Date.parse('2026-08-04T15:00:00Z');
+    expect(getTerminalEventTime({
+      terminal_arrival_time: now / 1000 - 301
+    }, 'approaching', now)).toBeNull();
+    expect(getTerminalEventTime({
+      terminal_arrival_time: now / 1000 - 20
+    }, 'approaching', now, 1300)).toBeNull();
+    expect(getTerminalEventTime({
+      terminal_departure_time: now / 1000 + 60
+    }, 'at_terminal', now)).toBe(now / 1000 + 60);
   });
 
   test('respects the requested row limit', () => {
@@ -150,5 +229,30 @@ describe('BATT departure labels', () => {
     expect(formatTerminalDeparture(now / 1000 - 20, now)).toBe('Departs now');
     expect(formatTerminalDeparture(now / 1000 - 301, now)).toBe('');
     expect(formatTerminalDeparture(null, now)).toBe('');
+  });
+});
+
+describe('BATT arrival labels', () => {
+  const now = Date.parse('2026-07-31T13:00:00Z');
+
+  test('shows whole minutes until arrival', () => {
+    expect(formatTerminalArrival(now / 1000 + 121, now)).toBe('Arrives in 3 min');
+    expect(formatTerminalArrival(now / 1000 + 20, now)).toBe('Arrives in 1 min');
+  });
+
+  test('handles due and stale arrivals', () => {
+    expect(formatTerminalArrival(now / 1000 - 20, now)).toBe('Arriving now');
+    expect(formatTerminalArrival(now / 1000 - 301, now)).toBe('');
+    expect(formatTerminalArrival(null, now)).toBe('');
+  });
+
+  test('uses physical proximity over a terminal arrival pushed to departure time', () => {
+    expect(formatTerminalArrival(now / 1000 + 7 * 60, now, 100)).toBe('Arriving now');
+    expect(formatTerminalArrival(now / 1000 + 7 * 60, now, 251)).toBe('Arrives in 7 min');
+  });
+
+  test('hides an expired prediction when GPS still shows the vehicle far away', () => {
+    expect(formatTerminalArrival(now / 1000 - 20, now, 1300)).toBe('');
+    expect(formatTerminalArrival(now / 1000 - 20, now, 250)).toBe('Arriving now');
   });
 });

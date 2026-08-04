@@ -6,6 +6,7 @@ export const BATT_COORDS = Object.freeze({
 });
 
 export const TERMINAL_DISPLAY_RADIUS_METERS = 150;
+export const TERMINAL_ARRIVING_NOW_RADIUS_METERS = 250;
 
 export function getTerminalDisplayStatus(
   terminalProgressStatus,
@@ -80,8 +81,51 @@ export function getRouteEightDirectionLabel(routeId, directionId) {
   return '';
 }
 
+export function getTerminalEventTime(
+  vehicle,
+  terminalStatus,
+  nowMs = Date.now(),
+  distanceMeters = null
+) {
+  if (!vehicle) return null;
+  const nowSeconds = Number(nowMs) / 1000;
+  const distance = Number(distanceMeters);
+  if (
+    terminalStatus !== 'at_terminal' &&
+    distanceMeters !== null && distanceMeters !== undefined &&
+    Number.isFinite(distance) && distance <= TERMINAL_ARRIVING_NOW_RADIUS_METERS &&
+    Number.isFinite(nowSeconds)
+  ) {
+    return nowSeconds;
+  }
+  const rawTime = terminalStatus === 'at_terminal'
+    ? vehicle.terminal_departure_time
+    : vehicle.terminal_arrival_time;
+  if (rawTime === null || rawTime === undefined || rawTime === '') return null;
+  const eventTime = Number(rawTime);
+  if (
+    !Number.isFinite(eventTime) || eventTime <= 0 ||
+    !Number.isFinite(nowSeconds) || eventTime < nowSeconds - 5 * 60
+  ) {
+    return null;
+  }
+  // A due arrival prediction cannot outweigh GPS evidence that the vehicle is
+  // still outside the arriving-now radius. Treat it as unknown until either a
+  // future prediction arrives or the vehicle gets physically close.
+  if (
+    terminalStatus !== 'at_terminal' &&
+    distanceMeters !== null && distanceMeters !== undefined &&
+    Number.isFinite(distance) && distance > TERMINAL_ARRIVING_NOW_RADIUS_METERS &&
+    eventTime <= nowSeconds
+  ) {
+    return null;
+  }
+  return eventTime;
+}
+
 export function selectNearestVehicles(list, options = {}) {
   const terminal = options.terminal || BATT_COORDS;
+  const nowMs = Number.isFinite(Number(options.nowMs)) ? Number(options.nowMs) : Date.now();
   const requestedLimit = Number(options.limit);
   const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
     ? Math.floor(requestedLimit)
@@ -93,15 +137,26 @@ export function selectNearestVehicles(list, options = {}) {
       Number.isFinite(Number(vehicle.lat)) &&
       Number.isFinite(Number(vehicle.lon))
     ))
-    .map((vehicle) => ({
-      vehicle,
-      distanceMeters: distanceBetweenMeters(
+    .map((vehicle) => {
+      const distanceMeters = distanceBetweenMeters(
         Number(vehicle.lat),
         Number(vehicle.lon),
         Number(terminal.lat),
         Number(terminal.lon)
-      )
-    }))
+      );
+      const terminalStatus = getTerminalListStatus(vehicle, distanceMeters);
+      return {
+        vehicle,
+        distanceMeters,
+        terminalStatus,
+        terminalEventTime: getTerminalEventTime(
+          vehicle,
+          terminalStatus,
+          nowMs,
+          distanceMeters
+        )
+      };
+    })
     .filter((entry) => (
       Number.isFinite(entry.distanceMeters) &&
       (
@@ -110,6 +165,15 @@ export function selectNearestVehicles(list, options = {}) {
       )
     ))
     .sort((a, b) => {
+      const aAtTerminal = a.terminalStatus === 'at_terminal';
+      const bAtTerminal = b.terminalStatus === 'at_terminal';
+      if (aAtTerminal !== bAtTerminal) return aAtTerminal ? -1 : 1;
+      const aHasTime = Number.isFinite(a.terminalEventTime);
+      const bHasTime = Number.isFinite(b.terminalEventTime);
+      if (aHasTime !== bHasTime) return aHasTime ? -1 : 1;
+      if (aHasTime && a.terminalEventTime !== b.terminalEventTime) {
+        return a.terminalEventTime - b.terminalEventTime;
+      }
       if (a.distanceMeters !== b.distanceMeters) {
         return a.distanceMeters - b.distanceMeters;
       }
@@ -137,4 +201,30 @@ export function formatTerminalDeparture(departureEpochSeconds, nowMs = Date.now(
   if (remainingMs <= 0) return 'Departs now';
   const minutes = Math.max(1, Math.ceil(remainingMs / 60000));
   return `Departs in ${minutes} min`;
+}
+
+export function formatTerminalArrival(
+  arrivalEpochSeconds,
+  nowMs = Date.now(),
+  distanceMeters = null
+) {
+  const distance = Number(distanceMeters);
+  if (
+    distanceMeters !== null && distanceMeters !== undefined &&
+    Number.isFinite(distance) && distance <= TERMINAL_ARRIVING_NOW_RADIUS_METERS
+  ) {
+    return 'Arriving now';
+  }
+  const arrivalMs = Number(arrivalEpochSeconds) * 1000;
+  const currentMs = Number(nowMs);
+  if (!Number.isFinite(arrivalMs) || arrivalMs <= 0 || !Number.isFinite(currentMs)) return '';
+  const remainingMs = arrivalMs - currentMs;
+  if (remainingMs < -5 * 60 * 1000) return '';
+  if (remainingMs <= 0) {
+    const hasDistance = distanceMeters !== null && distanceMeters !== undefined &&
+      Number.isFinite(distance);
+    return hasDistance ? '' : 'Arriving now';
+  }
+  const minutes = Math.max(1, Math.ceil(remainingMs / 60000));
+  return `Arrives in ${minutes} min`;
 }
