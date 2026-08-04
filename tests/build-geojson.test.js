@@ -123,6 +123,7 @@ test('build-geojson emits routes and stops artefacts', async () => {
         stop_sequence: 1,
         arrival_time: '15:34:00',
         departure_time: '15:34:00',
+        is_departure: false,
       },
     ]);
     expect(metadata.trips['trip-1'].terminal_stops).toEqual([
@@ -131,6 +132,7 @@ test('build-geojson emits routes and stops artefacts', async () => {
         stop_sequence: 2,
         arrival_time: '12:15:00',
         departure_time: '12:20:00',
+        is_departure: false,
       },
     ]);
     expect(metadata.trips['trip-1'].service_id).toBe('weekday');

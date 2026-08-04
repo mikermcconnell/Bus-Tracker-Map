@@ -22,6 +22,7 @@ const {
   loadTerminalMetadata,
 } = require('./terminal-progress');
 const { buildTerminalLayout } = require('./terminal-layout');
+const { createDeparturesService } = require('./departures');
 
 function normalizeBasePath(input) {
   if (!input) return '/';
@@ -144,6 +145,11 @@ const ONTARIO_NORTHLAND_RT_URL =
   process.env.ONTARIO_NORTHLAND_GTFS_RT_VEHICLES_URL || DEFAULT_ONTARIO_NORTHLAND_VEHICLES_URL;
 const ONTARIO_NORTHLAND_TRIP_UPDATES_URL =
   process.env.ONTARIO_NORTHLAND_GTFS_RT_TRIP_UPDATES_URL || DEFAULT_ONTARIO_NORTHLAND_TRIP_UPDATES_URL;
+const BARRIE_TRIP_UPDATES_URL = process.env.GTFS_RT_TRIP_UPDATES_URL ||
+  'https://www.myridebarrie.ca/gtfs/GTFS_TripUpdates.pb';
+const LINX_ENABLED = !/^(?:0|false|no|off)$/i.test(String(process.env.LINX_ENABLED || 'true').trim());
+const LINX_TRIP_UPDATES_URL = process.env.LINX_GTFS_RT_TRIP_UPDATES_URL ||
+  'https://metrolinx.tmix.se/gtfs-realtime-simcoe/tripupdates.pb';
 const ONTARIO_NORTHLAND_ALERTS_URL =
   process.env.ONTARIO_NORTHLAND_GTFS_RT_ALERTS_URL || DEFAULT_ONTARIO_NORTHLAND_ALERTS_URL;
 const METROLINX_API_KEY = String(process.env.METROLINX_API_KEY || '').trim();
@@ -161,6 +167,24 @@ const CACHE_DIR = path.resolve(process.env.CACHE_DIR || path.join(__dirname, '..
 const barrieTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'barrie-transit.json');
 const northlandTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'ontario-northland.json');
 const goTransitTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'go-transit.json');
+const linxTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'linx.json');
+const getDepartures = createDeparturesService({
+  metadata: {
+    barrie_transit: barrieTerminalMetadata,
+    ontario_northland: northlandTerminalMetadata,
+    go_transit: goTransitTerminalMetadata,
+    simcoe_linx: linxTerminalMetadata,
+  },
+  urls: {
+    barrie: BARRIE_TRIP_UPDATES_URL,
+    ontarioNorthland: ONTARIO_NORTHLAND_ENABLED ? ONTARIO_NORTHLAND_TRIP_UPDATES_URL : '',
+    linx: LINX_ENABLED ? LINX_TRIP_UPDATES_URL : '',
+  },
+  goApiBase: METROLINX_API_BASE,
+  goApiKey: METROLINX_API_KEY,
+  delayedAfterMs: FEED_DELAYED_AFTER_MS,
+  offlineAfterMs: FEED_OFFLINE_AFTER_MS,
+});
 const hashedAssetPattern = /\.[0-9a-f]{10}\.(?:js|css)$/;
 const allowedOrigins = parseAllowedOrigins(process.env.ALLOWED_ORIGINS);
 const corsMiddleware = createCorsMiddleware(allowedOrigins);
@@ -414,6 +438,7 @@ apiRouter.get('/config', (req, res) => {
       barrie_transit: Boolean(RT_URL),
       ontario_northland: ONTARIO_NORTHLAND_ENABLED,
       go_transit: GO_TRANSIT_ENABLED,
+      simcoe_linx: LINX_ENABLED,
     },
   });
 });
@@ -425,6 +450,23 @@ apiRouter.get('/terminal-layout', (req, res) => {
     ontarioNorthland: northlandTerminalMetadata,
     goTransit: goTransitTerminalMetadata,
   }));
+});
+
+apiRouter.get('/departures', async (req, res) => {
+  const rawLimit = req.query && req.query.limit;
+  if (rawLimit !== undefined && !/^\d+$/.test(String(rawLimit))) {
+    return res.status(400).json({ error: 'INVALID_LIMIT' });
+  }
+  const limit = rawLimit === undefined ? 12 : Number(rawLimit);
+  if (limit < 1 || limit > 30) return res.status(400).json({ error: 'INVALID_LIMIT' });
+  try {
+    const data = await getDepartures({ limit });
+    res.setHeader('Cache-Control', 'public, max-age=5, stale-while-revalidate=5');
+    res.json(data);
+  } catch (err) {
+    console.error('[departures] Unable to build departure board:', err.message || err);
+    res.status(Number(err.statusCode) || 502).json({ error: 'DEPARTURES_UNAVAILABLE' });
+  }
 });
 
 apiRouter.get('/service-status', (req, res) => {
@@ -530,6 +572,14 @@ router.get('/notices', (req, res, next) => {
   res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';");
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(noticesPath);
+});
+
+router.get('/departures', (req, res, next) => {
+  const departuresPath = path.join(FRONTEND_DIR, 'departures.html');
+  if (!fs.existsSync(departuresPath)) return next();
+  res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self';");
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(departuresPath);
 });
 
 router.get('*', (req, res, next) => {

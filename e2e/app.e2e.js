@@ -123,6 +123,52 @@ test('platform map loads without runtime errors', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test('departures board renders twelve TV-safe rows without scrolling', async ({ page }) => {
+  const errors = captureRuntimeErrors(page);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.route('**/api/config', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ poll_ms: 10000, base_path: '/' }) });
+  });
+  await page.route('**/api/departures?*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        generated_at: Date.now(),
+        departures: Array.from({ length: 12 }, (_, index) => ({
+          id: `departure-${index}`,
+          agency_id: index % 4 === 0 ? 'go-transit' : 'barrie-transit',
+          agency_name: index % 4 === 0 ? 'GO Transit' : 'Barrie Transit',
+          route_label: index % 4 === 0 ? 'TRAIN' : '8A',
+          destination: index % 4 === 0 ? 'Toronto / Union Station' : 'Yonge Southbound',
+          platform: index % 4 === 0 ? '1' : '3',
+          platform_type: 'platform',
+          expected_departure_time: nowSeconds + (index + 1) * 300,
+          departure_source: index % 2 ? 'scheduled' : 'realtime',
+        })),
+        sources: {
+          barrie_transit: { display_mode: 'mixed', realtime_status: 'live' },
+          ontario_northland: { display_mode: 'scheduled', realtime_status: 'offline' },
+          go_transit: { display_mode: 'realtime', realtime_status: 'live' },
+          simcoe_linx: { display_mode: 'scheduled', realtime_status: 'delayed' },
+        },
+      }),
+    });
+  });
+
+  await page.goto('/departures');
+  await expect(page).toHaveTitle(/Allandale Departures/);
+  await expect(page.locator('.departure')).toHaveCount(12);
+  await expect(page.locator('.destination').first()).toContainText('Toronto');
+  const dimensions = await page.locator('html').evaluate((element) => ({
+    height: element.scrollHeight,
+    viewport: element.clientHeight,
+  }));
+  expect(dimensions.height).toBeLessThanOrEqual(dimensions.viewport);
+  expect(errors).toEqual([]);
+});
+
 test('platform map renders current assignments and updates markers in place', async ({ page }) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   let vehiclePoll = 0;

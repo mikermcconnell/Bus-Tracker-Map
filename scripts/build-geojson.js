@@ -212,8 +212,16 @@ function normalizeHexColor(color) {
     }
 
     const terminalStopIds = new Set(terminalStops.map((stop) => String(stop.stop_id)));
+    const stopTimeRows = parse(stopTimesTxt, { columns: true, skip_empty_lines: true });
+    const lastStopSequenceByTrip = {};
+    stopTimeRows.forEach((stopTime) => {
+      const tripId = String(stopTime.trip_id || '');
+      const stopSequence = Number(stopTime.stop_sequence);
+      if (!tripId || !Number.isFinite(stopSequence)) return;
+      lastStopSequenceByTrip[tripId] = Math.max(lastStopSequenceByTrip[tripId] || 0, stopSequence);
+    });
     const terminalStopsByTrip = {};
-    parse(stopTimesTxt, { columns: true, skip_empty_lines: true }).forEach((stopTime) => {
+    stopTimeRows.forEach((stopTime) => {
       const stopId = String(stopTime.stop_id || '');
       const stopSequence = Number(stopTime.stop_sequence);
       if (!terminalStopIds.has(stopId) || !Number.isFinite(stopSequence)) return;
@@ -225,6 +233,7 @@ function normalizeHexColor(color) {
         stop_sequence: stopSequence,
         arrival_time: stopTime.arrival_time || null,
         departure_time: stopTime.departure_time || stopTime.arrival_time || null,
+        is_departure: stopSequence < Number(lastStopSequenceByTrip[tripId] || stopSequence),
       });
     });
 

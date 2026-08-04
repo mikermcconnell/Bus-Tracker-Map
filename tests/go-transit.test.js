@@ -208,6 +208,7 @@ describe('GO Transit Allandale integration', () => {
         stop_sequence: 1,
         arrival_time: '12:00:00',
         departure_time: '12:05:00',
+        is_departure: false,
       },
     ]);
     expect(result.metadata.trips['train-trip'].terminal_stops).toEqual([
@@ -216,6 +217,7 @@ describe('GO Transit Allandale integration', () => {
         stop_sequence: 1,
         arrival_time: '13:00:00',
         departure_time: '13:05:00',
+        is_departure: false,
       },
     ]);
     expect(result.metadata.trips['bus-trip'].service_id).toBe('weekday');

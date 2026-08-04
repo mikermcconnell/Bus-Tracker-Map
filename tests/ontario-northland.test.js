@@ -94,6 +94,7 @@ describe('Ontario Northland integration', () => {
         stop_sequence: 2,
         arrival_time: '12:00:00',
         departure_time: '12:05:00',
+        is_departure: false,
       },
     ]);
     expect(result.routes.features.length).toBeGreaterThan(0);

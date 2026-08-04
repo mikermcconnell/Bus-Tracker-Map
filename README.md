@@ -12,6 +12,7 @@ A single-page Leaflet app that shows Barrie Transit routes and live vehicle posi
    - Keep `GTFS_STATIC_URL=https://www.myridebarrie.ca/gtfs/google_transit.zip`.
    - Set `GTFS_RT_VEHICLES_URL` to your exact Vehicle Positions protobuf URL (for example `https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb`).
    - Keep the four `ONTARIO_NORTHLAND_*` feed URLs from `.env.example`; set `ONTARIO_NORTHLAND_ENABLED=false` only if that source must be disabled.
+   - Keep the `LINX_*` static and trip-update feed URLs to include route 2 departures from Allandale Platform 2.
    - Set `METROLINX_API_KEY` to the server-side Metrolinx Open Data API key and leave `GO_TRANSIT_ENABLED=true`.
    - Leave `MAPTILER_KEY` blank to use OpenStreetMap tiles, or supply your MapTiler key if you have one.
    - Leave `POLL_MS=10000` unless you need a different polling interval.
@@ -30,7 +31,7 @@ npm install
 ```bash
 npm run build
 ```
-This bundles the frontend into `frontend/dist/` (hashed assets for long-lived caching), refreshes Barrie GTFS GeoJSON, creates a compact Ontario Northland layer containing only the routes that serve Barrie, and creates GO bus/train layers containing only trips serving Allandale stops `08049` and `AD`.
+This bundles the frontend into `frontend/dist/` (hashed assets for long-lived caching), refreshes Barrie GTFS GeoJSON, creates a compact Ontario Northland layer containing only the routes that serve Barrie, creates GO bus/train layers containing only trips serving Allandale stops `08049` and `AD`, and generates Simcoe LINX route 2 departure metadata.
 
 > Tip: Run `npm run build:northland` to refresh only Ontario Northland data, `npm run build:go` to refresh only GO Allandale data, or `npm run build:frontend` to rebuild the SPA bundle by itself.
 
@@ -60,6 +61,12 @@ Open [http://localhost:3000](http://localhost:3000) in a browser (or on the Smar
 
 The terminal-focused displays are available at `/platform.map` and `/batt.map`. Both consume the same merged, freshness-checked vehicle endpoint and show Ontario Northland and GO vehicles when they enter the calibrated Allandale platform area. The platform display reads `/api/terminal-layout`, overlays current GTFS-derived bay assignments, keeps live markers aligned at 16:9 and 4:3, and marks Platform 14 as having no scheduled service when it is absent from the current Barrie feed.
 
+## Allandale departure board
+
+Open [http://localhost:3000/departures](http://localhost:3000/departures) locally or `/departures` on the production site. The TV-safe board displays the next 12 outbound departures within 24 hours for Barrie Transit, Ontario Northland, GO buses and trains, and Simcoe LINX route 2.
+
+The board uses fresh trip predictions when available and falls back independently to the published schedule for any delayed, stale, unconfigured, or failed source. Each agency status chip says whether the displayed information is live or scheduled. The supporting `GET /api/departures?limit=12` endpoint accepts limits from 1 through 30.
+
 ### Metrolinx data notice
 
 Data used in this product or service is provided with the permission of Metrolinx. Metrolinx makes no representations or warranties of any kind, express or implied, with respect to the Data and assumes no responsibility for the accuracy or currency of the data used in this product or service.
@@ -82,6 +89,7 @@ For the terminal TV, disable its sleep/screensaver setting and bookmark the prod
 - `npm run build:data` - regenerate the cached GeoJSON from the latest GTFS ZIP.
 - `npm run build:northland` - refresh the Barrie-serving Ontario Northland route and trip metadata.
 - `npm run build:go` - refresh only GO route 68 and Barrie line data serving Allandale.
+- `npm run build:linx` - refresh only Simcoe LINX route 2 metadata at Allandale.
 - `npm run build:frontend` - produce hashed frontend assets in `frontend/dist/`.
 - `npm run watch:frontend` - development watcher that rebuilds the frontend bundle on changes.
 - `npm start` - run the Express server.
@@ -102,11 +110,13 @@ barrie-bus/
     build-geojson.js  # Downloads GTFS static feed and writes GeoJSON caches
     build-ontario-northland.js # Builds the clipped Ontario Northland layer
     build-go-transit.js # Builds GO layers limited to Allandale-serving trips
+    build-linx.js # Builds Simcoe LINX route 2 departure metadata
   server/
     server.js        # Express server, REST endpoints, static hosting
     vehicles.js      # Optional GTFS-Realtime fetch/convert helper
     ontario-northland.js # Ontario Northland vehicles, trip updates, and alerts
     go-transit.js  # Metrolinx vehicles filtered to Allandale routes and Barrie bounds
+    departures.js # Unified static and realtime departure-board service
   cache/             # Generated GeoJSON (routes/stops) after build:data
   .env               # Local configuration (ignored by Git)
   .env.example       # Template for the environment variables

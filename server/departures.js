@@ -1,0 +1,247 @@
+const fetch = require('node-fetch');
+const { isServiceActiveOnDate } = require('../shared/gtfs-service-calendar');
+const { scheduledTimeToEpochSeconds } = require('./terminal-progress');
+const { BARRIE_PLATFORM_LABELS, cleanHeadsign } = require('./terminal-layout');
+const { fetchTripUpdates } = require('./gtfs-trip-updates');
+
+const TIME_ZONE = 'America/Toronto';
+const HORIZON_HOURS = 24;
+const GRACE_SECONDS = 60;
+
+const AGENCIES = Object.freeze({
+  barrie_transit: { id: 'barrie-transit', name: 'Barrie Transit', mode: 'bus' },
+  ontario_northland: { id: 'ontario-northland', name: 'Ontario Northland', mode: 'coach' },
+  go_transit: { id: 'go-transit', name: 'GO Transit', mode: 'bus' },
+  simcoe_linx: { id: 'simcoe-linx', name: 'Simcoe LINX', mode: 'bus' },
+});
+
+function localDateKeys(nowMs) {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(new Date(nowMs));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const base = Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day));
+  return [-1, 0, 1, 2].map((offset) => {
+    const date = new Date(base + offset * 86400000);
+    return `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, '0')}${String(date.getUTCDate()).padStart(2, '0')}`;
+  });
+}
+
+function stopPlatform(metadata, stopId, fallback) {
+  const stop = (metadata.terminal_stops || []).find((candidate) => String(candidate.id || candidate.stop_id) === stopId);
+  return String(stop && stop.platform_code || fallback || '');
+}
+
+function routeDetails(agencyKey, metadata, trip, stopId) {
+  const sourceRoute = String(trip.route_id || '');
+  if (agencyKey === 'barrie_transit') {
+    const platform = stopPlatform(metadata, stopId, stopId === '14' ? '14' : '');
+    return { route_id: sourceRoute, route_label: sourceRoute, mode: 'bus', destination: BARRIE_PLATFORM_LABELS[`${platform}|${sourceRoute}`] || cleanHeadsign(trip.headsign, 'barrie-transit') };
+  }
+  if (agencyKey === 'ontario_northland') {
+    const route = metadata.routes && metadata.routes[sourceRoute] || {};
+    return { route_id: sourceRoute, route_label: route.short_name || sourceRoute, mode: 'coach', destination: cleanHeadsign(trip.headsign, 'ontario-northland') || route.long_name || 'Ontario Northland' };
+  }
+  if (agencyKey === 'simcoe_linx') {
+    return { route_id: sourceRoute, route_label: '2', mode: 'bus', destination: cleanHeadsign(trip.headsign, 'simcoe-linx') || 'Wasaga Beach' };
+  }
+  const train = stopId === 'AD' || /(?:^|-)BR(?:$|-)/i.test(sourceRoute);
+  return { route_id: sourceRoute, route_label: train ? 'TRAIN' : '68', mode: train ? 'train' : 'bus', destination: cleanHeadsign(trip.headsign, 'go-transit') || (train ? 'Toronto / Union Station' : 'Aurora / East Gwillimbury') };
+}
+
+function platformDetails(agencyKey, metadata, stopId) {
+  if (agencyKey === 'barrie_transit') {
+    const value = stopPlatform(metadata, stopId, stopId === '14' ? '14' : '');
+    return { platform: value, platform_type: stopId === '14' ? 'stop' : 'platform' };
+  }
+  if (agencyKey === 'ontario_northland') return { platform: '8', platform_type: 'platform' };
+  if (agencyKey === 'simcoe_linx') return { platform: '2', platform_type: 'platform' };
+  return { platform: stopId === 'AD' ? '1' : '7', platform_type: 'platform' };
+}
+
+function collectScheduledDepartures(metadata, agencyKey, nowMs, horizonHours = HORIZON_HOURS) {
+  const agency = AGENCIES[agencyKey];
+  if (!agency || !metadata || !metadata.trips) return [];
+  const start = nowMs / 1000 - GRACE_SECONDS;
+  const end = nowMs / 1000 + horizonHours * 3600;
+  const results = [];
+  for (const [tripId, trip] of Object.entries(metadata.trips)) {
+    for (const stop of trip.terminal_stops || []) {
+      if (stop.is_departure === false) continue;
+      const stopId = String(stop.stop_id || '');
+      for (const serviceDate of localDateKeys(nowMs)) {
+        if (!isServiceActiveOnDate(metadata, trip.service_id, serviceDate)) continue;
+        const scheduled = scheduledTimeToEpochSeconds(serviceDate, stop.departure_time || stop.arrival_time, TIME_ZONE);
+        if (!Number.isFinite(scheduled) || scheduled < start || scheduled > end) continue;
+        results.push({
+          id: `${agency.id}:${tripId}:${stopId}:${serviceDate}`,
+          agency_id: agency.id,
+          agency_name: agency.name,
+          ...routeDetails(agencyKey, metadata, trip, stopId),
+          ...platformDetails(agencyKey, metadata, stopId),
+          stop_id: stopId,
+          trip_id: tripId,
+          service_date: serviceDate,
+          scheduled_departure_time: scheduled,
+          expected_departure_time: scheduled,
+          departure_source: 'scheduled',
+          delay_seconds: 0,
+        });
+      }
+    }
+  }
+  return results;
+}
+
+function freshness(feedTimestamp, nowMs, delayedAfterMs, offlineAfterMs) {
+  if (!Number.isFinite(feedTimestamp) || feedTimestamp <= 0) return { realtime_status: 'offline', status_reason: 'missing_timestamp', latest_data_timestamp: null };
+  const age = Math.max(0, nowMs - feedTimestamp * 1000);
+  if (age > offlineAfterMs) return { realtime_status: 'offline', status_reason: 'stale_feed', latest_data_timestamp: feedTimestamp * 1000 };
+  if (age > delayedAfterMs) return { realtime_status: 'delayed', status_reason: 'delayed_feed', latest_data_timestamp: feedTimestamp * 1000 };
+  return { realtime_status: 'live', status_reason: 'fresh_feed', latest_data_timestamp: feedTimestamp * 1000 };
+}
+
+function mergeTripUpdates(scheduled, realtime, nowMs, delayedAfterMs, offlineAfterMs) {
+  const state = freshness(realtime && realtime.feed_timestamp, nowMs, delayedAfterMs, offlineAfterMs);
+  if (state.realtime_status !== 'live') return { departures: scheduled, source: { display_mode: 'scheduled', ...state } };
+  const updates = realtime.updates || [];
+  const usedUpdates = new Set();
+  let realtimeCount = 0;
+  const departures = scheduled.flatMap((departure) => {
+    let updateIndex = updates.findIndex((candidate, index) => (
+      !usedUpdates.has(index) &&
+      candidate.trip_id === departure.trip_id &&
+      candidate.stop_id === departure.stop_id &&
+      (!candidate.start_date || candidate.start_date === departure.service_date)
+    ));
+    // Some publishers rotate static trip IDs before their realtime producer does.
+    // A route/stop/time match keeps predictions usable without crossing services.
+    if (updateIndex < 0) {
+      let nearestDifference = 20 * 60 + 1;
+      updates.forEach((candidate, index) => {
+        if (usedUpdates.has(index) || candidate.canceled || candidate.skipped) return;
+        if (candidate.stop_id !== departure.stop_id || String(candidate.route_id || '') !== String(departure.route_id || '')) return;
+        if (!Number.isFinite(candidate.departure_time)) return;
+        const difference = Math.abs(candidate.departure_time - departure.scheduled_departure_time);
+        if (difference < nearestDifference) {
+          nearestDifference = difference;
+          updateIndex = index;
+        }
+      });
+    }
+    const update = updateIndex >= 0 ? updates[updateIndex] : null;
+    if (!update) return [departure];
+    if (update.canceled || update.skipped) return [];
+    usedUpdates.add(updateIndex);
+    const expected = Number.isFinite(update.departure_time)
+      ? update.departure_time
+      : departure.scheduled_departure_time + (Number(update.delay_seconds) || 0);
+    realtimeCount += 1;
+    return [{ ...departure, expected_departure_time: expected, departure_source: 'realtime', delay_seconds: Math.round(expected - departure.scheduled_departure_time) }];
+  });
+  return { departures, source: { display_mode: realtimeCount ? (realtimeCount === departures.length ? 'realtime' : 'mixed') : 'scheduled', ...state } };
+}
+
+function readGoTime(value) {
+  if (Number.isFinite(Number(value))) {
+    const numeric = Number(value);
+    return numeric > 1e12 ? Math.floor(numeric / 1000) : numeric;
+  }
+  const dotNet = String(value || '').match(/^\/Date\((\d+)/);
+  if (dotNet) return Math.floor(Number(dotNet[1]) / 1000);
+  const parsed = Date.parse(value || '');
+  return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
+}
+
+function parseGoNextService(payload, stopCode, nowMs) {
+  const root = payload && (payload.NextService || payload.nextService || payload);
+  const services = root && (root.Lines || root.lines || root.Services || root.services) || [];
+  const rows = Array.isArray(services) ? services : services && services.Line || [];
+  return (Array.isArray(rows) ? rows : [rows]).flatMap((row, index) => {
+    const time = readGoTime(row && (row.ComputedDepartureTime || row.AdjustedDepartureTime || row.ScheduledDepartureTime || row.DepartureTime));
+    if (!Number.isFinite(time)) return [];
+    const train = stopCode === 'AD';
+    return [{
+      id: `go-transit:next-service:${stopCode}:${row.TripNumber || row.TripId || index}:${time}`,
+      agency_id: 'go-transit', agency_name: 'GO Transit', mode: train ? 'train' : 'bus',
+      route_id: String(row.LineCode || row.RouteNumber || (train ? 'BR' : '68')),
+      route_label: train ? 'TRAIN' : String(row.LineCode || row.RouteNumber || '68').replace(/[^0-9].*$/, '') || '68',
+      destination: String(row.Destination || row.TripName || (train ? 'Toronto / Union Station' : 'Aurora / East Gwillimbury')),
+      platform: String(row.Platform || (train ? '1' : '7')), platform_type: 'platform', stop_id: stopCode,
+      trip_id: String(row.TripNumber || row.TripId || ''), service_date: null,
+      scheduled_departure_time: readGoTime(row.ScheduledDepartureTime || row.DepartureTime) || time,
+      expected_departure_time: time, departure_source: 'realtime',
+      delay_seconds: 0,
+    }];
+  }).filter((row) => row.expected_departure_time >= nowMs / 1000 - GRACE_SECONDS);
+}
+
+async function fetchGoNextServices({ apiBase, apiKey, nowMs }) {
+  if (!apiKey) throw new Error('GO API key is not configured');
+  const results = await Promise.all(['08049', 'AD'].map(async (stopCode) => {
+    const endpoint = `${String(apiBase).replace(/\/$/, '')}/Stop/NextService/${stopCode}?key=${encodeURIComponent(apiKey)}`;
+    const response = await fetch(endpoint, { timeout: 10_000, headers: { 'Cache-Control': 'no-cache' } });
+    if (!response.ok) throw new Error(`GO NextService failed: ${response.status}`);
+    const payload = await response.json();
+    return { payload, stopCode };
+  }));
+  const timestampValues = results.map(({ payload }) => readGoTime(payload && (payload.Metadata && payload.Metadata.TimeStamp || payload.TimeStamp))).filter(Number.isFinite);
+  return { feed_timestamp: timestampValues.length ? Math.max(...timestampValues) : Math.floor(nowMs / 1000), departures: results.flatMap(({ payload, stopCode }) => parseGoNextService(payload, stopCode, nowMs)) };
+}
+
+function unavailableSource(reason) {
+  return { display_mode: 'scheduled', realtime_status: 'offline', status_reason: reason, latest_data_timestamp: null };
+}
+
+function createDeparturesService(options = {}) {
+  const metadata = options.metadata || {};
+  const delayedAfterMs = options.delayedAfterMs || 120000;
+  const offlineAfterMs = options.offlineAfterMs || 900000;
+  return async function getDepartures({ limit = 12, now = Date.now() } = {}) {
+    const nowMs = Number(now);
+    const schedule = {};
+    for (const key of Object.keys(AGENCIES)) schedule[key] = collectScheduledDepartures(metadata[key], key, nowMs);
+    if (!Object.values(metadata).some((value) => value && value.trips && Object.keys(value.trips).length)) {
+      const error = new Error('Departure schedule metadata is unavailable'); error.statusCode = 503; throw error;
+    }
+    const realtimePromises = {
+      barrie_transit: options.urls && options.urls.barrie ? fetchTripUpdates(options.urls.barrie, metadata.barrie_transit && metadata.barrie_transit.terminal_stop_ids, { now: nowMs }) : Promise.reject(new Error('not_configured')),
+      ontario_northland: options.urls && options.urls.ontarioNorthland ? fetchTripUpdates(options.urls.ontarioNorthland, metadata.ontario_northland && metadata.ontario_northland.barrie_stop_ids, { now: nowMs }) : Promise.reject(new Error('not_configured')),
+      simcoe_linx: options.urls && options.urls.linx ? fetchTripUpdates(options.urls.linx, metadata.simcoe_linx && metadata.simcoe_linx.terminal_stop_ids, { now: nowMs }) : Promise.reject(new Error('not_configured')),
+      go_transit: fetchGoNextServices({ apiBase: options.goApiBase, apiKey: options.goApiKey, nowMs }),
+    };
+    const keys = Object.keys(realtimePromises);
+    const settled = await Promise.allSettled(keys.map((key) => realtimePromises[key]));
+    const sources = {};
+    let combined = [];
+    settled.forEach((result, index) => {
+      const key = keys[index];
+      if (result.status === 'rejected') {
+        sources[key] = unavailableSource(result.reason && result.reason.message === 'not_configured' ? 'feed_not_configured' : 'fetch_failed');
+        combined = combined.concat(schedule[key]);
+        return;
+      }
+      if (key === 'go_transit') {
+        const state = freshness(result.value.feed_timestamp, nowMs, delayedAfterMs, offlineAfterMs);
+        if (state.realtime_status === 'live' && result.value.departures.length) {
+          combined = combined.concat(result.value.departures);
+          sources[key] = { display_mode: 'realtime', ...state };
+        } else {
+          combined = combined.concat(schedule[key]);
+          sources[key] = { display_mode: 'scheduled', ...state };
+        }
+      } else {
+        const merged = mergeTripUpdates(schedule[key], result.value, nowMs, delayedAfterMs, offlineAfterMs);
+        combined = combined.concat(merged.departures);
+        sources[key] = merged.source;
+      }
+    });
+    const end = nowMs / 1000 + HORIZON_HOURS * 3600;
+    const departures = combined
+      .filter((row) => row.expected_departure_time >= nowMs / 1000 - GRACE_SECONDS && row.expected_departure_time <= end)
+      .sort((a, b) => a.expected_departure_time - b.expected_departure_time || a.id.localeCompare(b.id))
+      .slice(0, limit);
+    return { generated_at: nowMs, time_zone: TIME_ZONE, horizon_hours: HORIZON_HOURS, departures, sources };
+  };
+}
+
+module.exports = { collectScheduledDepartures, createDeparturesService, freshness, mergeTripUpdates, parseGoNextService, readGoTime };

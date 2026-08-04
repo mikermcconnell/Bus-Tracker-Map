@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#071b32">
+  <title>Allandale Departures</title>
+  <link rel="stylesheet" href="%APP_CSS%">
+</head>
+<body>
+  <main class="board" aria-labelledby="page-title">
+    <header class="masthead">
+      <div class="location">
+        <p class="eyebrow">ALLANDALE WATERFRONT STATION</p>
+        <h1 id="page-title">Next departures</h1>
+      </div>
+      <div class="clock" aria-live="off">
+        <time id="clock-time">--:--</time>
+        <span id="clock-date">---</span>
+      </div>
+    </header>
+
+    <section id="service-health" class="service-health" aria-label="Transit data status"></section>
+    <div id="warning" class="warning" role="status" hidden>Updates are temporarily unavailable. Showing the most recently received departures.</div>
+
+    <section class="departures-panel" aria-label="Upcoming departures">
+      <div class="column-head" aria-hidden="true">
+        <span>Service</span><span>Destination</span><span>Bay</span><span>Departs</span>
+      </div>
+      <ol id="departures-list" class="departures-list">
+        <li class="empty-state">Loading departures…</li>
+      </ol>
+    </section>
+
+    <footer>
+      <span><i class="live-key"></i> Live prediction</span>
+      <span><i class="scheduled-key"></i> Scheduled time</span>
+      <span id="last-updated">Connecting…</span>
+    </footer>
+  </main>
+  <script src="%APP_JS%" defer></script>
+</body>
+</html>

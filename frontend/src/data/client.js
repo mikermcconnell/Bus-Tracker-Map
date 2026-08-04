@@ -98,6 +98,11 @@ export function createDataClient(options = {}) {
       return fetchJson(resolveUrl(`/api/terminal-layout?cb=${cacheBust}`), { cache: 'no-store' });
     },
 
+    fetchDepartures(limit = 12) {
+      const cacheBust = Date.now().toString(36);
+      return fetchJson(resolveUrl(`/api/departures?limit=${encodeURIComponent(limit)}&cb=${cacheBust}`), { cache: 'no-store' });
+    },
+
     fetchVehicles() {
       const cacheBust = Date.now().toString(36);
       return fetchJson(resolveUrl(`/api/vehicles.json?cb=${cacheBust}`), { cache: 'no-store' });

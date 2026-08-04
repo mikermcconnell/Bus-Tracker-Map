@@ -19,6 +19,7 @@ const srcDir = path.join(projectRoot, 'frontend', 'src');
 const dataDir = path.join(projectRoot, 'frontend', 'data');
 const distDir = path.join(projectRoot, 'frontend', 'dist');
 const assetsDir = path.join(distDir, 'assets');
+const leafletDir = path.dirname(require.resolve('leaflet/package.json'));
 
 // Bundle at a modern target for speed, then downlevel with Babel for legacy screens.
 const DEFAULT_ESBUILD_TARGET = (process.env.ESBUILD_TARGET || 'es2017')
@@ -56,6 +57,13 @@ const entryPoints = [
     cssPath: path.join(srcDir, 'notices', 'styles.css'),
     templatePath: path.join(srcDir, 'notices', 'index.html'),
     outputHtml: 'notices.html'
+  },
+  {
+    key: 'departures',
+    entryPath: path.join(srcDir, 'departures', 'main.js'),
+    cssPath: path.join(srcDir, 'departures', 'styles.css'),
+    templatePath: path.join(srcDir, 'departures', 'index.html'),
+    outputHtml: 'departures.html'
   }
 ];
 
@@ -139,7 +147,7 @@ function copySharedAssets() {
 }
 
 function copyLeafletAssets() {
-  const leafletImagesDir = path.join(projectRoot, 'node_modules', 'leaflet', 'dist', 'images');
+  const leafletImagesDir = path.join(leafletDir, 'dist', 'images');
   if (!fs.existsSync(leafletImagesDir)) {
     throw new Error('Leaflet image assets are missing; run npm install before building');
   }
@@ -178,7 +186,7 @@ function buildCss(entry) {
   const appCss = fs.readFileSync(entry.cssPath);
   const buffer = entry.includeLeafletCss
     ? Buffer.concat([
-      fs.readFileSync(path.join(projectRoot, 'node_modules', 'leaflet', 'dist', 'leaflet.css')),
+      fs.readFileSync(path.join(leafletDir, 'dist', 'leaflet.css')),
       Buffer.from('\n'),
       appCss,
     ])

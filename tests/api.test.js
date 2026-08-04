@@ -154,6 +154,22 @@ describe('API smoke tests', () => {
     expect(res.body.poll_ms).toBeGreaterThan(0);
   });
 
+  test('validates the departure-board limit before accessing feeds', async () => {
+    const app = await initApp();
+    const invalidText = await request(app).get('/api/departures?limit=twelve');
+    const invalidRange = await request(app).get('/api/departures?limit=31');
+    expect(invalidText.status).toBe(400);
+    expect(invalidRange.status).toBe(400);
+    expect(invalidText.body.error).toBe('INVALID_LIMIT');
+  });
+
+  test('returns a controlled unavailable response when no schedule metadata exists', async () => {
+    const app = await initApp();
+    const res = await request(app).get('/api/departures');
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({ error: 'DEPARTURES_UNAVAILABLE' });
+  });
+
   test('serves current terminal platform assignments from generated GTFS metadata', async () => {
     writeJson(path.join(cacheDir, 'barrie-transit.json'), {
       generated_at: '2026-07-30T18:42:08.922Z',
