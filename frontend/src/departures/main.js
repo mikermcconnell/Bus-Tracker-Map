@@ -6,7 +6,6 @@ const health = document.getElementById('service-health');
 const warning = document.getElementById('warning');
 const updated = document.getElementById('last-updated');
 const clockTime = document.getElementById('clock-time');
-const clockDate = document.getElementById('clock-date');
 const FAILURE_RETENTION_MS = 15 * 60 * 1000;
 const AGENCIES = {
   barrie_transit: { name: 'Barrie Transit', short: 'BT', logo: 'agency-barrie-transit.png' },
@@ -29,8 +28,7 @@ function asset(name) {
 
 function formatClock() {
   const now = new Date();
-  clockTime.textContent = new Intl.DateTimeFormat('en-CA', { hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(now);
-  clockDate.textContent = new Intl.DateTimeFormat('en-CA', { weekday: 'long', month: 'short', day: 'numeric' }).format(now);
+  clockTime.textContent = new Intl.DateTimeFormat('en-CA', { hour: 'numeric', minute: '2-digit' }).format(now);
   renderTimes();
 }
 
@@ -48,7 +46,10 @@ function renderTimes() {
 }
 
 function platform(row) {
-  return row.platform_type === 'stop' ? `Stop ${row.platform}` : `P${row.platform}`;
+  return {
+    label: row.platform_type === 'stop' ? 'Stop' : 'Platform',
+    number: String(row.platform || '').padStart(2, '0'),
+  };
 }
 
 function renderDepartures(rows) {
@@ -59,30 +60,31 @@ function renderDepartures(rows) {
   list.innerHTML = rows.map((row) => {
     const agencyKey = String(row.agency_id || '').replace(/-/g, '_');
     const agency = AGENCIES[agencyKey] || { name: row.agency_name, short: row.agency_name, logo: '' };
-    const sourceClass = row.departure_source === 'realtime' ? 'is-live' : 'is-scheduled';
+    const bay = platform(row);
     const logo = agency.logo ? `<img src="${asset(agency.logo)}" alt="">` : '';
     return `<li class="departure agency-${escapeHtml(agencyKey)}">
-      <div class="service-cell">${logo}<span class="route-badge">${escapeHtml(row.route_label)}</span><span class="agency-name">${escapeHtml(agency.name)}</span></div>
-      <div class="destination">${escapeHtml(row.destination || 'Destination unavailable')}</div>
-      <div class="platform">${escapeHtml(platform(row))}</div>
-      <div class="departure-time ${sourceClass}" data-departure-time="${Number(row.expected_departure_time)}">${departureLabel(row.expected_departure_time)}</div>
+      <div class="agency-logo">${logo}<span class="visually-hidden">${escapeHtml(agency.name)}</span></div>
+      <div class="route">${escapeHtml(row.route_label)}</div>
+      <div class="destination">${escapeHtml(String(row.destination || 'Destination unavailable').toUpperCase())}</div>
+      <div class="departure-time" data-departure-time="${Number(row.expected_departure_time)}">${departureLabel(row.expected_departure_time)}</div>
+      <div class="platform"><span>${escapeHtml(bay.label)}</span><strong>${escapeHtml(bay.number)}</strong></div>
     </li>`;
   }).join('');
 }
 
 function renderHealth(sources) {
-  health.innerHTML = Object.keys(AGENCIES).map((key) => {
+  health.textContent = Object.keys(AGENCIES).map((key) => {
     const source = sources && sources[key] || {};
     const agency = AGENCIES[key];
     const live = source.display_mode === 'realtime' || source.display_mode === 'mixed';
     const status = source.realtime_status === 'delayed' ? 'Delayed feed' : live ? 'Live' : 'Schedule';
-    return `<span class="health-chip status-${escapeHtml(source.realtime_status || 'offline')}"><b>${escapeHtml(agency.short)}</b> ${status}</span>`;
-  }).join('');
+    return `${agency.short} ${status}`;
+  }).join('. ');
 }
 
 async function refresh() {
   try {
-    const payload = await client.fetchDepartures(12);
+    const payload = await client.fetchDepartures(10);
     lastGoodAt = Date.now();
     renderDepartures(Array.isArray(payload.departures) ? payload.departures : []);
     renderHealth(payload.sources || {});

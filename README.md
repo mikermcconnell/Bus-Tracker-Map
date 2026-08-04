@@ -63,7 +63,7 @@ The terminal-focused displays are available at `/platform.map` and `/batt.map`. 
 
 ## Allandale departure board
 
-Open [http://localhost:3000/departures](http://localhost:3000/departures) locally or `/departures` on the production site. The TV-safe board displays the next 12 outbound departures within 24 hours for Barrie Transit, Ontario Northland, GO buses and trains, and Simcoe LINX route 2.
+Open [http://localhost:3000/departures](http://localhost:3000/departures) locally or `/departures` on the production site. The TV-safe board displays the next 10 outbound departures within 24 hours for Barrie Transit, Ontario Northland, GO buses and trains, and Simcoe LINX route 2.
 
 The board uses fresh trip predictions when available and falls back independently to the published schedule for any delayed, stale, unconfigured, or failed source. Each agency status chip says whether the displayed information is live or scheduled. The supporting `GET /api/departures?limit=12` endpoint accepts limits from 1 through 30.
 

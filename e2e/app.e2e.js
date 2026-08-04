@@ -123,7 +123,7 @@ test('platform map loads without runtime errors', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('departures board renders twelve TV-safe rows without scrolling', async ({ page }) => {
+test('departures board matches the ten-row Allandale TV layout without scrolling', async ({ page }) => {
   const errors = captureRuntimeErrors(page);
   const nowSeconds = Math.floor(Date.now() / 1000);
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -136,7 +136,7 @@ test('departures board renders twelve TV-safe rows without scrolling', async ({ 
       contentType: 'application/json',
       body: JSON.stringify({
         generated_at: Date.now(),
-        departures: Array.from({ length: 12 }, (_, index) => ({
+        departures: Array.from({ length: 10 }, (_, index) => ({
           id: `departure-${index}`,
           agency_id: index % 4 === 0 ? 'go-transit' : 'barrie-transit',
           agency_name: index % 4 === 0 ? 'GO Transit' : 'Barrie Transit',
@@ -159,8 +159,11 @@ test('departures board renders twelve TV-safe rows without scrolling', async ({ 
 
   await page.goto('/departures');
   await expect(page).toHaveTitle(/Allandale Departures/);
-  await expect(page.locator('.departure')).toHaveCount(12);
-  await expect(page.locator('.destination').first()).toContainText('Toronto');
+  await expect(page.locator('.departure')).toHaveCount(10);
+  await expect(page.locator('.destination').first()).toContainText('TORONTO');
+  await expect(page.locator('.platform strong').first()).toHaveText('01');
+  await expect(page.locator('.departure').first()).toHaveCSS('background-color', 'rgb(217, 217, 216)');
+  await expect(page.locator('.departure').nth(1)).toHaveCSS('background-color', 'rgb(187, 187, 188)');
   const dimensions = await page.locator('html').evaluate((element) => ({
     height: element.scrollHeight,
     viewport: element.clientHeight,

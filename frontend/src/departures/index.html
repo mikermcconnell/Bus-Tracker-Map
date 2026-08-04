@@ -10,33 +10,19 @@
 <body>
   <main class="board" aria-labelledby="page-title">
     <header class="masthead">
-      <div class="location">
-        <p class="eyebrow">ALLANDALE WATERFRONT STATION</p>
-        <h1 id="page-title">Next departures</h1>
-      </div>
-      <div class="clock" aria-live="off">
-        <time id="clock-time">--:--</time>
-        <span id="clock-date">---</span>
-      </div>
+      <h1 id="page-title">Departures</h1>
+      <time id="clock-time" aria-live="off">--:--</time>
     </header>
 
-    <section id="service-health" class="service-health" aria-label="Transit data status"></section>
     <div id="warning" class="warning" role="status" hidden>Updates are temporarily unavailable. Showing the most recently received departures.</div>
 
     <section class="departures-panel" aria-label="Upcoming departures">
-      <div class="column-head" aria-hidden="true">
-        <span>Service</span><span>Destination</span><span>Bay</span><span>Departs</span>
-      </div>
       <ol id="departures-list" class="departures-list">
         <li class="empty-state">Loading departures…</li>
       </ol>
     </section>
-
-    <footer>
-      <span><i class="live-key"></i> Live prediction</span>
-      <span><i class="scheduled-key"></i> Scheduled time</span>
-      <span id="last-updated">Connecting…</span>
-    </footer>
+    <p id="service-health" class="visually-hidden" aria-live="polite"></p>
+    <p id="last-updated" class="visually-hidden">Connecting…</p>
   </main>
   <script src="%APP_JS%" defer></script>
 </body>
