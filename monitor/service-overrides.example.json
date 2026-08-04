@@ -4,6 +4,8 @@
       "Update this file when the next year's holiday service is approved.",
       "Keep only approved special-service days here.",
       "Supported modes today: no_service, sunday.",
+      "Sunday mode is fallback-only when GTFS calendar_dates does not define the holiday.",
+      "Keep the holiday label because it is shown in monitor emails.",
       "After editing, run npm test.",
       "Keep monitor/service-overrides.example.json in sync."
     ]

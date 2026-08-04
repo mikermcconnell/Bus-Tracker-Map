@@ -598,6 +598,39 @@ async function main() {
       LAYOVER_GRACE_MIN
     );
 
+    const serviceContext = expected.serviceContext || null;
+    if (serviceContext) {
+      console.log(
+        '[monitor] Service date: %s; holiday: %s; expected schedule: %s; source: %s',
+        serviceContext.date,
+        serviceContext.holidayLabel || 'no',
+        serviceContext.expectedSchedule,
+        serviceContext.scheduleSource
+      );
+    }
+
+    if (expected.coverageIssue) {
+      const coverage = expected.coverageIssue;
+      console.error(
+        '[monitor] GTFS schedule does not cover %s (coverage: %s to %s).',
+        coverage.date,
+        coverage.feedCoverageStart || 'unknown',
+        coverage.feedCoverageEnd || 'unknown'
+      );
+      await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, {
+        kind: 'schedule_data_out_of_range',
+        code: coverage.code,
+        severity: 'Critical',
+        checkedAt: now,
+        serviceContext,
+        details: `The monitored service date ${coverage.date} is outside GTFS coverage ${coverage.feedCoverageStart || 'unknown'} to ${coverage.feedCoverageEnd || 'unknown'}.`,
+      });
+      saveState({});
+      saveIssueState(issueState);
+      await saveSuccessHeartbeat(emailConfig);
+      process.exit(0);
+    }
+
     if (expected.totalExpected === 0) {
       console.log('[monitor] No buses expected at this time. Exiting.');
       saveState({});
@@ -622,6 +655,7 @@ async function main() {
         feedUrl: GTFS_RT_VEHICLES_URL,
         httpStatus: err && err.status ? err.status : 'unknown',
         errorMessage: errorText,
+        serviceContext,
         details: 'The live bus locations feed could not be loaded before the monitor checked the buses.',
       });
       saveIssueState(issueState);
@@ -659,7 +693,10 @@ async function main() {
     );
     if (noRecentGpsIssue) {
       console.log('[monitor] No expected buses have recent GPS. Sending GPS-stalled alert.');
-      await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, noRecentGpsIssue);
+      await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, {
+        ...noRecentGpsIssue,
+        serviceContext,
+      });
       saveState({});
       saveIssueState(issueState);
       await saveSuccessHeartbeat(emailConfig);
@@ -679,7 +716,10 @@ async function main() {
 
       const feedIssue = getFeedAlertContext(vehicleData, tripUpdatesMeta, now, FEED_STALE_AFTER_MIN) || candidateFeedIssue;
       console.log('[monitor] GPS feed issue detected: %s. Sending system alert.', feedIssue.code);
-      await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, feedIssue);
+      await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, {
+        ...feedIssue,
+        serviceContext,
+      });
       saveState({});
       saveIssueState(issueState);
       await saveSuccessHeartbeat(emailConfig);
@@ -728,6 +768,7 @@ async function main() {
       await triggerIssueAlert(emailConfig, issueState, activeIssueCodes, {
         ...possibleServiceMismatch,
         checkedAt: now,
+        serviceContext,
       });
       saveIssueState(issueState);
       await saveSuccessHeartbeat(emailConfig);
@@ -744,6 +785,7 @@ async function main() {
         expectedCount: expected.totalExpected,
         trackingCount: totalTracking,
         missingCount: totalMissing,
+        serviceContext,
         details: summarizeRouteIssues(rows),
       });
       saveIssueState(issueState);
@@ -760,6 +802,7 @@ async function main() {
       totalMissing,
       totalMonitoring,
       checkedAt: now,
+      serviceContext,
     };
 
     await sendRecoveryAlerts(emailConfig, issueState, activeIssueCodes, now);
