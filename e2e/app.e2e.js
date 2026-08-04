@@ -138,11 +138,11 @@ test('departures board shows every departure in the one-hour window without scro
         generated_at: Date.now(),
         departures: Array.from({ length: 30 }, (_, index) => ({
           id: `departure-${index}`,
-          agency_id: index === 0 || index === 10 ? 'go-transit' : 'barrie-transit',
-          agency_name: index === 0 || index === 10 ? 'GO Transit' : 'Barrie Transit',
-          route_label: index === 0 ? 'TRAIN' : index === 10 ? '68' : '8A',
-          destination: index === 0 ? 'Toronto / Union Station' : index === 10 ? 'Barrie / Newmarket' : 'Yonge Southbound',
-          platform: index === 0 ? '1' : index === 10 ? '7' : '3',
+          agency_id: index === 0 || index === 10 ? 'go-transit' : index === 5 ? 'ontario-northland' : 'barrie-transit',
+          agency_name: index === 0 || index === 10 ? 'GO Transit' : index === 5 ? 'Ontario Northland' : 'Barrie Transit',
+          route_label: index === 0 ? 'TRAIN' : index === 10 ? '68' : index === 5 ? '101' : '8A',
+          destination: index === 0 ? 'Toronto / Union Station' : index === 10 ? 'Barrie / Newmarket' : index === 5 ? 'North Bay' : 'Yonge Southbound',
+          platform: index === 0 ? '1' : index === 10 ? '7' : index === 5 ? '8' : '3',
           platform_type: 'platform',
           scheduled_departure_time: nowSeconds + (index + 1) * 300,
           expected_departure_time: nowSeconds + (index + 1) * 300,
@@ -178,6 +178,12 @@ test('departures board shows every departure in the one-hour window without scro
   expect(logoAlignment.horizontal).toBeLessThanOrEqual(1);
   expect(logoAlignment.vertical).toBeLessThanOrEqual(1);
   await expect(page.locator('.agency-logo img').first()).toHaveCSS('mix-blend-mode', 'multiply');
+  const northlandLogo = page.locator('.agency-ontario_northland .agency-logo img');
+  await expect(northlandLogo).toHaveCSS('width', '72px');
+  await expect(northlandLogo).toHaveCSS('height', '40px');
+  await expect(northlandLogo).toHaveCSS('object-fit', 'cover');
+  await expect(northlandLogo).toHaveCSS('object-position', '0% 50%');
+  await expect(northlandLogo).toHaveCSS('mix-blend-mode', 'normal');
   const dimensions = await page.locator('html').evaluate((element) => ({
     height: element.scrollHeight,
     viewport: element.clientHeight,

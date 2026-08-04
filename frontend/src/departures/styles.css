@@ -93,6 +93,16 @@ h1,
   object-fit: contain;
 }
 
+.agency-ontario_northland .agency-logo img {
+  width: 72px;
+  height: 40px;
+  max-width: none;
+  margin: auto;
+  object-fit: cover;
+  object-position: left center;
+  mix-blend-mode: normal;
+}
+
 .route,
 .destination,
 .departure-time {
