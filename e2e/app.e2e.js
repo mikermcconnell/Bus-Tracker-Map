@@ -123,7 +123,7 @@ test('platform map loads without runtime errors', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('departures board matches the ten-row Allandale TV layout without scrolling', async ({ page }) => {
+test('departures board shows every departure in the one-hour window without scrolling', async ({ page }) => {
   const errors = captureRuntimeErrors(page);
   const nowSeconds = Math.floor(Date.now() / 1000);
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -136,13 +136,13 @@ test('departures board matches the ten-row Allandale TV layout without scrolling
       contentType: 'application/json',
       body: JSON.stringify({
         generated_at: Date.now(),
-        departures: Array.from({ length: 10 }, (_, index) => ({
+        departures: Array.from({ length: 11 }, (_, index) => ({
           id: `departure-${index}`,
-          agency_id: index % 4 === 0 ? 'go-transit' : 'barrie-transit',
-          agency_name: index % 4 === 0 ? 'GO Transit' : 'Barrie Transit',
-          route_label: index % 4 === 0 ? 'TRAIN' : '8A',
-          destination: index % 4 === 0 ? 'Toronto / Union Station' : 'Yonge Southbound',
-          platform: index % 4 === 0 ? '1' : '3',
+          agency_id: index === 0 || index === 10 ? 'go-transit' : 'barrie-transit',
+          agency_name: index === 0 || index === 10 ? 'GO Transit' : 'Barrie Transit',
+          route_label: index === 0 ? 'TRAIN' : index === 10 ? '68' : '8A',
+          destination: index === 0 ? 'Toronto / Union Station' : index === 10 ? 'Barrie / Newmarket' : 'Yonge Southbound',
+          platform: index === 0 ? '1' : index === 10 ? '7' : '3',
           platform_type: 'platform',
           scheduled_departure_time: nowSeconds + (index + 1) * 300,
           expected_departure_time: nowSeconds + (index + 1) * 300,
@@ -160,9 +160,11 @@ test('departures board matches the ten-row Allandale TV layout without scrolling
 
   await page.goto('/departures');
   await expect(page).toHaveTitle(/Allandale Departures/);
-  await expect(page.locator('.departure')).toHaveCount(10);
+  await expect(page.locator('.departure')).toHaveCount(11);
   await expect(page.locator('.destination').first()).toContainText('TORONTO');
   await expect(page.locator('.platform strong').first()).toHaveText('01');
+  await expect(page.locator('.departure').nth(10).locator('.route')).toHaveText('68');
+  await expect(page.locator('.departure').nth(10).locator('.destination')).toHaveText('BARRIE / NEWMARKET');
   await expect(page.locator('.departure').first()).toHaveCSS('background-color', 'rgb(217, 217, 216)');
   await expect(page.locator('.departure').nth(1)).toHaveCSS('background-color', 'rgb(187, 187, 188)');
   const logoAlignment = await page.locator('.departure').first().evaluate((row) => {

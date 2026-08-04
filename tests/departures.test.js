@@ -36,7 +36,7 @@ function metadata() {
 }
 
 describe('departure aggregation', () => {
-  test('collects outbound service in the 24-hour window and excludes terminating trips', () => {
+  test('collects outbound service in the one-hour window and excludes terminating trips', () => {
     const now = Date.parse('2026-08-04T16:00:00Z'); // 12:00 in Toronto
     const rows = collectScheduledDepartures(metadata(), 'barrie_transit', now);
     expect(rows).toHaveLength(1);
@@ -79,6 +79,7 @@ describe('departure aggregation', () => {
       { id: 'duplicate', agency_id: 'barrie-transit', route_label: '12B', destination: 'Barrie South GO', platform: '14', scheduled_departure_time: start + 400, expected_departure_time: start + 400 },
       { id: 'second', agency_id: 'ontario-northland', route_label: '101', destination: 'North Bay', platform: '8', scheduled_departure_time: start + 600, expected_departure_time: start + 600 },
       { id: 'same-time-later-platform', agency_id: 'barrie-transit', route_label: '8B', destination: 'Crosstown', platform: '12', scheduled_departure_time: start + 600, expected_departure_time: start + 600 },
+      { id: 'outside-window', agency_id: 'ontario-northland', route_label: '201', destination: 'Sudbury', platform: '8', scheduled_departure_time: start + 3601, expected_departure_time: start + 3601 },
     ], now, 10);
     expect(rows.map((row) => row.id)).toEqual(['first', 'second', 'same-time-later-platform']);
   });
@@ -106,6 +107,6 @@ describe('departure aggregation', () => {
     const rows = parseGoNextService({ NextService: { Lines: [{ LineCode: '68', Destination: 'Aurora GO', Platform: '7', TripNumber: '123', ScheduledDepartureTime: '/Date(1785859800000)/', ComputedDepartureTime: '/Date(1785860100000)/' }] } }, '08049', now);
     expect(readGoTime('/Date(1785860100000)/')).toBe(1785860100);
     expect(readGoTime('2026-08-04T11:40:34')).toBe(Date.parse('2026-08-04T15:40:34Z') / 1000);
-    expect(rows[0]).toMatchObject({ agency_id: 'go-transit', route_label: '68', platform: '7', departure_source: 'realtime' });
+    expect(rows[0]).toMatchObject({ agency_id: 'go-transit', route_label: '68', destination: 'Barrie / Newmarket', platform: '7', departure_source: 'realtime' });
   });
 });

@@ -5,8 +5,9 @@ const { BARRIE_PLATFORM_LABELS, cleanHeadsign } = require('./terminal-layout');
 const { fetchTripUpdates } = require('./gtfs-trip-updates');
 
 const TIME_ZONE = 'America/Toronto';
-const HORIZON_HOURS = 24;
+const HORIZON_HOURS = 1;
 const GRACE_SECONDS = 60;
+const GO_BUS_DESTINATION = 'Barrie / Newmarket';
 
 const AGENCIES = Object.freeze({
   barrie_transit: { id: 'barrie-transit', name: 'Barrie Transit', mode: 'bus' },
@@ -49,7 +50,7 @@ function routeDetails(agencyKey, metadata, trip, stopId) {
     return { route_id: sourceRoute, route_label: '2', mode: 'bus', destination };
   }
   const train = stopId === 'AD' || /(?:^|-)BR(?:$|-)/i.test(sourceRoute);
-  return { route_id: sourceRoute, route_label: train ? 'TRAIN' : '68', mode: train ? 'train' : 'bus', destination: cleanHeadsign(trip.headsign, 'go-transit') || (train ? 'Toronto / Union Station' : 'Aurora / East Gwillimbury') };
+  return { route_id: sourceRoute, route_label: train ? 'TRAIN' : '68', mode: train ? 'train' : 'bus', destination: train ? (cleanHeadsign(trip.headsign, 'go-transit') || 'Toronto / Union Station') : GO_BUS_DESTINATION };
 }
 
 function platformDetails(agencyKey, metadata, stopId) {
@@ -177,7 +178,7 @@ function parseGoNextService(payload, stopCode, nowMs) {
       agency_id: 'go-transit', agency_name: 'GO Transit', mode: train ? 'train' : 'bus',
       route_id: String(row.LineCode || row.RouteNumber || (train ? 'BR' : '68')),
       route_label: train ? 'TRAIN' : String(row.LineCode || row.RouteNumber || '68').replace(/[^0-9].*$/, '') || '68',
-      destination: String(row.Destination || row.TripName || (train ? 'Toronto / Union Station' : 'Aurora / East Gwillimbury')),
+      destination: train ? String(row.Destination || row.TripName || 'Toronto / Union Station') : GO_BUS_DESTINATION,
       platform: String(row.Platform || (train ? '1' : '7')), platform_type: 'platform', stop_id: stopCode,
       trip_id: String(row.TripNumber || row.TripId || ''), service_date: null,
       scheduled_departure_time: readGoTime(row.ScheduledDepartureTime || row.DepartureTime) || time,

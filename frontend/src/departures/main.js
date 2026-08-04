@@ -63,11 +63,13 @@ function compareDepartures(left, right) {
 }
 
 function renderDepartures(rows) {
-  const orderedRows = rows.slice().sort(compareDepartures).slice(0, 10);
+  const orderedRows = rows.slice().sort(compareDepartures);
   if (!orderedRows.length) {
-    list.innerHTML = '<li class="empty-state">No departures are scheduled in the next 24 hours.</li>';
+    list.style.setProperty('--departure-count', '1');
+    list.innerHTML = '<li class="empty-state">No departures are scheduled in the next hour.</li>';
     return;
   }
+  list.style.setProperty('--departure-count', String(orderedRows.length));
   list.innerHTML = orderedRows.map((row) => {
     const agencyKey = String(row.agency_id || '').replace(/-/g, '_');
     const agency = AGENCIES[agencyKey] || { name: row.agency_name, short: row.agency_name, logo: '' };
@@ -96,7 +98,7 @@ function renderHealth(sources) {
 
 async function refresh() {
   try {
-    const payload = await client.fetchDepartures(10);
+    const payload = await client.fetchDepartures(30);
     lastGoodAt = Date.now();
     renderDepartures(Array.isArray(payload.departures) ? payload.departures : []);
     renderHealth(payload.sources || {});
