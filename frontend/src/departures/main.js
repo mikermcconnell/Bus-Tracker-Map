@@ -7,6 +7,7 @@ const warning = document.getElementById('warning');
 const updated = document.getElementById('last-updated');
 const clockTime = document.getElementById('clock-time');
 const FAILURE_RETENTION_MS = 15 * 60 * 1000;
+const MAX_DEPARTURES = 11;
 const AGENCIES = {
   barrie_transit: { name: 'Barrie Transit', short: 'BT', logo: 'agency-barrie-transit.png' },
   ontario_northland: { name: 'Ontario Northland', short: 'ON', logo: 'agency-ontario-northland.png' },
@@ -63,7 +64,7 @@ function compareDepartures(left, right) {
 }
 
 function renderDepartures(rows) {
-  const orderedRows = rows.slice().sort(compareDepartures);
+  const orderedRows = rows.slice().sort(compareDepartures).slice(0, MAX_DEPARTURES);
   if (!orderedRows.length) {
     list.style.setProperty('--departure-count', '1');
     list.innerHTML = '<li class="empty-state">No departures are scheduled in the next hour.</li>';
@@ -98,7 +99,7 @@ function renderHealth(sources) {
 
 async function refresh() {
   try {
-    const payload = await client.fetchDepartures(30);
+    const payload = await client.fetchDepartures(MAX_DEPARTURES);
     lastGoodAt = Date.now();
     renderDepartures(Array.isArray(payload.departures) ? payload.departures : []);
     renderHealth(payload.sources || {});

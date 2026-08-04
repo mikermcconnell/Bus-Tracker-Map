@@ -136,7 +136,7 @@ test('departures board shows every departure in the one-hour window without scro
       contentType: 'application/json',
       body: JSON.stringify({
         generated_at: Date.now(),
-        departures: Array.from({ length: 11 }, (_, index) => ({
+        departures: Array.from({ length: 30 }, (_, index) => ({
           id: `departure-${index}`,
           agency_id: index === 0 || index === 10 ? 'go-transit' : 'barrie-transit',
           agency_name: index === 0 || index === 10 ? 'GO Transit' : 'Barrie Transit',
