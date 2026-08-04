@@ -54,7 +54,7 @@ h1,
   width: 100%;
   min-height: clamp(60px, 7.1vh, 77px);
   display: grid;
-  grid-template-columns: clamp(66px, 4.2vw, 81px) 9% minmax(0, 1fr) 14% 14%;
+  grid-template-columns: clamp(82.5px, 5.25vw, 101.25px) 9% minmax(0, 1fr) 14% 14%;
   align-items: stretch;
   background: #d9d9d8;
   color: #111;
@@ -82,9 +82,11 @@ h1,
 .agency-logo img {
   display: block;
   width: auto;
-  height: clamp(39px, 4.65vh, 50px);
+  height: clamp(48.75px, 5.81vh, 62.5px);
   max-width: calc(100% - 12px);
   margin: auto;
+  background: transparent;
+  mix-blend-mode: multiply;
   object-fit: contain;
 }
 
@@ -166,6 +168,6 @@ h1,
 }
 
 @media (max-width: 900px) {
-  .departure { grid-template-columns: 58px 10% minmax(0, 1fr) 15% 17%; }
+  .departure { grid-template-columns: 72.5px 10% minmax(0, 1fr) 15% 17%; }
   .platform { gap: 4px; }
 }

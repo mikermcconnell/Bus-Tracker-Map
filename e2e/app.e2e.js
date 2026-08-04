@@ -174,6 +174,7 @@ test('departures board matches the ten-row Allandale TV layout without scrolling
   });
   expect(logoAlignment.horizontal).toBeLessThanOrEqual(1);
   expect(logoAlignment.vertical).toBeLessThanOrEqual(1);
+  await expect(page.locator('.agency-logo img').first()).toHaveCSS('mix-blend-mode', 'multiply');
   const dimensions = await page.locator('html').evaluate((element) => ({
     height: element.scrollHeight,
     viewport: element.clientHeight,
