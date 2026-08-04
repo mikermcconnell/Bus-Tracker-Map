@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="190" viewBox="0 0 160 190" role="img" aria-labelledby="title desc">
+  <title id="title">Classic pin bus marker</title>
+  <desc id="desc">A navy map pin with route 8A, a front-facing bus, and the Barrie Transit logo.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-15%" width="140%" height="145%"><feDropShadow dx="0" dy="4" stdDeviation="4" flood-opacity=".25"/></filter>
+  </defs>
+  <g filter="url(#shadow)">
+    <path fill="#07517e" stroke="#fff" stroke-width="6" d="M80 4c-41 0-70 29-70 68 0 48 43 82 70 111 27-29 70-63 70-111C150 33 121 4 80 4Z"/>
+    <circle cx="80" cy="70" r="57" fill="#e8f6fb"/>
+    <rect x="21" y="19" width="48" height="37" rx="12" fill="#f7931d" stroke="#fff" stroke-width="4"/>
+    <text x="45" y="46" fill="#fff" font-family="Arial,sans-serif" font-size="28" font-weight="900" text-anchor="middle">8A</text>
+    <g transform="translate(48 44)">
+      <rect width="64" height="66" rx="14" fill="#fff" stroke="#082f49" stroke-width="5"/>
+      <rect x="9" y="9" width="46" height="25" rx="5" fill="#79c6e3" stroke="#082f49" stroke-width="3"/>
+      <path d="M18 10v23M46 10v23" stroke="#fff" stroke-width="3" opacity=".8"/>
+      <rect x="10" y="39" width="44" height="12" rx="4" fill="#07517e"/>
+      <circle cx="14" cy="59" r="7" fill="#17212b"/><circle cx="50" cy="59" r="7" fill="#17212b"/>
+      <circle cx="14" cy="59" r="3" fill="#c7d1d8"/><circle cx="50" cy="59" r="3" fill="#c7d1d8"/>
+    </g>
+    <g transform="translate(45 118)">
+      <rect width="70" height="29" rx="7" fill="#fff"/>
+      <path fill="#07517e" d="M7 7h10l8 7-8 8H7l8-8-8-7Zm14 0h10l8 7-8 8H21l8-8-8-7Z"/>
+      <text x="44" y="13" fill="#07517e" font-family="Arial,sans-serif" font-size="7" font-weight="800">BARRIE</text>
+      <text x="44" y="21" fill="#07517e" font-family="Arial,sans-serif" font-size="7" font-weight="800">TRANSIT</text>
+    </g>
+  </g>
+</svg>

@@ -1,7 +1,9 @@
 import { clusterVehicles, DEFAULT_CLUSTER_THRESHOLD_METERS, distanceBetweenMeters } from './vehicle-groups.js';
 import {
+  formatTerminalDeparture,
   formatTerminalDistance,
-  getTerminalDisplayStatus,
+  getRouteEightDirectionLabel,
+  getTerminalListStatus,
   selectNearestVehicles
 } from './nearby-vehicles.js';
 import { buildTrackedAgencySummaries } from './tracked-services.js';
@@ -2411,10 +2413,14 @@ export function createMapController({ dataClient, ui }) {
       var routeLabel = vehicle.route_label || meta.displayName || vehicle.route_id || 'Bus';
       var agencyLabel = vehicle.agency_name || meta.agencyName || 'Barrie Transit';
       var destination = getNearbyDestination(vehicle, meta, routeLabel);
-      var terminalStatus = getTerminalDisplayStatus(
-        vehicle.terminal_progress_status,
+      var terminalStatus = getTerminalListStatus(
+        vehicle,
         entry.distanceMeters,
         TERMINAL_RADIUS_METERS
+      );
+      var routeEightDirection = getRouteEightDirectionLabel(
+        resolved && resolved.id,
+        vehicle.direction_id
       );
 
       return {
@@ -2425,12 +2431,16 @@ export function createMapController({ dataClient, ui }) {
         agencyLabel: agencyLabel,
         serviceLabel: getVehicleServiceLabel(vehicle, agencyLabel),
         destination: destination,
+        directionLabel: routeEightDirection,
         terminalStatus: terminalStatus,
         distanceMeters: entry.distanceMeters,
         distanceLabel: formatTerminalDistance(
           entry.distanceMeters,
           terminalStatus
         ),
+        departureLabel: terminalStatus === 'at_terminal'
+          ? formatTerminalDeparture(vehicle.terminal_departure_time)
+          : '',
         color: meta.color || '#004e80',
         textColor: meta.textColor || '#ffffff'
       };
@@ -2470,10 +2480,14 @@ export function createMapController({ dataClient, ui }) {
     for (var j = 0; j < visibleBuckets.length; j++) {
       var bucket = visibleBuckets[j];
       var meta = bucket.meta || {};
-      var label = sanitizeVehicleText(meta.displayName || meta.id || '?');
+      var agencyId = String(meta.agencyId || '');
+      var agencyClass = agencyId === 'go-transit'
+        ? ' vehicle-mini--go-transit'
+        : (agencyId === 'ontario-northland' ? ' vehicle-mini--ontario-northland' : '');
+      var label = sanitizeVehicleText(meta.routeCode || meta.displayName || meta.id || '?');
       var chipBg = sanitizeColorValue(meta.color, '#444444');
       var chipFg = sanitizeColorValue(meta.textColor, '#ffffff');
-      chips.push('<span class="vehicle-mini" style="--chip-bg:' + chipBg + ';--chip-fg:' + chipFg + ';">' + label + '</span>');
+      chips.push('<span class="vehicle-mini' + agencyClass + '" style="--chip-bg:' + chipBg + ';--chip-fg:' + chipFg + ';">' + label + '</span>');
     }
     if (extraCount > 0) {
       var safeExtra = sanitizeVehicleText('+' + extraCount);
@@ -3568,28 +3582,6 @@ export function createMapController({ dataClient, ui }) {
       var sources = payload && payload.sources;
       if (typeof ui.setSourceStatuses === 'function') {
         ui.setSourceStatuses(sources || null);
-      }
-      if (!sources) return;
-
-      var problems = [];
-      [
-        { key: 'barrie_transit', label: 'Barrie Transit' },
-        { key: 'ontario_northland', label: 'Ontario Northland' },
-        { key: 'go_transit', label: 'GO Transit' }
-      ].forEach(function (sourceInfo) {
-        var source = sources[sourceInfo.key];
-        var status = source && source.feed_status;
-        if (status === 'offline') {
-          problems.push(sourceInfo.label + ' live locations are offline');
-        } else if (status === 'delayed') {
-          problems.push(sourceInfo.label + ' locations are delayed');
-        }
-      });
-
-      if (problems.length) {
-        ui.showBanner('vehicles', problems.join('. ') + '.');
-      } else {
-        ui.clearBanner('vehicles');
       }
     }
 

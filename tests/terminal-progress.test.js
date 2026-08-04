@@ -2,6 +2,8 @@ import { describe, expect, test } from 'vitest';
 import {
   classifyTerminalProgress,
   enrichTerminalProgress,
+  inferScheduledDepartureEpochSeconds,
+  scheduledTimeToEpochSeconds,
 } from '../server/terminal-progress.js';
 
 const terminalStops = [
@@ -10,6 +12,63 @@ const terminalStops = [
 const terminalStopIds = ['9006'];
 
 describe('BATT trip progress classification', () => {
+  test('converts a Toronto GTFS departure into an absolute timestamp', () => {
+    expect(scheduledTimeToEpochSeconds('20260731', '09:02:00'))
+      .toBe(Date.parse('2026-07-31T13:02:00Z') / 1000);
+  });
+
+  test('adds the scheduled terminal departure to a vehicle at its first stop', () => {
+    const enriched = enrichTerminalProgress({
+      start_date: '20260731',
+      stop_id: 'AD',
+      trip_headsign: 'Union Station GO',
+    }, {
+      terminalStops: [{
+        stop_id: 'AD',
+        stop_sequence: 1,
+        arrival_time: '08:57:00',
+        departure_time: '09:02:00',
+      }],
+      terminalStopIds: ['AD'],
+      inboundHeadsignPattern: /Allandale Waterfront/i,
+    });
+
+    expect(enriched).toMatchObject({
+      terminal_progress_status: 'departed',
+      terminal_departure_time: Date.parse('2026-07-31T13:02:00Z') / 1000,
+      terminal_departure_source: 'static',
+    });
+  });
+
+  test('infers today for a Barrie vehicle whose realtime feed omits its service date', () => {
+    const nowMs = Date.parse('2026-07-31T13:07:00Z');
+    const enriched = enrichTerminalProgress({
+      stop_id: '9005',
+      current_stop_sequence: 238,
+      current_status: 1,
+    }, {
+      nowMs,
+      terminalStops: [{
+        stop_id: '9005',
+        stop_sequence: 238,
+        departure_time: '09:12:00',
+      }],
+      terminalStopIds: ['9005'],
+    });
+
+    expect(enriched).toMatchObject({
+      terminal_progress_status: 'at_terminal',
+      terminal_departure_time: Date.parse('2026-07-31T13:12:00Z') / 1000,
+      terminal_departure_source: 'static',
+    });
+  });
+
+  test('uses the previous service date for an after-midnight GTFS departure', () => {
+    const nowMs = Date.parse('2026-08-01T04:32:00Z');
+    expect(inferScheduledDepartureEpochSeconds('24:35:00', { nowMs }))
+      .toBe(Date.parse('2026-08-01T04:35:00Z') / 1000);
+  });
+
   test('keeps a bus whose BATT stop sequence is still ahead', () => {
     expect(classifyTerminalProgress({
       current_stop_sequence: 45,

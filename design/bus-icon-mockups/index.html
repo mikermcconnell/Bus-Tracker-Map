@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Platform Map Bus Marker Options</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #f4f8fa;
+      --muted: #9bb0ba;
+      --panel: #0a1c27;
+      --line: #294451;
+      --bt: #006697;
+      --go: #007a33;
+      --on: #00214d;
+      --linx: #522583;
+      --route: #f49ac1;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #0f172a;
+      font: 15px/1.4 "Segoe UI", Arial, sans-serif;
+    }
+    header.page-head {
+      padding: 28px clamp(20px, 4vw, 64px) 22px;
+      border-bottom: 2px solid #00a8c8;
+      background: #050e15;
+    }
+    .eyebrow { color: #74d5e7; font-size: 12px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+    h1 { margin: 5px 0 4px; font-size: clamp(26px, 3vw, 42px); line-height: 1.05; }
+    .page-head p { max-width: 760px; margin: 0; color: var(--muted); }
+    main { padding: clamp(18px, 3vw, 42px); }
+    .options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; max-width: 1480px; margin: auto; }
+    article { overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); box-shadow: 0 14px 30px #0004; }
+    article > header { padding: 18px 20px 15px; border-bottom: 1px solid var(--line); }
+    article h2 { margin: 0; font-size: 21px; }
+    article header p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+    .map-preview {
+      position: relative;
+      height: 315px;
+      overflow: hidden;
+      background: #d7e1e4 url("../../frontend/src/platform-map/map.png") center / cover no-repeat;
+    }
+    .map-preview::after { content: "Map-scale preview"; position: absolute; right: 10px; bottom: 9px; padding: 4px 8px; border-radius: 999px; color: #dceaf0; background: #071722d9; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .marker { position: absolute; transform: translate(-50%, -50%); filter: drop-shadow(0 5px 6px #00101d88); }
+    .m1 { left: 25%; top: 40%; }.m2 { left: 53%; top: 57%; }.m3 { left: 76%; top: 33%; }.m4 { left: 68%; top: 77%; }
+    .agency-bt { --agency: var(--bt); }.agency-go { --agency: var(--go); }.agency-on { --agency: var(--on); }.agency-linx { --agency: var(--linx); }
+    .examples { display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 13px 18px 15px; color: #b8cad2; font-size: 12px; }
+    .examples strong { color: #fff; }
+
+    /* Option 1: wide board */
+    .board { display: grid; grid-template-columns: 34px auto; min-width: 88px; overflow: hidden; border: 2px solid #fff; border-radius: 8px; background: #fff; }
+    .board .agency { display: grid; place-items: center; color: #fff; background: var(--agency); font-size: 11px; font-weight: 900; writing-mode: vertical-rl; transform: rotate(180deg); letter-spacing: .04em; }
+    .board .route { min-width: 54px; padding: 8px 9px; color: #08131a; background: var(--route); font: 900 25px/1 "Bahnschrift", "Segoe UI", sans-serif; text-align: center; }
+    .board.agency-go .route { --route: #fff; }.board.agency-on .route { --route: #ffc72c; }.board.agency-linx .route { --route: #fff; }
+
+    /* Option 2: bus tile */
+    .tile { width: 74px; overflow: hidden; border: 3px solid #fff; border-radius: 12px; background: #fff; text-align: center; }
+    .tile .agency { padding: 3px 2px 4px; color: #fff; background: var(--agency); font-size: 10px; font-weight: 900; letter-spacing: .035em; }
+    .tile .bus-face { position: relative; height: 31px; margin: 4px 7px 0; border-radius: 8px 8px 4px 4px; background: #17212a; }
+    .tile .bus-face::before { content: ""; position: absolute; inset: 5px 7px 9px; border-radius: 2px; background: #bfeaf3; box-shadow: -8px 22px 0 -5px #111, 8px 22px 0 -5px #111; }
+    .tile .route { padding: 3px 3px 5px; color: #0b1720; font: 900 21px/1 "Bahnschrift", sans-serif; }
+
+    /* Option 3: destination pin */
+    .pin { width: 74px; height: 86px; }
+    .pin .bubble { position: relative; z-index: 1; display: grid; place-items: center; width: 74px; height: 68px; border: 4px solid #fff; border-radius: 50%; color: #fff; background: var(--agency); }
+    .pin .bubble::after { content: ""; position: absolute; left: 50%; bottom: -16px; width: 25px; height: 25px; border-right: 4px solid #fff; border-bottom: 4px solid #fff; background: var(--agency); transform: translateX(-50%) rotate(45deg); }
+    .pin .agency { position: relative; z-index: 2; font-size: 9px; font-weight: 900; letter-spacing: .06em; }
+    .pin .route { position: relative; z-index: 2; font: 900 22px/1 "Bahnschrift", sans-serif; }
+
+    /* Option 4: route beacon */
+    .beacon { position: relative; width: 78px; height: 78px; display: grid; place-items: center; border: 5px solid var(--agency); border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px #fff; }
+    .beacon .route { color: #071722; font: 900 23px/1 "Bahnschrift", sans-serif; }
+    .beacon .agency { position: absolute; left: 50%; bottom: -10px; min-width: 48px; padding: 3px 6px; border: 2px solid #fff; border-radius: 999px; color: #fff; background: var(--agency); font-size: 9px; font-weight: 900; letter-spacing: .035em; text-align: center; transform: translateX(-50%); white-space: nowrap; }
+
+    .recommend { display: inline-block; margin-left: 7px; padding: 3px 7px; border-radius: 999px; color: #052014; background: #72e2a3; font-size: 9px; font-weight: 900; letter-spacing: .05em; vertical-align: middle; text-transform: uppercase; }
+    @media (max-width: 850px) { .options { grid-template-columns: 1fr; } .map-preview { height: 280px; } }
+  </style>
+</head>
+<body>
+  <header class="page-head">
+    <div class="eyebrow">Platform map design study</div>
+    <h1>Live vehicle marker options</h1>
+    <p>Each option keeps the route as the largest element and identifies the operating agency separately. Samples show Barrie Transit, GO Transit, Ontario Northland and Simcoe LINX at realistic map scale.</p>
+  </header>
+  <main>
+    <section class="options" aria-label="Four live vehicle marker options">
+      <article>
+        <header><h2>1. Agency Board <span class="recommend">Recommended</span></h2><p>Fastest to scan: agency colour band plus an oversized route number.</p></header>
+        <div class="map-preview">
+          <div class="marker board agency-bt m1"><span class="agency">BARRIE</span><strong class="route">12B</strong></div>
+          <div class="marker board agency-go m2"><span class="agency">GO</span><strong class="route">68</strong></div>
+          <div class="marker board agency-on m3"><span class="agency">ON</span><strong class="route">201</strong></div>
+          <div class="marker board agency-linx m4"><span class="agency">LINX</span><strong class="route">2</strong></div>
+        </div>
+        <div class="examples"><span><strong>Strength:</strong> clearest route and agency pairing</span><span><strong>Trade-off:</strong> widest footprint</span></div>
+      </article>
+
+      <article>
+        <header><h2>2. Bus Tile</h2><p>A recognizable front-facing vehicle with agency header and route footer.</p></header>
+        <div class="map-preview">
+          <div class="marker tile agency-bt m1"><div class="agency">BARRIE</div><div class="bus-face"></div><strong class="route">8A</strong></div>
+          <div class="marker tile agency-go m2"><div class="agency">GO</div><div class="bus-face"></div><strong class="route">68</strong></div>
+          <div class="marker tile agency-on m3"><div class="agency">ONTARIO N.</div><div class="bus-face"></div><strong class="route">201</strong></div>
+          <div class="marker tile agency-linx m4"><div class="agency">LINX</div><div class="bus-face"></div><strong class="route">2</strong></div>
+        </div>
+        <div class="examples"><span><strong>Strength:</strong> unmistakably a bus</span><span><strong>Trade-off:</strong> more visual detail</span></div>
+      </article>
+
+      <article>
+        <header><h2>3. Transit Pin</h2><p>Familiar map-pin shape with agency and route inside one marker.</p></header>
+        <div class="map-preview">
+          <div class="marker pin agency-bt m1"><div class="bubble"><span class="agency">BARRIE</span><strong class="route">7A</strong></div></div>
+          <div class="marker pin agency-go m2"><div class="bubble"><span class="agency">GO</span><strong class="route">68</strong></div></div>
+          <div class="marker pin agency-on m3"><div class="bubble"><span class="agency">ONTARIO N.</span><strong class="route">201</strong></div></div>
+          <div class="marker pin agency-linx m4"><div class="bubble"><span class="agency">LINX</span><strong class="route">2</strong></div></div>
+        </div>
+        <div class="examples"><span><strong>Strength:</strong> exact location is obvious</span><span><strong>Trade-off:</strong> route is slightly smaller</span></div>
+      </article>
+
+      <article>
+        <header><h2>4. Route Beacon</h2><p>Compact circular route marker with a separate agency nameplate.</p></header>
+        <div class="map-preview">
+          <div class="marker beacon agency-bt m1"><strong class="route">8B</strong><span class="agency">BARRIE</span></div>
+          <div class="marker beacon agency-go m2"><strong class="route">68</strong><span class="agency">GO</span></div>
+          <div class="marker beacon agency-on m3"><strong class="route">201</strong><span class="agency">ONTARIO N.</span></div>
+          <div class="marker beacon agency-linx m4"><strong class="route">2</strong><span class="agency">LINX</span></div>
+        </div>
+        <div class="examples"><span><strong>Strength:</strong> compact and balanced</span><span><strong>Trade-off:</strong> less vehicle-like</span></div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

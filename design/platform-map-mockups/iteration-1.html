@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Iteration 1 — Operations Rail</title><link rel="stylesheet" href="common.css">
+  <style>
+    .workspace{height:calc(100% - 140px - 52px);display:grid;grid-template-columns:minmax(0,1fr) 365px}.map{min-width:0}.rail{display:flex;min-height:0;flex-direction:column;border-left:1px solid #34505e;background:#071722}
+    .rail-head{padding:20px 22px 14px;border-bottom:1px solid #243d4a}.rail-head h2{margin:0 0 4px;font:700 24px Bahnschrift,sans-serif}.rail-head p{margin:0;color:#93a8b0;font-size:13px}
+    .rows{display:grid;grid-template-columns:1fr;overflow:hidden}.platform-row{display:grid;grid-template-columns:72px 1fr auto;align-items:center;gap:12px;min-height:64px;padding:9px 18px;border-bottom:1px solid #203846;background:#0a1c27}
+    .platform-row.active{background:#0c2b24}.platform-row.arriving{background:#2a2517}.platform-no{font:700 17px Bahnschrift,sans-serif}.platform-no small{display:block;margin-top:2px;color:#8198a1;font:600 10px Aptos,sans-serif;text-transform:uppercase}.service{display:flex;align-items:center;gap:9px}.service span:last-child{font-size:13px;font-weight:700;line-height:1.12}.platform-row .state{justify-self:end}
+    .rail-note{margin-top:auto;padding:13px 18px;color:#88a0aa;background:#06131c;font-size:12px}
+    .pin{position:absolute;z-index:3;padding:4px 7px;border:1px solid #0e516f;color:#fff;background:#075f86;font:700 12px Bahnschrift,sans-serif;box-shadow:0 2px 4px #0005}
+    .p6{left:40%;top:30%}.p12{left:19%;top:46%}.p5{left:41%;top:69%}.p3{left:58%;top:69%}.p14{left:6%;top:79%}
+  </style>
+</head>
+<body><main class="screen">
+  <header class="topbar"><div><div class="eyebrow">Live terminal display</div><h1>Barrie Allandale Terminal</h1></div><div class="live-pill"><i class="dot"></i>LIVE</div><div class="clock"><strong>9:10 AM</strong><span>UPDATED 16s AGO</span></div></header>
+  <div class="healthbar"><span><i></i>BT Live</span><span><i></i>GO Live</span><span><i></i>ON Live</span><span class="down"><i></i>LINX locations unavailable</span></div>
+  <section class="workspace">
+    <div class="map"><span class="pin p6">P6</span><span class="pin p12">P12</span><span class="pin p5">P5</span><span class="pin p3">P3</span><span class="pin p14">STOP 14</span>
+      <div class="bus" style="left:40%;top:39%;--route:#f28b23"><b>7A</b><img src="../../frontend/src/platform-map/bus_icon.jpg" alt=""></div>
+      <div class="bus" style="left:21%;top:48%;--route:#111"><b>8B</b><img src="../../frontend/src/platform-map/bus_icon.jpg" alt=""></div>
+      <div class="bus" style="left:48%;top:66%;--route:#111"><b>8A</b><img src="../../frontend/src/platform-map/bus_icon.jpg" alt=""></div>
+    </div>
+    <aside class="rail"><div class="rail-head"><h2>Platforms</h2><p>Current assignments and terminal activity</p></div><div class="rows">
+      <div class="platform-row active"><div class="platform-no">P12<small>Platform</small></div><div class="service"><b class="route">8B</b><span>Crosstown<br>Northbound</span></div><span class="state live">At platform</span></div>
+      <div class="platform-row active"><div class="platform-no">P6<small>Platform</small></div><div class="service"><b class="route orange">7A</b><span>Grove / Bear Creek</span></div><span class="state live">At platform</span></div>
+      <div class="platform-row arriving"><div class="platform-no">P13<small>Platform</small></div><div class="service"><b class="route">12A</b><span>Georgian Mall</span></div><span class="state arriving">Arriving</span></div>
+      <div class="platform-row"><div class="platform-no">P5<small>Platform</small></div><div class="service"><b class="route">8A</b><span>RVH Northbound</span></div><span class="state">Scheduled</span></div>
+      <div class="platform-row"><div class="platform-no">P4<small>Platform</small></div><div class="service"><b class="route">8B</b><span>Essa Southbound</span></div><span class="state">Scheduled</span></div>
+      <div class="platform-row"><div class="platform-no">P3<small>Platform</small></div><div class="service"><b class="route">8A</b><span>Yonge Southbound</span></div><span class="state">Scheduled</span></div>
+      <div class="platform-row"><div class="platform-no">14<small>Stop</small></div><div class="service"><b class="route pink">12B</b><span>Barrie South GO</span></div><span class="state">Scheduled</span></div>
+    </div><div class="rail-note">Additional scheduled service: KP1 Kempenfest Shuttle North</div></aside>
+  </section>
+  <footer class="footer"><b>SERVICE UPDATE</b><span>Sunday schedules on Monday, August 3.</span></footer>
+</main></body></html>

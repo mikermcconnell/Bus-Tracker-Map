@@ -33,9 +33,10 @@ function assessVehicleFeedFreshness(payload, options = {}) {
   const feedTimestampMs = normalizeTimestampMs(payload && payload.feed_timestamp);
   // When vehicles exist, their GPS timestamps are the most honest signal. A feed
   // header can advance even when every bus position inside it is frozen.
-  const latestDataTimestampMs = latestVehicleTimestampMs !== null
-    ? latestVehicleTimestampMs
-    : feedTimestampMs;
+  const preferFeedTimestamp = options.preferFeedTimestamp === true;
+  const latestDataTimestampMs = preferFeedTimestamp && feedTimestampMs !== null
+    ? feedTimestampMs
+    : (latestVehicleTimestampMs !== null ? latestVehicleTimestampMs : feedTimestampMs);
 
   if (!configured) {
     return {

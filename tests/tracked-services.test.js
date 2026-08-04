@@ -118,5 +118,11 @@ describe('nearby vehicle render signatures', () => {
     expect(buildNearbyRenderSignature([
       { ...rows[0], terminalStatus: 'at_terminal' }
     ])).not.toBe(first);
+    expect(buildNearbyRenderSignature([
+      { ...rows[0], departureLabel: 'Departs in 4 min' }
+    ])).not.toBe(first);
+    expect(buildNearbyRenderSignature([
+      { ...rows[0], directionLabel: 'North' }
+    ])).not.toBe(first);
   });
 });

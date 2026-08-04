@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="130" viewBox="0 0 240 130" role="img" aria-labelledby="title desc">
+  <title id="title">Directional bus marker</title>
+  <desc id="desc">A wide arrow marker showing route 8A, a bus, and Barrie Transit branding.</desc>
+  <defs><filter id="shadow" x="-15%" y="-25%" width="140%" height="160%"><feDropShadow dx="0" dy="4" stdDeviation="4" flood-opacity=".25"/></filter></defs>
+  <g filter="url(#shadow)">
+    <path fill="#07517e" stroke="#fff" stroke-width="6" stroke-linejoin="round" d="M15 12h169l43 53-43 53H15c-7 0-12-5-12-12V24c0-7 5-12 12-12Z"/>
+    <rect x="16" y="25" width="65" height="80" rx="14" fill="#f7931d"/>
+    <text x="48.5" y="76" fill="#fff" font-family="Arial,sans-serif" font-size="42" font-weight="900" text-anchor="middle">8A</text>
+    <g transform="translate(92 27)">
+      <rect width="68" height="73" rx="15" fill="#fff"/>
+      <rect x="9" y="10" width="50" height="29" rx="6" fill="#7cc8e4" stroke="#082f49" stroke-width="3"/>
+      <path d="M20 11v27M48 11v27" stroke="#fff" stroke-width="3"/>
+      <rect x="10" y="45" width="48" height="13" rx="4" fill="#07517e"/>
+      <circle cx="15" cy="66" r="7" fill="#17212b"/><circle cx="53" cy="66" r="7" fill="#17212b"/>
+    </g>
+    <g transform="translate(170 39)">
+      <path fill="#fff" d="M0 5h13l13 11-13 11H0l12-11L0 5Zm17 0h13l13 11-13 11H17l12-11L17 5Z"/>
+      <text x="22" y="42" fill="#fff" font-family="Arial,sans-serif" font-size="9" font-weight="800" text-anchor="middle">BARRIE</text>
+      <text x="22" y="52" fill="#fff" font-family="Arial,sans-serif" font-size="9" font-weight="800" text-anchor="middle">TRANSIT</text>
+    </g>
+  </g>
+</svg>

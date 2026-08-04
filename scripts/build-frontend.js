@@ -105,6 +105,10 @@ function copyPlatformMapAssets() {
   if (fs.existsSync(mapSource)) {
     fs.copyFileSync(mapSource, path.join(assetsDir, 'map.png'));
   }
+  const vectorMapSource = path.join(srcDir, 'platform-map', 'allandale-basemap.svg');
+  if (fs.existsSync(vectorMapSource)) {
+    fs.copyFileSync(vectorMapSource, path.join(assetsDir, 'allandale-basemap.svg'));
+  }
   const busSource = path.join(srcDir, 'platform-map', 'bus_icon.jpg');
   if (fs.existsSync(busSource)) {
     fs.copyFileSync(busSource, path.join(assetsDir, 'bus_icon.jpg'));

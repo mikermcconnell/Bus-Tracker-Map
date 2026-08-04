@@ -50,6 +50,16 @@ function createStaticZip() {
       'shape-other,46.4000,-79.3000,2',
       ''
     ],
+    'calendar.txt': [
+      'service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date',
+      'weekday,1,1,1,1,1,0,0,20260701,20260831',
+      ''
+    ],
+    'calendar_dates.txt': [
+      'service_id,date,exception_type',
+      'weekday,20260803,2',
+      ''
+    ],
   };
   Object.entries(files).forEach(([name, lines]) => {
     zip.addFile(name, Buffer.from(lines.join('\n'), 'utf8'));
@@ -75,8 +85,16 @@ describe('Ontario Northland integration', () => {
     expect(result.metadata.barrie_route_ids).toEqual(['101']);
     expect(result.metadata.barrie_stop_ids).toEqual(['315']);
     expect(result.metadata.trips['trip-barrie'].headsign).toBe('NORTH BAY');
+    expect(result.metadata.trips['trip-barrie'].service_id).toBe('weekday');
+    expect(result.metadata.service_calendars.weekday.friday).toBe(true);
+    expect(result.metadata.service_exceptions['20260803'].weekday).toBe(2);
     expect(result.metadata.trips['trip-barrie'].terminal_stops).toEqual([
-      { stop_id: '315', stop_sequence: 2 },
+      {
+        stop_id: '315',
+        stop_sequence: 2,
+        arrival_time: '12:00:00',
+        departure_time: '12:05:00',
+      },
     ]);
     expect(result.routes.features.length).toBeGreaterThan(0);
     expect(result.routes.features[0].properties).toMatchObject({
@@ -165,7 +183,7 @@ describe('Ontario Northland integration', () => {
     });
   });
 
-  test('reads Allandale arrival updates and active alert text', () => {
+  test('reads Allandale arrival updates and keeps only cancellation alerts', () => {
     const FeedMessage = GtfsRealtimeBindings.transit_realtime.FeedMessage;
     const tripFeed = FeedMessage.create({
       header: { gtfsRealtimeVersion: '1.0' },
@@ -184,10 +202,17 @@ describe('Ontario Northland integration', () => {
     const alertFeed = FeedMessage.create({
       header: { gtfsRealtimeVersion: '1.0' },
       entity: [{
-        id: 'alert-1',
+        id: 'delay-alert',
         alert: {
           headerText: { translation: [{ text: 'Terminal delay', language: 'en' }] },
           descriptionText: { translation: [{ text: 'Expect delays.', language: 'en' }] },
+        }
+      }, {
+        id: 'cancel-alert',
+        alert: {
+          headerText: { translation: [{ text: 'Trip cancelled', language: 'en' }] },
+          descriptionText: { translation: [{ text: 'The scheduled coach will not operate.', language: 'en' }] },
+          effect: 1,
         }
       }]
     });
@@ -197,10 +222,13 @@ describe('Ontario Northland integration', () => {
       arrival_time: 1785427200,
       delay_seconds: 120,
     });
-    expect(parseAlerts(alertFeed)[0]).toMatchObject({
-      id: 'alert-1',
-      header: 'Terminal delay',
-      description: 'Expect delays.',
-    });
+    expect(parseAlerts(alertFeed)).toEqual([
+      expect.objectContaining({
+        id: 'cancel-alert',
+        header: 'Trip cancelled',
+        description: 'The scheduled coach will not operate.',
+        effect: 1,
+      }),
+    ]);
   });
 });

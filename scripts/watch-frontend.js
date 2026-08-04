@@ -29,6 +29,7 @@ const entryPoints = [
     key: 'main',
     entryPath: path.join(srcDir, 'main.js'),
     cssPath: path.join(srcDir, 'styles.css'),
+    includeLeafletCss: true,
     templatePath: path.join(srcDir, 'index.html'),
     outputHtml: 'index.html'
   },
@@ -36,6 +37,7 @@ const entryPoints = [
     key: 'battMap',
     entryPath: path.join(srcDir, 'batt-map', 'main.js'),
     cssPath: path.join(srcDir, 'batt-map', 'styles.css'),
+    includeLeafletCss: true,
     templatePath: path.join(srcDir, 'batt-map', 'index.html'),
     outputHtml: 'batt.map.html'
   },
@@ -97,6 +99,10 @@ function copyPlatformMapAssets() {
   if (fs.existsSync(mapSource)) {
     fs.copyFileSync(mapSource, path.join(assetsDir, 'map.png'));
   }
+  const vectorMapSource = path.join(srcDir, 'platform-map', 'allandale-basemap.svg');
+  if (fs.existsSync(vectorMapSource)) {
+    fs.copyFileSync(vectorMapSource, path.join(assetsDir, 'allandale-basemap.svg'));
+  }
   const busSource = path.join(srcDir, 'platform-map', 'bus_icon.jpg');
   if (fs.existsSync(busSource)) {
     fs.copyFileSync(busSource, path.join(assetsDir, 'bus_icon.jpg'));
@@ -109,13 +115,23 @@ function copySharedAssets() {
     'town-winter.png',
     'town-summer-clean.png',
     'agency-barrie-transit.png',
-    'agency-ontario-northland.png'
+    'agency-go-transit.svg',
+    'agency-ontario-northland.png',
+    'agency-simcoe-linx.png'
   ].forEach((entry) => {
     const source = path.join(sharedAssetsDir, entry);
     if (fs.existsSync(source)) {
       fs.copyFileSync(source, path.join(assetsDir, entry));
     }
   });
+}
+
+function copyLeafletAssets() {
+  const leafletImagesDir = path.join(projectRoot, 'node_modules', 'leaflet', 'dist', 'images');
+  if (!fs.existsSync(leafletImagesDir)) {
+    throw new Error('Leaflet image assets are missing; run npm install before starting development');
+  }
+  fs.cpSync(leafletImagesDir, path.join(assetsDir, 'images'), { recursive: true });
 }
 
 async function buildJs(entry) {
@@ -146,7 +162,15 @@ async function buildJs(entry) {
 
 function buildCss(entry) {
   const outPath = path.join(assetsDir, `${entry.key}.css`);
-  fs.copyFileSync(entry.cssPath, outPath);
+  const appCss = fs.readFileSync(entry.cssPath);
+  const buffer = entry.includeLeafletCss
+    ? Buffer.concat([
+      fs.readFileSync(path.join(projectRoot, 'node_modules', 'leaflet', 'dist', 'leaflet.css')),
+      Buffer.from('\n'),
+      appCss,
+    ])
+    : appCss;
+  fs.writeFileSync(outPath, buffer);
   return `${entry.key}.css`;
 }
 
@@ -193,6 +217,7 @@ async function buildFrontend({ clean } = { clean: false }) {
   copyBattMapAssets();
   copyPlatformMapAssets();
   copySharedAssets();
+  copyLeafletAssets();
 
   writeManifest(entryAssets);
   return entryAssets;

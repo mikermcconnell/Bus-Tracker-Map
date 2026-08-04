@@ -49,6 +49,20 @@ describe('vehicle feed freshness', () => {
     expect(result.latest_data_timestamp).toBe(seconds('2026-07-22T13:56:10Z'));
   });
 
+  test('can assess feed availability separately from a stationary vehicle timestamp', () => {
+    const result = assessVehicleFeedFreshness({
+      feed_timestamp: seconds('2026-07-22T15:29:50Z'),
+      vehicles: [{ last_reported: seconds('2026-07-22T13:56:10Z') }],
+    }, { nowMs: NOW, preferFeedTimestamp: true });
+
+    expect(result).toMatchObject({
+      feed_status: 'live',
+      status_reason: 'fresh',
+      latest_data_timestamp: seconds('2026-07-22T15:29:50Z'),
+      data_age_seconds: 10,
+    });
+  });
+
   test('does not label a current but empty feed live', () => {
     const result = assessVehicleFeedFreshness({
       feed_timestamp: seconds('2026-07-22T15:29:40Z'),

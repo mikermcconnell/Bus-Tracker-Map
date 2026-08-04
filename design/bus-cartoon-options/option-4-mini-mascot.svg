@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="340" height="310" viewBox="0 0 340 310" role="img" aria-labelledby="t d">
+  <title id="t">Mini mascot cartoon bus</title><desc id="d">A compact, playful blue and white bus with oversized wheels and a smiling grille.</desc>
+  <g stroke="#102d3c" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="170" cy="272" rx="110" ry="14" fill="#102d3c" opacity=".14" stroke="none"/>
+    <path d="M59 93c0-41 32-70 75-70h72c43 0 75 29 75 70v119c0 29-23 52-52 52H111c-29 0-52-23-52-52V93Z" fill="#0d6795" stroke-width="8"/>
+    <path d="M77 100c0-32 24-54 57-54h72c33 0 57 22 57 54v48H77v-48Z" fill="#f9fcfd" stroke-width="6"/>
+    <path d="M92 95c0-19 15-34 34-34h88c19 0 34 15 34 34v36H92V95Z" fill="#8fd8ed" stroke-width="6"/>
+    <path d="M170 61v70" fill="none" stroke-width="6"/>
+    <path d="m105 76 37-10-28 61m72-51 37-10-28 61" fill="none" stroke="#ddf7ff" stroke-width="10" opacity=".8"/>
+    <rect x="118" y="31" width="104" height="28" rx="12" fill="#172932" stroke-width="5"/>
+    <text x="170" y="51" fill="#ffd24b" stroke="none" font-family="Arial,sans-serif" font-size="16" font-weight="900" text-anchor="middle">HELLO!</text>
+    <rect x="79" y="159" width="182" height="70" rx="27" fill="#f9fcfd" stroke-width="6"/>
+    <circle cx="109" cy="184" r="15" fill="#ffe16b" stroke-width="5"/><circle cx="231" cy="184" r="15" fill="#ffe16b" stroke-width="5"/>
+    <path d="M126 204c18 17 70 17 88 0" fill="none" stroke-width="8"/>
+    <circle cx="101" cy="251" r="31" fill="#253944" stroke-width="7"/><circle cx="101" cy="251" r="12" fill="#9eb0b8" stroke-width="5"/>
+    <circle cx="239" cy="251" r="31" fill="#253944" stroke-width="7"/><circle cx="239" cy="251" r="12" fill="#9eb0b8" stroke-width="5"/>
+  </g>
+</svg>

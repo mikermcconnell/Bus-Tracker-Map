@@ -58,7 +58,7 @@ Open [http://localhost:3000](http://localhost:3000) in a browser (or on the Smar
 - A banner if the realtime feed is temporarily unavailable (bus icons are hidden while it is offline).
 - Ontario Northland service alerts are intentionally neither requested nor published; this map is focused on route and live-vehicle tracking.
 
-The terminal-focused displays are available at `/platform.map` and `/batt.map`. Both consume the same merged, freshness-checked vehicle endpoint and show Ontario Northland and GO vehicles when they enter the calibrated Allandale platform area.
+The terminal-focused displays are available at `/platform.map` and `/batt.map`. Both consume the same merged, freshness-checked vehicle endpoint and show Ontario Northland and GO vehicles when they enter the calibrated Allandale platform area. The platform display reads `/api/terminal-layout`, overlays current GTFS-derived bay assignments, keeps live markers aligned at 16:9 and 4:3, and marks Platform 14 as having no scheduled service when it is absent from the current Barrie feed.
 
 ### Metrolinx data notice
 
@@ -86,7 +86,9 @@ For the terminal TV, disable its sleep/screensaver setting and bookmark the prod
 - `npm run watch:frontend` - development watcher that rebuilds the frontend bundle on changes.
 - `npm start` - run the Express server.
 - `npm run dev` - launch the frontend watcher and Express server with live reload for local development.
+- `npm run lint` - check browser, server, monitor, build, and test JavaScript with ESLint.
 - `npm test` - run smoke tests for the GTFS build pipeline and API endpoints (Vitest + Supertest).
+- `npm run test:e2e` - build and exercise the map and TV display routes in headless Chromium.
 
 ## Project layout
 ```

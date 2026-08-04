@@ -1133,6 +1133,11 @@ body {
   box-shadow: var(--shadow-soft);
 }
 
+.vehicle-mini--go-transit {
+  background: #007a33;
+  color: #ffffff;
+}
+
 .vehicle-mini--count {
   background: var(--brand-primary);
   color: #ffffff;
@@ -2141,6 +2146,10 @@ body {
 }
 
 .nearby-bus__distance {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
   max-width: 92px;
   color: var(--transit-blue);
   font-family: var(--font-display);
@@ -2149,6 +2158,26 @@ body {
   line-height: 1;
   text-align: right;
   text-transform: uppercase;
+}
+
+.nearby-bus__distance-main {
+  display: block;
+}
+
+.nearby-bus__departure {
+  display: block;
+  color: #007a33;
+  font-family: var(--font-body);
+  font-size: clamp(10px, 0.72vw, 12px);
+  font-weight: 800;
+  line-height: 1.05;
+  text-align: right;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.nearby-bus__departure[hidden] {
+  display: none;
 }
 
 .nearby-bus--terminal .nearby-bus__distance {

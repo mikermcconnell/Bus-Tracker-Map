@@ -5,7 +5,15 @@ const { enrichTerminalProgress } = require('./terminal-progress');
 
 const DEFAULT_API_BASE = 'https://api.openmetrolinx.com/OpenDataAPI/api/V1';
 const REALTIME_CACHE_MS = 5_000;
+const STALE_IF_ERROR_MS = 15 * 60 * 1000;
+const PROXY_FAILURE_REASONS = new Set([
+  'fetch_failed',
+  'invalid_payload',
+  'feed_not_configured',
+  'missing_timestamp',
+]);
 let realtimeCache = null;
+let lastSuccessfulRealtime = null;
 
 function loadMetadata(cacheDir) {
   const metadataPath = path.join(cacheDir, 'go-transit.json');
@@ -24,6 +32,31 @@ function loadMetadata(cacheDir) {
 function readTimestamp(value) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function readEpochSeconds(value) {
+  const timestamp = readTimestamp(value);
+  if (timestamp === null) return null;
+  return Math.floor(timestamp >= 1e12 ? timestamp / 1000 : timestamp);
+}
+
+function cacheSuccessfulRealtime(now, value) {
+  realtimeCache = { cachedAt: now, value };
+  lastSuccessfulRealtime = { cachedAt: now, value };
+  return value;
+}
+
+function useLastSuccessfulRealtime(now, error) {
+  if (!lastSuccessfulRealtime || now - lastSuccessfulRealtime.cachedAt > STALE_IF_ERROR_MS) {
+    throw error;
+  }
+  const value = {
+    ...lastSuccessfulRealtime.value,
+    generated_at: now,
+    stale_if_error: true,
+  };
+  realtimeCache = { cachedAt: now, value };
+  return value;
 }
 
 function isInsideBounds(lat, lon, bounds) {
@@ -229,7 +262,9 @@ function parseVehicleFeed(feed, metadata) {
 async function fetchGoTransitRealtime(options = {}) {
   const enabled = options.enabled === true;
   const apiKey = String(options.apiKey || '').trim();
-  if (!enabled || !apiKey) {
+  const proxyUrl = String(options.proxyUrl || '').trim();
+  const fetchImpl = options.fetchImpl || fetch;
+  if (!enabled || (!apiKey && !proxyUrl)) {
     return {
       generated_at: Date.now(),
       feed_timestamp: null,
@@ -243,35 +278,89 @@ async function fetchGoTransitRealtime(options = {}) {
     return realtimeCache.value;
   }
 
+  if (!apiKey && proxyUrl) {
+    try {
+      const response = await fetchImpl(proxyUrl, {
+        timeout: 10_000,
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'Barrie-Bus-Tracker/1.0',
+        },
+      });
+      if (!response.ok) {
+        throw new Error(`GO Transit proxy feed failed: ${response.status}`);
+      }
+      const payload = await response.json();
+      const source = payload && payload.sources && payload.sources.go_transit || {};
+      if (PROXY_FAILURE_REASONS.has(String(source.status_reason || '').toLowerCase())) {
+        throw new Error(`GO Transit proxy source unavailable: ${source.status_reason}`);
+      }
+      const cacheDir = path.resolve(options.cacheDir || path.join(__dirname, '..', 'cache'));
+      const metadata = loadMetadata(cacheDir);
+      const sourceTimestamp = readEpochSeconds(source.latest_data_timestamp) ||
+        readEpochSeconds(payload && payload.feed_timestamp);
+      const proxyResponseTimestamp = readEpochSeconds(payload && payload.generated_at);
+      const value = {
+        generated_at: now,
+        // A stationary GO vehicle can keep the same GPS timestamp even though
+        // Metrolinx is responding normally. Track the successful source poll
+        // separately, while stale individual icons are still filtered later.
+        feed_timestamp: proxyResponseTimestamp || sourceTimestamp,
+        vehicles: (payload && Array.isArray(payload.vehicles) ? payload.vehicles : [])
+          .filter((vehicle) => vehicle && vehicle.agency_id === 'go-transit')
+          .map((vehicle) => {
+            const trip = vehicle.trip_id && metadata.trips && metadata.trips[vehicle.trip_id] || {};
+            return enrichTerminalProgress({
+              ...vehicle,
+              trip_headsign: vehicle.trip_headsign || trip.headsign || null,
+            }, {
+              terminalStopIds: metadata.allandale_stop_ids,
+              terminalStops: trip.terminal_stops,
+              inboundHeadsignPattern: /Allandale Waterfront|Barrie Allandale/i,
+            });
+          }),
+        configured: true,
+        agency: { id: 'go-transit', name: 'GO Transit' },
+      };
+      return cacheSuccessfulRealtime(now, value);
+    } catch (error) {
+      return useLastSuccessfulRealtime(now, error);
+    }
+  }
+
   const cacheDir = path.resolve(options.cacheDir || path.join(__dirname, '..', 'cache'));
   const metadata = loadMetadata(cacheDir);
   const apiBase = String(options.apiBase || DEFAULT_API_BASE).replace(/\/+$/, '');
   const endpoint = `${apiBase}/Gtfs/Feed/VehiclePosition?key=${encodeURIComponent(apiKey)}`;
-  const response = await fetch(endpoint, {
-    timeout: 10_000,
-    headers: {
-      Accept: 'application/json',
-      'User-Agent': 'Barrie-Bus-Tracker/1.0',
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`Metrolinx vehicle feed failed: ${response.status}`);
-  }
+  try {
+    const response = await fetchImpl(endpoint, {
+      timeout: 10_000,
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'Barrie-Bus-Tracker/1.0',
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`Metrolinx vehicle feed failed: ${response.status}`);
+    }
 
-  const feed = await response.json();
-  const value = {
-    generated_at: Date.now(),
-    feed_timestamp: readTimestamp(feed.header && feed.header.timestamp),
-    vehicles: parseVehicleFeed(feed, metadata),
-    configured: true,
-    agency: metadata.agency,
-  };
-  realtimeCache = { cachedAt: now, value };
-  return value;
+    const feed = await response.json();
+    const value = {
+      generated_at: now,
+      feed_timestamp: readEpochSeconds(feed.header && feed.header.timestamp),
+      vehicles: parseVehicleFeed(feed, metadata),
+      configured: true,
+      agency: metadata.agency,
+    };
+    return cacheSuccessfulRealtime(now, value);
+  } catch (error) {
+    return useLastSuccessfulRealtime(now, error);
+  }
 }
 
 function resetGoTransitCache() {
   realtimeCache = null;
+  lastSuccessfulRealtime = null;
 }
 
 module.exports = {

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Platform Map — Editable Vector Basemap</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main class="screen">
+  <header class="topbar"><div><div class="eyebrow">Editable vector prototype</div><h1>Barrie Allandale Terminal</h1></div><div class="live">LIVE</div><div class="clock"><strong>1:14 PM</strong><span>UPDATED JUST NOW</span></div></header>
+  <div class="health"><span><i></i>BT Live</span><span><i></i>GO Live</span><span><i></i>ON Live</span><span class="off"><i></i>LINX locations unavailable</span></div>
+  <section class="workspace">
+    <div class="map-stage">
+      <div class="map-plane">
+        <object class="terminal-map" data="allandale-basemap.svg" type="image/svg+xml" aria-label="Editable vector map of Barrie Allandale Transit Terminal">
+          Editable vector map of Barrie Allandale Transit Terminal
+        </object>
+        <i class="scrub s12" aria-hidden="true"></i><i class="scrub s6" aria-hidden="true"></i><i class="scrub s7" aria-hidden="true"></i><i class="scrub s8" aria-hidden="true"></i><i class="scrub s5" aria-hidden="true"></i><i class="scrub s4" aria-hidden="true"></i><i class="scrub s3" aria-hidden="true"></i><i class="scrub s1" aria-hidden="true"></i><i class="scrub s14" aria-hidden="true"></i>
+        <div id="platform-overlays" aria-label="Live platform status"></div>
+      </div>
+    </div>
+    <aside class="directory"><header><h2>Platforms</h2><p>Full service details and live terminal activity</p></header><div class="rows" id="directory-rows"></div><div class="directory-note">The basemap is editable SVG. Platform cards are generated from a separate data file.</div></aside>
+  </section>
+  <footer class="footer"><b>VECTOR PROTOTYPE</b><span>No raster basemap is used in this mock-up.</span></footer>
+</main>
+<script src="platforms.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
+

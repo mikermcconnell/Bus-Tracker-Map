@@ -4,11 +4,18 @@ const path = require('path');
 const fetch = require('node-fetch');
 const AdmZip = require('adm-zip');
 const { parse } = require('csv-parse/sync');
+const { buildServiceCalendarMetadata } = require('../shared/gtfs-service-calendar');
 require('dotenv').config();
 
 const args = process.argv.slice(2);
 const skipIfCache = args.includes('--skip-if-cache');
 const forceRefresh = args.includes('--force-refresh');
+
+const ADDITIONAL_TERMINAL_STOP_PLATFORMS = Object.freeze({
+  // Stop 14 is the on-street terminal stop at Essa and Gowan. GTFS does not
+  // model it as a child of the Allandale station, so include it explicitly.
+  '14': '14',
+});
 
 const OUT_DIR = path.resolve(process.env.CACHE_DIR || path.join(__dirname, '..', 'cache'));
 const ROUTES_PATH = path.join(OUT_DIR, 'routes.geojson');
@@ -63,6 +70,12 @@ function normalizeHexColor(color) {
     const tripsTxt = getText('trips.txt');
     const routesTxt = getText('routes.txt');
     const stopTimesTxt = getText('stop_times.txt');
+    const calendarTxt = getText('calendar.txt');
+    const calendarDatesTxt = getText('calendar_dates.txt');
+    const serviceCalendarMetadata = buildServiceCalendarMetadata(
+      calendarTxt ? parse(calendarTxt, { columns: true, skip_empty_lines: true }) : [],
+      calendarDatesTxt ? parse(calendarDatesTxt, { columns: true, skip_empty_lines: true }) : []
+    );
 
     const shapeToRouteCounts = new Map();
     let tripsRows = [];
@@ -190,7 +203,8 @@ function normalizeHexColor(color) {
       String(stop.location_type || '0') === '0' &&
       (
         terminalStationIds.has(String(stop.parent_station || '')) ||
-        /Barrie Allandale Transit Terminal Platform/i.test(String(stop.stop_name || ''))
+        /Barrie Allandale Transit Terminal Platform/i.test(String(stop.stop_name || '')) ||
+        Object.hasOwn(ADDITIONAL_TERMINAL_STOP_PLATFORMS, String(stop.stop_id || ''))
       )
     ));
     if (!terminalStops.length) {
@@ -209,6 +223,8 @@ function normalizeHexColor(color) {
       terminalStopsByTrip[tripId].push({
         stop_id: stopId,
         stop_sequence: stopSequence,
+        arrival_time: stopTime.arrival_time || null,
+        departure_time: stopTime.departure_time || stopTime.arrival_time || null,
       });
     });
 
@@ -219,6 +235,7 @@ function normalizeHexColor(color) {
       if (!tripId || !tripTerminalStops || !tripTerminalStops.length) return;
       tripMetadata[tripId] = {
         route_id: String(trip.route_id || ''),
+        service_id: String(trip.service_id || ''),
         headsign: trip.trip_headsign || null,
         terminal_stops: tripTerminalStops.sort((a, b) => a.stop_sequence - b.stop_sequence),
       };
@@ -231,8 +248,11 @@ function normalizeHexColor(color) {
       terminal_stops: terminalStops.map((stop) => ({
         id: String(stop.stop_id),
         name: stop.stop_name || null,
-        platform_code: stop.platform_code || null,
+        platform_code: stop.platform_code ||
+          ADDITIONAL_TERMINAL_STOP_PLATFORMS[String(stop.stop_id || '')] ||
+          null,
       })),
+      ...serviceCalendarMetadata,
       trips: tripMetadata,
     }));
     console.log(

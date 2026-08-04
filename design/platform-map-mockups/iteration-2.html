@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Iteration 2 — Departure Dock</title><link rel="stylesheet" href="common.css">
+<style>
+  .content{height:calc(100% - 140px);display:grid;grid-template-rows:minmax(0,1fr) 245px}.map{min-height:0;border-bottom:1px solid #416171}.bus{width:55px;height:55px}
+  .dock{padding:15px 20px 18px;background:#071722}.dock-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}.dock-head h2{margin:0;font:700 20px Bahnschrift,sans-serif}.dock-head span{color:#8ca4ad;font-size:12px}
+  .platform-grid{height:177px;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:9px}.tile{position:relative;overflow:hidden;padding:13px 12px 10px;border:1px solid #2e4a58;background:#0b202c}.tile::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:#3e6272}.tile.active::before{background:var(--live)}.tile.arriving::before{background:var(--arriving)}
+  .tile-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}.tile h3{margin:0;font:700 18px Bahnschrift,sans-serif}.tile .state{font-size:9px}.tile-service{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:8px;margin-top:8px}.tile-service span{font-size:12px;font-weight:700;line-height:1.1}.tile small{display:block;margin-top:11px;color:#7f98a2;font-size:10px}.tile.stop{grid-column:span 1;background:#102431}
+  .footer{display:none}.map-caption{position:absolute;z-index:4;top:16px;left:18px;padding:8px 12px;color:#d9e6e8;background:#082433e8;font-size:12px;font-weight:700;letter-spacing:.04em}
+</style></head>
+<body><main class="screen"><header class="topbar"><div><div class="eyebrow">Live terminal display</div><h1>Barrie Allandale Terminal</h1></div><div class="live-pill"><i class="dot"></i>LIVE</div><div class="clock"><strong>9:10 AM</strong><span>UPDATED 16s AGO</span></div></header>
+<div class="healthbar"><span><i></i>All live feeds connected</span><span class="down"><i></i>LINX location data unavailable</span></div>
+<section class="content"><div class="map"><div class="map-caption">LIVE VEHICLE POSITIONS</div>
+  <div class="bus" style="left:39%;top:40%;--route:#f28b23"><b>7A</b><img src="../../frontend/src/platform-map/bus_icon.jpg" alt=""></div><div class="bus" style="left:22%;top:48%;--route:#111"><b>8B</b><img src="../../frontend/src/platform-map/bus_icon.jpg" alt=""></div><div class="bus" style="left:48%;top:69%;--route:#111"><b>8A</b><img src="../../frontend/src/platform-map/bus_icon.jpg" alt=""></div>
+</div><section class="dock"><div class="dock-head"><h2>Platform directory</h2><span>Green indicates a vehicle is currently at the platform</span></div><div class="platform-grid">
+  <article class="tile arriving"><div class="tile-top"><h3>P3</h3><span class="state arriving">Arriving</span></div><div class="tile-service"><b class="route">8A</b><span>Yonge<br>Southbound</span></div></article>
+  <article class="tile arriving"><div class="tile-top"><h3>P4</h3><span class="state arriving">Arriving</span></div><div class="tile-service"><b class="route">8B</b><span>Essa<br>Southbound</span></div></article>
+  <article class="tile active"><div class="tile-top"><h3>P5</h3><span class="state live">Here</span></div><div class="tile-service"><b class="route">8A</b><span>RVH<br>Northbound</span></div></article>
+  <article class="tile active"><div class="tile-top"><h3>P6</h3><span class="state live">Here</span></div><div class="tile-service"><b class="route orange">7A</b><span>Grove</span></div><div class="tile-service"><b class="route orange">7B</b><span>Bear Creek</span></div></article>
+  <article class="tile active"><div class="tile-top"><h3>P12</h3><span class="state live">Here</span></div><div class="tile-service"><b class="route">8B</b><span>Crosstown<br>Northbound</span></div></article>
+  <article class="tile arriving"><div class="tile-top"><h3>P13</h3><span class="state arriving">Arriving</span></div><div class="tile-service"><b class="route">12A</b><span>Georgian<br>Mall</span></div></article>
+  <article class="tile stop"><div class="tile-top"><h3>Stop 14</h3><span class="state">Scheduled</span></div><div class="tile-service"><b class="route pink">12B</b><span>Barrie South GO</span></div><small>Also KP1 Kempenfest Shuttle</small></article>
+</div></section></section></main></body></html>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Platform Map Front-End Concepts</title>
+  <style>
+    *{box-sizing:border-box} body{margin:0;padding:48px;color:#eaf3f5;background:#0d1a28;font-family:Aptos,"Segoe UI",sans-serif}
+    main{max-width:1180px;margin:auto} h1{margin:0 0 10px;font:700 46px/1 Bahnschrift,sans-serif} p{color:#abc0c8;font-size:18px}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:40px}.card{overflow:hidden;border:1px solid #355263;background:#071722;text-decoration:none;color:inherit;transition:.2s transform,.2s border-color}.card:hover{transform:translateY(-5px);border-color:#58cde6}.preview{height:190px;display:grid;place-items:center;color:#5fd4eb;background:#0b2c3c;font:700 28px Bahnschrift,sans-serif}.copy{padding:24px}.copy h2{margin:0 0 8px;font:700 24px Bahnschrift,sans-serif}.copy p{margin:0;font-size:15px;line-height:1.5}.tag{display:inline-block;margin-bottom:12px;color:#58d98f;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+    @media(max-width:850px){body{padding:28px}.grid{grid-template-columns:1fr}h1{font-size:36px}}
+  </style>
+</head>
+<body>
+<main>
+  <span style="color:#65d7ed;font-weight:800;letter-spacing:.12em">BARRIE ALLANDALE TERMINAL</span>
+  <h1>Three platform display directions</h1>
+  <p>Each concept keeps the production bus icon, live GTFS assignments, and Stop 14.</p>
+  <div class="grid">
+    <a class="card" href="iteration-1.html"><div class="preview">01</div><div class="copy"><span class="tag">Recommended</span><h2>Operations Rail</h2><p>The map stays clean while one structured panel holds every platform and status.</p></div></a>
+    <a class="card" href="iteration-2.html"><div class="preview">02</div><div class="copy"><span class="tag">Wide-screen</span><h2>Departure Dock</h2><p>A full-width platform board sits beneath the map in evenly spaced columns.</p></div></a>
+    <a class="card" href="iteration-3.html"><div class="preview">03</div><div class="copy"><span class="tag">Map-first</span><h2>Quiet Callouts</h2><p>Small platform anchors remain on the map; only active arrivals receive emphasis.</p></div></a>
+  </div>
+</main>
+</body>
+</html>

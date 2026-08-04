@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="200" viewBox="0 0 180 200" role="img" aria-labelledby="title desc">
+  <title id="title">Platform card bus marker</title>
+  <desc id="desc">A terminal-sign-style card with Barrie Transit branding, route 8A, and a bus.</desc>
+  <defs><filter id="shadow" x="-20%" y="-15%" width="140%" height="145%"><feDropShadow dx="0" dy="5" stdDeviation="5" flood-opacity=".26"/></filter></defs>
+  <g filter="url(#shadow)">
+    <path fill="#fff" stroke="#07517e" stroke-width="6" stroke-linejoin="round" d="M18 7h144c7 0 12 5 12 12v137c0 7-5 12-12 12h-50l-22 25-22-25H18c-7 0-12-5-12-12V19C6 12 11 7 18 7Z"/>
+    <path fill="#07517e" d="M18 10h144c5 0 9 4 9 9v35H9V19c0-5 4-9 9-9Z"/>
+    <g transform="translate(22 20)">
+      <path fill="#fff" d="M0 3h11l10 8-10 9H0l10-9L0 3Zm15 0h11l10 8-10 9H15l10-9-10-8Z"/>
+      <text x="43" y="10" fill="#fff" font-family="Arial,sans-serif" font-size="9" font-weight="800">BARRIE</text>
+      <text x="43" y="20" fill="#fff" font-family="Arial,sans-serif" font-size="9" font-weight="800">TRANSIT</text>
+    </g>
+    <circle cx="137" cy="80" r="29" fill="#f7931d" stroke="#fff" stroke-width="5"/>
+    <text x="137" y="90" fill="#fff" font-family="Arial,sans-serif" font-size="29" font-weight="900" text-anchor="middle">8A</text>
+    <g transform="translate(30 70)">
+      <rect width="78" height="76" rx="16" fill="#e8f6fb" stroke="#082f49" stroke-width="5"/>
+      <rect x="10" y="10" width="58" height="31" rx="6" fill="#73c3e1" stroke="#082f49" stroke-width="3"/>
+      <path d="M23 11v29M55 11v29" stroke="#fff" stroke-width="4"/>
+      <rect x="11" y="48" width="56" height="14" rx="4" fill="#07517e"/>
+      <circle cx="16" cy="69" r="8" fill="#17212b"/><circle cx="62" cy="69" r="8" fill="#17212b"/>
+      <circle cx="16" cy="69" r="3" fill="#c7d1d8"/><circle cx="62" cy="69" r="3" fill="#c7d1d8"/>
+    </g>
+  </g>
+</svg>
