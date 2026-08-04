@@ -145,6 +145,8 @@ barrie-bus/
 - The monitor sends a dedicated `NO_RECENT_VEHICLE_GPS` alert when buses are expected but no buses have recent GPS updates. It exits quietly when the schedule says no buses are expected, including configured no-service holidays.
 - The monitor now ships with a local holiday/service override calendar in `monitor/service-overrides.json` for the current operating year. Update that file annually or whenever special service changes are approved.
 - The scheduled monitor job now refreshes GTFS static more aggressively (`GTFS_CACHE_MAX_AGE_HOURS=6`) to reduce stale service-calendar risk.
+- Holiday dates use explicit GTFS `calendar_dates.txt` service when published; the local Sunday schedule is fallback-only and is never combined with a separate GTFS holiday service. Monitor emails name the holiday, selected schedule, source, and feed coverage used for the expected-bus count.
+- If the published GTFS feed does not cover the monitored date, expected-bus GPS alerts pause and a `GTFS_SCHEDULE_DATE_NOT_COVERED` email is sent instead of silently treating the day as no service.
 - A separate GitHub Actions workflow, **Bus Monitor Daily Check-In**, sends one daily health email with the subject `Barrie Transit Monitor Daily Check-In | ...`. It checks whether the GitHub manual backup workflow is active, reports live feed health, and helps catch obvious backup-workflow problems. Railway run health should be watched with `HEARTBEAT_URL`.
 
 ## Bus monitor holiday calendar maintenance
@@ -154,4 +156,5 @@ barrie-bus/
   - `sunday`
 - After updating the file, run `npm test` to confirm the holiday calendar and fallback logic still pass.
 - Keep the example file (`monitor/service-overrides.example.json`) in sync with the real file so the expected format stays obvious.
+- Keep each `label` human-readable because it appears in daily check-in and GPS alert email subjects and bodies.
 # Bus-Tracker-Map

@@ -68,6 +68,15 @@ describe('buildAlertSubject', () => {
     const subject = buildAlertSubject({ totalMissing: 3, totalExpected: 10 });
     expect(subject).toBe('Barrie Transit GPS Alert | BUSES_NOT_REPORTING | 3 of 10 expected buses are not reporting live GPS');
   });
+
+  test('identifies the holiday in a missing-bus alert subject', () => {
+    const subject = buildAlertSubject({
+      totalMissing: 2,
+      totalExpected: 19,
+      serviceContext: { holidayLabel: 'Civic Holiday' },
+    });
+    expect(subject).toContain('| Civic Holiday');
+  });
 });
 
 describe('buildTaggedSubject', () => {
@@ -119,6 +128,27 @@ describe('buildHealthCheckMessage', () => {
 
     expect(subject).toBe('Barrie Transit Monitor Daily Check-In | Working');
     expect(subject).not.toContain('Barrie Transit GPS Alert');
+  });
+
+  test('identifies the holiday and selected schedule in the daily email', () => {
+    const serviceContext = {
+      date: '20260803',
+      holidayLabel: 'Civic Holiday',
+      expectedSchedule: 'GTFS special holiday service',
+      scheduleSourceLabel: 'GTFS calendar_dates special service',
+      feedCoverageStart: '20260628',
+      feedCoverageEnd: '20261031',
+      feedCoversDate: true,
+    };
+    const { subject, text } = buildHealthCheckMessage({
+      status: 'ok',
+      serviceContext,
+      rows: notifyModule.buildScheduleRows(serviceContext),
+    });
+
+    expect(subject).toContain('Civic Holiday');
+    expect(text).toContain('Holiday / special day: Civic Holiday');
+    expect(text).toContain('Expected schedule: GTFS special holiday service');
   });
 
   test('calls out disabled workflow state in the daily check-in body', () => {
@@ -173,6 +203,16 @@ const sampleReport = {
   checkedAt: new Date('2026-02-25T15:00:00Z'),
 };
 
+const holidayServiceContext = {
+  date: '20260803',
+  holidayLabel: 'Civic Holiday',
+  expectedSchedule: 'GTFS special holiday service',
+  scheduleSourceLabel: 'GTFS calendar_dates special service',
+  feedCoverageStart: '20260628',
+  feedCoverageEnd: '20261031',
+  feedCoversDate: true,
+};
+
 const mixedThresholdReport = {
   rows: [
     {
@@ -202,6 +242,13 @@ describe('buildHtml', () => {
     expect(html).toContain('25 min');
   });
 
+  test('shows the holiday schedule used for expected counts', () => {
+    const html = buildHtml({ ...sampleReport, serviceContext: holidayServiceContext });
+    expect(html).toContain('Civic Holiday');
+    expect(html).toContain('GTFS special holiday service');
+    expect(html).toContain('GTFS calendar_dates special service');
+  });
+
   test('contains missing summary', () => {
     const html = buildHtml(sampleReport);
     expect(html).toContain('2 of 5 expected buses are not reporting live GPS');
@@ -229,6 +276,12 @@ describe('buildPlainText', () => {
     expect(text).toContain('BARRIE TRANSIT GPS ALERT');
     expect(text).toContain('TOTAL');
     expect(text).toContain('25 min');
+  });
+
+  test('shows the holiday schedule used for expected counts', () => {
+    const text = buildPlainText({ ...sampleReport, serviceContext: holidayServiceContext });
+    expect(text).toContain('Holiday / special day: Civic Holiday');
+    expect(text).toContain('Expected schedule: GTFS special holiday service');
   });
 
   test('contains missing summary', () => {
@@ -326,5 +379,28 @@ describe('buildSystemMessage', () => {
     );
     expect(text).toContain('Summary: Buses are expected, but no buses have recent GPS updates.');
     expect(text).toContain('Recommended action: Check the live GPS feed first');
+  });
+
+  test('creates an actionable alert when GTFS does not cover the service date', () => {
+    const { subject, text } = buildSystemMessage({
+      kind: 'schedule_data_out_of_range',
+      code: 'GTFS_SCHEDULE_DATE_NOT_COVERED',
+      checkedAt: new Date('2026-12-26T15:15:00Z'),
+      serviceContext: {
+        date: '20261226',
+        holidayLabel: 'Boxing Day',
+        expectedSchedule: 'Sunday schedule',
+        scheduleSourceLabel: 'Approved local holiday calendar fallback',
+        feedCoverageStart: '20260628',
+        feedCoverageEnd: '20261031',
+        feedCoversDate: false,
+      },
+      details: 'The feed is out of range.',
+    });
+
+    expect(subject).toContain('GTFS_SCHEDULE_DATE_NOT_COVERED');
+    expect(subject).toContain('Boxing Day');
+    expect(text).toContain('Expected bus counts cannot be trusted');
+    expect(text).toContain('GTFS schedule coverage: NOT COVERED');
   });
 });
