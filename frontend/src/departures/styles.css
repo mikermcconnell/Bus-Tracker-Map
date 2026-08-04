@@ -6,6 +6,13 @@
 
 * { box-sizing: border-box; }
 
+.logo-filters {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
 html,
 body {
   width: 100%;
@@ -101,6 +108,7 @@ h1,
   object-fit: cover;
   object-position: left center;
   mix-blend-mode: normal;
+  filter: url("#northland-solid-yellow");
 }
 
 .route,

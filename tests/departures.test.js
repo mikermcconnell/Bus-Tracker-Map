@@ -90,8 +90,8 @@ describe('departure aggregation', () => {
     const northland = collectScheduledDepartures({
       service_calendars: common,
       service_exceptions: {},
-      routes: { 101: { short_name: 'ONTC', long_name: 'Toronto - North Bay' } },
-      trips: { north: { route_id: '101', service_id: 'weekday', headsign: 'NORTH BAY', terminal_stops: [{ stop_id: '315', departure_time: '12:10:00', is_departure: true }] } },
+      routes: { ONTC: { short_name: 'ONTC', long_name: 'Toronto - North Bay' } },
+      trips: { '101:north': { route_id: 'ONTC', service_id: 'weekday', headsign: 'NORTH BAY', terminal_stops: [{ stop_id: '315', departure_time: '12:10:00', is_departure: true }] } },
     }, 'ontario_northland', now);
     const linx = collectScheduledDepartures({
       service_calendars: common,

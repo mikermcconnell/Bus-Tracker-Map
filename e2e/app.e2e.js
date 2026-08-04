@@ -184,6 +184,7 @@ test('departures board shows every departure in the one-hour window without scro
   await expect(northlandLogo).toHaveCSS('object-fit', 'cover');
   await expect(northlandLogo).toHaveCSS('object-position', '0% 50%');
   await expect(northlandLogo).toHaveCSS('mix-blend-mode', 'normal');
+  await expect(northlandLogo).not.toHaveCSS('filter', 'none');
   const dimensions = await page.locator('html').evaluate((element) => ({
     height: element.scrollHeight,
     viewport: element.clientHeight,

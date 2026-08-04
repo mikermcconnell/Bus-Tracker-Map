@@ -8,6 +8,12 @@
   <link rel="stylesheet" href="%APP_CSS%">
 </head>
 <body>
+  <svg class="logo-filters" aria-hidden="true">
+    <filter id="northland-solid-yellow" color-interpolation-filters="sRGB">
+      <feFlood flood-color="#febd11" result="solid-color"></feFlood>
+      <feComposite in="solid-color" in2="SourceAlpha" operator="in"></feComposite>
+    </filter>
+  </svg>
   <main class="board" aria-labelledby="page-title">
     <header class="masthead">
       <h1 id="page-title">Departures</h1>

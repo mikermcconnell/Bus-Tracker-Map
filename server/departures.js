@@ -32,7 +32,12 @@ function stopPlatform(metadata, stopId, fallback) {
   return String(stop && stop.platform_code || fallback || '');
 }
 
-function routeDetails(agencyKey, metadata, trip, stopId) {
+function northlandRouteNumber(sourceRoute, tripId) {
+  const candidates = [sourceRoute, String(tripId || '').split(':')[0]];
+  return candidates.find((value) => /^(?:101|102|201|202)$/.test(String(value))) || sourceRoute;
+}
+
+function routeDetails(agencyKey, metadata, trip, stopId, tripId) {
   const sourceRoute = String(trip.route_id || '');
   if (agencyKey === 'barrie_transit') {
     const platform = stopPlatform(metadata, stopId, stopId === '14' ? '14' : '');
@@ -40,7 +45,7 @@ function routeDetails(agencyKey, metadata, trip, stopId) {
   }
   if (agencyKey === 'ontario_northland') {
     const route = metadata.routes && metadata.routes[sourceRoute] || {};
-    return { route_id: sourceRoute, route_label: sourceRoute, mode: 'coach', destination: cleanHeadsign(trip.headsign, 'ontario-northland') || route.long_name || 'Ontario Northland' };
+    return { route_id: sourceRoute, route_label: northlandRouteNumber(sourceRoute, tripId), mode: 'coach', destination: cleanHeadsign(trip.headsign, 'ontario-northland') || route.long_name || 'Ontario Northland' };
   }
   if (agencyKey === 'simcoe_linx') {
     const sourceDestination = cleanHeadsign(trip.headsign, 'simcoe-linx');
@@ -81,7 +86,7 @@ function collectScheduledDepartures(metadata, agencyKey, nowMs, horizonHours = H
           id: `${agency.id}:${tripId}:${stopId}:${serviceDate}`,
           agency_id: agency.id,
           agency_name: agency.name,
-          ...routeDetails(agencyKey, metadata, trip, stopId),
+          ...routeDetails(agencyKey, metadata, trip, stopId, tripId),
           ...platformDetails(agencyKey, metadata, stopId),
           stop_id: stopId,
           trip_id: tripId,
