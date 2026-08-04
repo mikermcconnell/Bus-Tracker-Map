@@ -147,7 +147,7 @@ test('departures board matches the ten-row Allandale TV layout without scrolling
           scheduled_departure_time: nowSeconds + (index + 1) * 300,
           expected_departure_time: nowSeconds + (index + 1) * 300,
           departure_source: index % 2 ? 'scheduled' : 'realtime',
-        })),
+        })).reverse(),
         sources: {
           barrie_transit: { display_mode: 'mixed', realtime_status: 'live' },
           ontario_northland: { display_mode: 'scheduled', realtime_status: 'offline' },

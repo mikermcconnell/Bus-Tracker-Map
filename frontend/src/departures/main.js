@@ -52,16 +52,27 @@ function platform(row) {
   };
 }
 
+function scheduledDeparture(row) {
+  return Number(row.scheduled_departure_time || row.expected_departure_time);
+}
+
+function compareDepartures(left, right) {
+  return scheduledDeparture(left) - scheduledDeparture(right) ||
+    Number(left.platform) - Number(right.platform) ||
+    String(left.route_label || '').localeCompare(String(right.route_label || ''));
+}
+
 function renderDepartures(rows) {
-  if (!rows.length) {
+  const orderedRows = rows.slice().sort(compareDepartures).slice(0, 10);
+  if (!orderedRows.length) {
     list.innerHTML = '<li class="empty-state">No departures are scheduled in the next 24 hours.</li>';
     return;
   }
-  list.innerHTML = rows.map((row) => {
+  list.innerHTML = orderedRows.map((row) => {
     const agencyKey = String(row.agency_id || '').replace(/-/g, '_');
     const agency = AGENCIES[agencyKey] || { name: row.agency_name, short: row.agency_name, logo: '' };
     const bay = platform(row);
-    const displayedDeparture = Number(row.scheduled_departure_time || row.expected_departure_time);
+    const displayedDeparture = scheduledDeparture(row);
     const logo = agency.logo ? `<img src="${asset(agency.logo)}" alt="">` : '';
     return `<li class="departure agency-${escapeHtml(agencyKey)}">
       <div class="agency-logo">${logo}<span class="visually-hidden">${escapeHtml(agency.name)}</span></div>
