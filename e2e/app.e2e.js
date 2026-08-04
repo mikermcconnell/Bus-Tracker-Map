@@ -140,7 +140,8 @@ test('departures board shows every departure in the one-hour window without scro
           id: `departure-${index}`,
           agency_id: index === 0 || index === 10 ? 'go-transit' : index === 5 ? 'ontario-northland' : 'barrie-transit',
           agency_name: index === 0 || index === 10 ? 'GO Transit' : index === 5 ? 'Ontario Northland' : 'Barrie Transit',
-          route_label: index === 0 ? 'TRAIN' : index === 10 ? '68' : index === 5 ? '101' : '8A',
+          route_id: index === 5 ? '201' : undefined,
+          route_label: index === 0 ? 'TRAIN' : index === 10 ? '68' : index === 5 ? 'ONTC' : '8A',
           destination: index === 0 ? 'Toronto / Union Station' : index === 10 ? 'Barrie / Newmarket' : index === 5 ? 'North Bay' : 'Yonge Southbound',
           platform: index === 0 ? '1' : index === 10 ? '7' : index === 5 ? '8' : '3',
           platform_type: 'platform',
@@ -166,6 +167,7 @@ test('departures board shows every departure in the one-hour window without scro
   await expect(page.locator('.departure').first().locator('.departure-status')).toHaveText('LIVE');
   await expect(page.locator('.departure').first().locator('[data-departure-time]')).toHaveAttribute('data-departure-time', String(nowSeconds + 420));
   await expect(page.locator('.departure').nth(1).locator('.departure-status')).toHaveText('SCHED');
+  await expect(page.locator('.agency-ontario_northland .route')).toHaveText('201');
   await expect(page.locator('.departure').nth(10).locator('.route')).toHaveText('68');
   await expect(page.locator('.departure').nth(10).locator('.destination')).toHaveText('BARRIE / NEWMARKET');
   await expect(page.locator('.departure').first()).toHaveCSS('background-color', 'rgb(217, 217, 216)');

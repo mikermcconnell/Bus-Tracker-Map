@@ -53,6 +53,13 @@ function platform(row) {
   };
 }
 
+function publicRouteLabel(row, agencyKey) {
+  const label = String(row.route_label || '');
+  if (agencyKey !== 'ontario_northland' || label.toUpperCase() !== 'ONTC') return label;
+  const candidates = [row.route_id, String(row.trip_id || '').split(':')[0]];
+  return String(candidates.find((value) => /^(?:101|102|201|202)$/.test(String(value))) || label);
+}
+
 function scheduledDeparture(row) {
   return Number(row.scheduled_departure_time || row.expected_departure_time);
 }
@@ -87,10 +94,11 @@ function renderDepartures(rows) {
     const agency = AGENCIES[agencyKey] || { name: row.agency_name, short: row.agency_name, logo: '' };
     const bay = platform(row);
     const departure = displayedDeparture(row);
+    const routeLabel = publicRouteLabel(row, agencyKey);
     const logo = agency.logo ? `<img src="${asset(agency.logo)}" alt="">` : '';
     return `<li class="departure agency-${escapeHtml(agencyKey)}">
       <div class="agency-logo">${logo}<span class="visually-hidden">${escapeHtml(agency.name)}</span></div>
-      <div class="route">${escapeHtml(row.route_label)}</div>
+      <div class="route">${escapeHtml(routeLabel)}</div>
       <div class="destination">${escapeHtml(String(row.destination || 'Destination unavailable').toUpperCase())}</div>
       <div class="departure-time departure-time--${departure.live ? 'live' : 'scheduled'}">
         <span class="departure-status" aria-label="${departure.description}">${departure.label}</span>
