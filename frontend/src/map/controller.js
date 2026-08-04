@@ -1,26 +1,41 @@
 import { clusterVehicles, DEFAULT_CLUSTER_THRESHOLD_METERS, distanceBetweenMeters } from './vehicle-groups.js';
 import {
+  formatTerminalArrival,
   formatTerminalDeparture,
   formatTerminalDistance,
   getRouteEightDirectionLabel,
   getTerminalListStatus,
   selectNearestVehicles
 } from './nearby-vehicles.js';
-import { buildTrackedAgencySummaries } from './tracked-services.js';
+import { buildTrackedAgencySummaries, getAgencyBranding } from './tracked-services.js';
+import {
+  buildTerminalAssignmentIndex,
+  formatPlatformLabel,
+  resolveTerminalAssignment
+} from './terminal-platforms.js';
 import feedFreshness from '../../../shared/feed-freshness.js';
 
 const { assessVehicleFeedFreshness, selectVehiclesForDisplay } = feedFreshness;
 
 export function createMapController({ dataClient, ui }) {
-  var map, routesGroup, vehicleLayer, highlightLayer, majorRoadLineLayer, majorRoadLabelLayer;
+  var map, routesGroup, vehicleLayer, highlightLayer;
+  // Retained only for the dormant legacy helper functions below. The custom
+  // road overlay is intentionally never initialized now that Mapbox owns roads.
+  var majorRoadLineLayer = null;
+  var majorRoadLabelLayer = null;
   var pollMs = 5000;
   var feedDelayedAfterMs = 2 * 60 * 1000;
   var feedOfflineAfterMs = 15 * 60 * 1000;
-  var tileUrl;
+  var tileLayer;
+  var miniBasemapLayer;
+  var basemapTileErrors = 0;
+  var basemapFallbackActive = false;
+  var basemapConfig;
   var basePath = '/';
   var routeLayers = {};
   var routeMetadata = {};
   var routeKeyIndex = {};
+  var terminalAssignments = [];
   var markers = {}; // key -> marker metadata
   var vehicleClusterThreshold = DEFAULT_CLUSTER_THRESHOLD_METERS;
   var anonymousVehicleCounter = 0;
@@ -36,11 +51,11 @@ export function createMapController({ dataClient, ui }) {
     },
     '725': {
       label: 'Barrie South GO',
-      shortLabel: 'BSG'
+      shortLabel: 'South GO'
     },
     '330': {
       label: 'Georgian College',
-      shortLabel: 'GC',
+      shortLabel: 'Georgian',
       labelCoords: { lat: 44.4165781268583, lng: -79.6754198957161 },
       offsetPx: { x: 0, y: 0 }
     },
@@ -50,19 +65,19 @@ export function createMapController({ dataClient, ui }) {
     },
     '76': {
       label: 'Georgian Mall',
-      shortLabel: 'GM',
-      labelCoords: { lat: 44.4118745345584, lng: -79.7211518849986 },
+      shortLabel: 'Georgian Mall',
+      labelCoords: { lat: 44.4105, lng: -79.731 },
       offsetPx: { x: 0, y: 0 }
     },
     '777': {
       label: 'Park Place',
-      shortLabel: 'PP',
+      shortLabel: 'Park Place',
       labelCoords: { lat: 44.3403906345005, lng: -79.6928865258419 },
       offsetPx: { x: 0, y: 0 }
     },
     '488': {
       label: 'Peggy Hill Community Centre',
-      shortLabel: 'PHCC',
+      shortLabel: 'Peggy Hill',
       cssOffsets: { x: '-55%', y: '-20%' },
       labelCoords: { lat: 44.34436966587496, lng: -79.71668472 },
       offsetPx: { x: 0, y: 0 }
@@ -77,7 +92,7 @@ export function createMapController({ dataClient, ui }) {
     },
     '1': {
       label: 'Downtown Barrie',
-      shortLabel: 'DB',
+      shortLabel: 'Downtown',
       labelCoords: { lat: 44.387588, lng: -79.68660088028756 },
       offsetPx: { x: 0, y: 0 }
     }
@@ -192,6 +207,10 @@ export function createMapController({ dataClient, ui }) {
   // Terminal focus constants keep the inset map centered on Barrie Allandale Transit Terminal.
   var TERMINAL_COORDS = { lat: 44.3740170437343, lng: -79.6899831810679 };
   var TERMINAL_RADIUS_METERS = 150;
+  // Keep the default TV view focused on Allandale and the nearby south-end
+  // network, with additional room on the right for the terminal board.
+  var DEFAULT_MAP_CENTER = { lat: 44.373, lng: -79.672 };
+  var DEFAULT_MAP_ZOOM = 13.5;
   // TV zoom ends up shrinking the effective viewport well below the panel's native size,
   // so loosen the breakpoint so the mini-map still renders on smaller CSS viewports.
   var MINI_MAP_MEDIA_QUERY = '(min-width: 500px) and (min-height: 360px)';
@@ -216,7 +235,9 @@ export function createMapController({ dataClient, ui }) {
   var DEAD_RECKON_MAX_DURATION_FACTOR = 1.6;
   var ANIMATION_DURATION_FACTOR = 2.0;
   var SERVICE_STATUS_REFRESH_MS = 15 * 60 * 1000;
+  var TERMINAL_LAYOUT_REFRESH_MS = 5 * 60 * 1000;
   var serviceStatusRefreshTimer = null;
+  var terminalLayoutRefreshTimer = null;
 
   function updateDebugState(key, value) {
     if (typeof window === 'undefined') return;
@@ -242,7 +263,19 @@ export function createMapController({ dataClient, ui }) {
 
   function initialize() {
     var DEFAULT_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-    tileUrl = DEFAULT_TILE_URL;
+    var DEFAULT_ATTRIBUTION =
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
+    basemapConfig = {
+      provider: 'osm',
+      url: DEFAULT_TILE_URL,
+      tileSize: 256,
+      zoomOffset: 0,
+      maxZoom: 19,
+      opacity: 1,
+      attribution: DEFAULT_ATTRIBUTION,
+      fallbackUrl: DEFAULT_TILE_URL,
+      fallbackAttribution: DEFAULT_ATTRIBUTION
+    };
 
     ui.showBanner('routes', 'Loading map…');
     ui.showBanner('vehicles', 'Loading vehicles…');
@@ -262,8 +295,10 @@ export function createMapController({ dataClient, ui }) {
           if (Number.isFinite(Number(cfg.feed_offline_after_ms)) && Number(cfg.feed_offline_after_ms) > 0) {
             feedOfflineAfterMs = Number(cfg.feed_offline_after_ms);
           }
-          if (cfg.tiles) {
-            tileUrl = cfg.tiles;
+          if (cfg.basemap && typeof cfg.basemap === 'object' && cfg.basemap.url) {
+            basemapConfig = normalizeBasemapConfig(cfg.basemap, basemapConfig);
+          } else if (cfg.tiles) {
+            basemapConfig.url = cfg.tiles;
           }
           if (cfg.base_path) {
             basePath = cfg.base_path;
@@ -281,9 +316,9 @@ export function createMapController({ dataClient, ui }) {
         ui.setupLegend(createLegendContext());
         updateDebugState('legend', 'rendered');
         return Promise.all([
-          loadMajorRoads(),
           loadRoutes(),
-          loadStopHighlights()
+          loadStopHighlights(),
+          loadTerminalLayout()
         ]);
       })
       .catch(function (err) {
@@ -292,11 +327,30 @@ export function createMapController({ dataClient, ui }) {
         updateDebugState('legend', 'error: init failed');
       })
       .then(function () {
-        scheduleMajorRoadLabelDeclutter();
         loadServiceStatus();
         scheduleServiceStatusRefresh();
+        scheduleTerminalLayoutRefresh();
         startVehiclesPoll();
       });
+  }
+
+  function loadTerminalLayout() {
+    if (!dataClient || typeof dataClient.fetchTerminalLayout !== 'function') {
+      terminalAssignments = [];
+      return Promise.resolve();
+    }
+    return dataClient.fetchTerminalLayout()
+      .then(function (layout) {
+        terminalAssignments = buildTerminalAssignmentIndex(layout);
+      })
+      .catch(function (err) {
+        console.warn('Terminal platform assignments unavailable:', err && err.message ? err.message : err);
+      });
+  }
+
+  function scheduleTerminalLayoutRefresh() {
+    if (terminalLayoutRefreshTimer) clearInterval(terminalLayoutRefreshTimer);
+    terminalLayoutRefreshTimer = setInterval(loadTerminalLayout, TERMINAL_LAYOUT_REFRESH_MS);
   }
 
   function loadServiceStatus() {
@@ -331,17 +385,81 @@ export function createMapController({ dataClient, ui }) {
     return match ? decodeURIComponent(match[1]) : null;
   }
 
+  function normalizeBasemapConfig(raw, fallback) {
+    var source = raw && typeof raw === 'object' ? raw : {};
+    var defaults = fallback || {};
+    var tileSize = Number(source.tile_size);
+    var zoomOffset = Number(source.zoom_offset);
+    var maxZoom = Number(source.max_zoom);
+    var opacity = Number(source.opacity);
+    return {
+      provider: String(source.provider || defaults.provider || 'osm').toLowerCase(),
+      url: String(source.url || defaults.url || ''),
+      tileSize: Number.isFinite(tileSize) && tileSize > 0 ? tileSize : Number(defaults.tileSize) || 256,
+      zoomOffset: Number.isFinite(zoomOffset) ? zoomOffset : Number(defaults.zoomOffset) || 0,
+      maxZoom: Number.isFinite(maxZoom) && maxZoom > 0 ? maxZoom : Number(defaults.maxZoom) || 19,
+      opacity: Number.isFinite(opacity) && opacity >= 0 && opacity <= 1
+        ? opacity
+        : (Number.isFinite(Number(defaults.opacity)) ? Number(defaults.opacity) : 1),
+      attribution: String(source.attribution || defaults.attribution || ''),
+      fallbackUrl: String(source.fallback_url || defaults.fallbackUrl || ''),
+      fallbackAttribution: String(
+        source.fallback_attribution || defaults.fallbackAttribution || defaults.attribution || ''
+      )
+    };
+  }
+
+  function getTileLayerOptions(config, opacityOverride) {
+    return {
+      tileSize: config.tileSize,
+      zoomOffset: config.zoomOffset,
+      maxZoom: config.maxZoom,
+      attribution: config.attribution,
+      opacity: Number.isFinite(Number(opacityOverride)) ? Number(opacityOverride) : config.opacity,
+      detectRetina: false,
+      crossOrigin: true
+    };
+  }
+
+  function createBasemapLayer(config, opacityOverride) {
+    return L.tileLayer(config.url, getTileLayerOptions(config, opacityOverride));
+  }
+
+  function handleBasemapTileError() {
+    if (!basemapConfig || basemapConfig.provider !== 'mapbox' || basemapFallbackActive) return;
+    basemapTileErrors += 1;
+    if (basemapTileErrors < 3) return;
+    basemapFallbackActive = true;
+    setTimeout(activateBasemapFallback, 0);
+  }
+
+  function activateBasemapFallback() {
+    if (!map || !basemapConfig || !basemapConfig.fallbackUrl) return;
+    var fallback = {
+      provider: 'osm',
+      url: basemapConfig.fallbackUrl,
+      tileSize: 256,
+      zoomOffset: 0,
+      maxZoom: 19,
+      opacity: 1,
+      attribution: basemapConfig.fallbackAttribution,
+      fallbackUrl: basemapConfig.fallbackUrl,
+      fallbackAttribution: basemapConfig.fallbackAttribution
+    };
+    if (tileLayer) map.removeLayer(tileLayer);
+    tileLayer = createBasemapLayer(fallback).addTo(map);
+    if (miniMap && miniBasemapLayer) {
+      miniMap.removeLayer(miniBasemapLayer);
+      miniBasemapLayer = createBasemapLayer(fallback, 1).addTo(miniMap);
+    }
+    console.warn('Mapbox tiles unavailable; switched to the OpenStreetMap fallback.');
+    updateDebugState('basemap', 'osm-fallback');
+  }
+
   function setupMap() {
-    map = L.map('map', { zoomControl: true, zoomSnap: 0.5, zoomDelta: 0.5 }).setView([44.3894, -79.6903], 13);
+    map = L.map('map', { zoomControl: true, zoomSnap: 0.5, zoomDelta: 0.5 })
+      .setView([DEFAULT_MAP_CENTER.lat, DEFAULT_MAP_CENTER.lng], DEFAULT_MAP_ZOOM);
     map.zoomControl.setPosition('bottomright');
-
-    map.createPane('majorRoadPane');
-    map.getPane('majorRoadPane').style.zIndex = 410;
-    map.getPane('majorRoadPane').style.pointerEvents = 'none';
-
-    map.createPane('majorRoadLabelPane');
-    map.getPane('majorRoadLabelPane').style.zIndex = 434;
-    map.getPane('majorRoadLabelPane').style.pointerEvents = 'none';
 
     map.createPane('routeOutlinePane');
     map.getPane('routeOutlinePane').style.zIndex = 420;
@@ -366,20 +484,12 @@ export function createMapController({ dataClient, ui }) {
     map.getPane('stopHighlightPane').style.zIndex = 500;
     map.getPane('stopHighlightPane').style.pointerEvents = 'none';
 
-    L.tileLayer(tileUrl, {
-      maxZoom: 19,
-      attribution: ' OpenStreetMap contributors',
-      opacity: 0.34,
-      detectRetina: true
-    }).addTo(map);
-    majorRoadLineLayer = L.layerGroup().addTo(map);
-    majorRoadLabelLayer = L.layerGroup();
+    tileLayer = createBasemapLayer(basemapConfig).addTo(map);
+    tileLayer.on('tileerror', handleBasemapTileError);
+    updateDebugState('basemap', basemapConfig.provider);
     routesGroup = L.layerGroup().addTo(map);
     vehicleLayer = L.layerGroup().addTo(map);
     highlightLayer = L.layerGroup().addTo(map);
-    map.on('zoomend', updateMajorRoadLabelVisibility);
-    map.on('zoomend moveend', scheduleMajorRoadLabelDeclutter);
-    updateMajorRoadLabelVisibility();
     initializeMiniMapSupport();
   }
 
@@ -452,13 +562,8 @@ export function createMapController({ dataClient, ui }) {
       zoomDelta: 0.5
     }).setView([TERMINAL_COORDS.lat, TERMINAL_COORDS.lng], MINI_MAP_ZOOM);
 
-    L.tileLayer(tileUrl, {
-      maxZoom: 20,
-      attribution: ' OpenStreetMap contributors',
-      opacity: 1,
-      detectRetina: true,
-      interactive: false
-    }).addTo(miniMap);
+    miniBasemapLayer = createBasemapLayer(basemapConfig, 1)
+      .addTo(miniMap);
 
     miniVehicleLayer = L.layerGroup().addTo(miniMap);
     miniBorderLayer = L.layerGroup().addTo(miniMap);
@@ -483,6 +588,7 @@ export function createMapController({ dataClient, ui }) {
       miniMap.remove();
       miniMap = null;
     }
+    miniBasemapLayer = null;
   }
 
   function clearMiniMapMarkers() {
@@ -2412,7 +2518,14 @@ export function createMapController({ dataClient, ui }) {
       var meta = getVehicleDisplayMeta(vehicle, baseMeta) || {};
       var routeLabel = vehicle.route_label || meta.displayName || vehicle.route_id || 'Bus';
       var agencyLabel = vehicle.agency_name || meta.agencyName || 'Barrie Transit';
+      var agencyId = vehicle.agency_id || meta.agencyId || 'barrie-transit';
+      var agencyBranding = getAgencyBranding(agencyId);
+      var assignment = resolveTerminalAssignment(vehicle, terminalAssignments);
       var destination = getNearbyDestination(vehicle, meta, routeLabel);
+      var assignmentDestination = String(assignment && assignment.destination || '').trim();
+      if (assignmentDestination && assignmentDestination.toLowerCase() !== agencyLabel.toLowerCase()) {
+        destination = assignmentDestination;
+      }
       var terminalStatus = getTerminalListStatus(
         vehicle,
         entry.distanceMeters,
@@ -2427,10 +2540,13 @@ export function createMapController({ dataClient, ui }) {
         id: vehicle.id || routeLabel,
         routeLabel: routeLabel,
         routeCode: meta.routeCode || routeLabel,
-        agencyId: vehicle.agency_id || meta.agencyId || 'barrie-transit',
+        agencyId: agencyId,
         agencyLabel: agencyLabel,
+        agencyLogoSrc: agencyBranding.logoSrc,
+        agencyLogoAlt: agencyBranding.logoAlt || agencyLabel,
         serviceLabel: getVehicleServiceLabel(vehicle, agencyLabel),
         destination: destination,
+        platformLabel: formatPlatformLabel(assignment),
         directionLabel: routeEightDirection,
         terminalStatus: terminalStatus,
         distanceMeters: entry.distanceMeters,
@@ -2440,7 +2556,11 @@ export function createMapController({ dataClient, ui }) {
         ),
         departureLabel: terminalStatus === 'at_terminal'
           ? formatTerminalDeparture(vehicle.terminal_departure_time)
-          : '',
+          : formatTerminalArrival(
+              vehicle.terminal_arrival_time,
+              Date.now(),
+              entry.distanceMeters
+            ),
         color: meta.color || '#004e80',
         textColor: meta.textColor || '#ffffff'
       };
@@ -3126,7 +3246,7 @@ export function createMapController({ dataClient, ui }) {
             smoothFactor: 1.5,
             filter: onlyLinework,
             style: function () {
-              return { color: '#ffffff', weight: 8, opacity: 0.58, lineJoin: 'round', lineCap: 'round' };
+              return { color: '#ffffff', weight: 8, opacity: 0.7, lineJoin: 'round', lineCap: 'round' };
             }
           });
 
@@ -3136,7 +3256,7 @@ export function createMapController({ dataClient, ui }) {
             smoothFactor: 1.5,
             filter: onlyLinework,
             style: function () {
-              return { color: meta.color, weight: 4.5, opacity: 0.58, lineJoin: 'round', lineCap: 'round' };
+              return { color: meta.color, weight: 4.5, opacity: 0.76, lineJoin: 'round', lineCap: 'round' };
             }
           });
 
@@ -3169,10 +3289,6 @@ export function createMapController({ dataClient, ui }) {
           updateDebugState('stopLegend', 'missing renderer');
         }
         ui.clearBanner('routes');
-        if (combinedBounds && combinedBounds.isValid()) {
-          map.fitBounds(combinedBounds, { padding: [12, 12] });
-        }
-
         Object.keys(routeLayers).forEach(function (routeId) {
           applyRouteVisibilityToVehicles(routeId);
         });

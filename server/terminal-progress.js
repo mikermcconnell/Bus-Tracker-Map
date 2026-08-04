@@ -198,6 +198,16 @@ function classifyTerminalProgress(vehicle, options = {}) {
 
   if (terminalStops.length) {
     if (currentSequence === null) {
+      // Metrolinx GO vehicle positions can omit current_stop_sequence even
+      // while supplying the trip, current stop, and inbound destination. The
+      // Allandale headsign is sufficient to keep that known terminal-serving
+      // trip in the approaching list; outbound headsigns still remain unknown.
+      if (options.inboundHeadsignPattern && options.inboundHeadsignPattern.test(headsign)) {
+        return {
+          status: TERMINAL_PROGRESS.APPROACHING,
+          terminalStop: terminalStops[0],
+        };
+      }
       return {
         status: TERMINAL_PROGRESS.UNKNOWN,
         terminalStop: terminalStops[0],
@@ -257,6 +267,46 @@ function enrichTerminalProgress(vehicle, options = {}) {
   };
 }
 
+function getTerminalApproachFallback(vehicle, fallbacks) {
+  if (!vehicle || !fallbacks || typeof fallbacks !== 'object') return null;
+  const routeId = String(vehicle.route_id || '').trim();
+  const stopId = String(vehicle.stop_id || '').trim();
+  const directionId = finiteSequence(vehicle.direction_id);
+  if (!routeId || !stopId || directionId === null) return null;
+  return fallbacks[`${routeId}|${directionId}|${stopId}`] || null;
+}
+
+function enrichTerminalProgressWithFallback(vehicle, options = {}) {
+  const enriched = enrichTerminalProgress(vehicle, options);
+  if (
+    enriched.terminal_progress_status !== TERMINAL_PROGRESS.NOT_SERVING &&
+    enriched.terminal_progress_status !== TERMINAL_PROGRESS.UNKNOWN
+  ) {
+    return enriched;
+  }
+
+  const fallback = getTerminalApproachFallback(
+    vehicle,
+    options.terminalApproachFallbacks
+  );
+  if (!fallback) return enriched;
+
+  const fallbackTerminalStopIds = Array.isArray(fallback.terminal_stop_ids)
+    ? fallback.terminal_stop_ids.map(String).filter(Boolean)
+    : [];
+  return {
+    ...enriched,
+    terminal_stop_id: fallbackTerminalStopIds.length === 1
+      ? fallbackTerminalStopIds[0]
+      : null,
+    terminal_stop_sequence: null,
+    terminal_progress_status: TERMINAL_PROGRESS.APPROACHING,
+    terminal_departure_time: null,
+    terminal_departure_source: null,
+    terminal_progress_source: 'route_direction_stop_fallback',
+  };
+}
+
 function loadTerminalMetadata(cacheDir, filename) {
   const filePath = path.join(cacheDir, filename);
   if (!fs.existsSync(filePath)) {
@@ -280,6 +330,8 @@ module.exports = {
   TERMINAL_PROGRESS,
   classifyTerminalProgress,
   enrichTerminalProgress,
+  enrichTerminalProgressWithFallback,
+  getTerminalApproachFallback,
   inferScheduledDepartureEpochSeconds,
   scheduledTimeToEpochSeconds,
   resolveTerminalDepartureTime,

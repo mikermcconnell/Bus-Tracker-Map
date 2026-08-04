@@ -3,7 +3,11 @@ const path = require('path');
 const fs = require('fs');
 const express = require('express');
 require('dotenv').config();
-const { fetchVehicles } = require('./vehicles');
+const {
+  fetchVehicles,
+  fetchTerminalTripUpdates,
+  selectTerminalTripUpdate,
+} = require('./vehicles');
 const {
   DEFAULT_VEHICLES_URL: DEFAULT_ONTARIO_NORTHLAND_VEHICLES_URL,
   DEFAULT_TRIP_UPDATES_URL: DEFAULT_ONTARIO_NORTHLAND_TRIP_UPDATES_URL,
@@ -18,7 +22,7 @@ const { assessVehicleFeedFreshness } = require('../shared/feed-freshness');
 const { buildServiceStatus } = require('./service-status');
 const { noticeService } = require('./notices');
 const {
-  enrichTerminalProgress,
+  enrichTerminalProgressWithFallback,
   loadTerminalMetadata,
 } = require('./terminal-progress');
 const { buildTerminalLayout } = require('./terminal-layout');
@@ -135,8 +139,15 @@ app.locals.noticeService = noticeService;
 maybeSetupLiveReload(app);
 const PORT = process.env.PORT || 3007;
 const POLL_MS = Number(process.env.POLL_MS || 10000);
-const MAPTILER_KEY = process.env.MAPTILER_KEY || '';
+const MAPBOX_ACCESS_TOKEN = String(process.env.MAPBOX_ACCESS_TOKEN || '').trim();
+const MAPBOX_USERNAME = String(process.env.MAPBOX_USERNAME || '').trim();
+const MAPBOX_STYLE_ID = String(process.env.MAPBOX_STYLE_ID || '').trim();
+const PLATFORM_MAPBOX_STYLE_ID = String(
+  process.env.PLATFORM_MAPBOX_STYLE_ID || MAPBOX_STYLE_ID
+).trim();
 const RT_URL = process.env.GTFS_RT_VEHICLES_URL || '';
+const RT_TRIP_UPDATES_URL = process.env.GTFS_RT_TRIP_UPDATES_URL ||
+  'https://www.myridebarrie.ca/gtfs/GTFS_TripUpdates.pb';
 const ONTARIO_NORTHLAND_ENABLED = !/^(?:0|false|no|off)$/i.test(
   String(process.env.ONTARIO_NORTHLAND_ENABLED || 'true').trim()
 );
@@ -164,6 +175,48 @@ const goTransitTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'go-transit.js
 const hashedAssetPattern = /\.[0-9a-f]{10}\.(?:js|css)$/;
 const allowedOrigins = parseAllowedOrigins(process.env.ALLOWED_ORIGINS);
 const corsMiddleware = createCorsMiddleware(allowedOrigins);
+
+const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const OSM_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
+const MAPBOX_ATTRIBUTION =
+  '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> ' +
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
+  '<a href="https://labs.mapbox.com/contribute/" target="_blank" rel="noopener">Improve this map</a>';
+
+function buildBasemapConfig(styleId = MAPBOX_STYLE_ID) {
+  const mapboxConfigured = Boolean(
+    MAPBOX_ACCESS_TOKEN && MAPBOX_USERNAME && styleId
+  );
+  if (!mapboxConfigured) {
+    return {
+      provider: 'osm',
+      url: OSM_TILE_URL,
+      tile_size: 256,
+      zoom_offset: 0,
+      max_zoom: 19,
+      opacity: 1,
+      attribution: OSM_ATTRIBUTION,
+      fallback_url: OSM_TILE_URL,
+      fallback_attribution: OSM_ATTRIBUTION,
+    };
+  }
+
+  const owner = encodeURIComponent(MAPBOX_USERNAME);
+  const encodedStyleId = encodeURIComponent(styleId);
+  const token = encodeURIComponent(MAPBOX_ACCESS_TOKEN);
+  return {
+    provider: 'mapbox',
+    url: `https://api.mapbox.com/styles/v1/${owner}/${encodedStyleId}/tiles/512/{z}/{x}/{y}?access_token=${token}`,
+    tile_size: 512,
+    zoom_offset: -1,
+    max_zoom: 19,
+    opacity: 1,
+    attribution: MAPBOX_ATTRIBUTION,
+    fallback_url: OSM_TILE_URL,
+    fallback_attribution: OSM_ATTRIBUTION,
+  };
+}
 
 if (allowedOrigins.size) {
   console.log('API CORS allowed for origins:', Array.from(allowedOrigins).join(', '));
@@ -219,25 +272,53 @@ function sendMergedRoutes(res) {
   });
 }
 
-function addBarrieAgencyMetadata(payload) {
+function addBarrieAgencyMetadata(payload, tripUpdates = {}) {
   return {
     ...payload,
     vehicles: (payload && Array.isArray(payload.vehicles) ? payload.vehicles : []).map((vehicle) => {
       const trip = vehicle && vehicle.trip_id &&
         barrieTerminalMetadata.trips &&
         barrieTerminalMetadata.trips[vehicle.trip_id] || {};
-      return enrichTerminalProgress({
+      const terminalUpdate = selectTerminalTripUpdate(vehicle, tripUpdates);
+      return enrichTerminalProgressWithFallback({
         ...vehicle,
         trip_headsign: trip.headsign || null,
         agency_id: 'barrie-transit',
         agency_name: 'Barrie Transit',
         source_route_id: vehicle.route_id || null,
+        terminal_stop_id: terminalUpdate && terminalUpdate.stop_id || null,
+        terminal_stop_sequence: terminalUpdate && terminalUpdate.stop_sequence,
+        terminal_arrival_time: terminalUpdate && terminalUpdate.arrival_time || null,
+        terminal_arrival_source: terminalUpdate ? 'realtime' : null,
+        terminal_departure_time: terminalUpdate && terminalUpdate.departure_time || null,
       }, {
         terminalStopIds: barrieTerminalMetadata.terminal_stop_ids,
-        terminalStops: trip.terminal_stops,
+        terminalStops: Array.isArray(trip.terminal_stops) && trip.terminal_stops.length
+          ? trip.terminal_stops
+          : (terminalUpdate ? [terminalUpdate] : []),
+        terminalApproachFallbacks: barrieTerminalMetadata.terminal_approach_fallbacks,
       });
     }),
   };
+}
+
+async function fetchBarrieRealtime() {
+  const [vehicleResult, tripUpdateResult] = await Promise.allSettled([
+    fetchVehicles(RT_URL),
+    fetchTerminalTripUpdates(
+      RT_TRIP_UPDATES_URL,
+      barrieTerminalMetadata.terminal_stop_ids
+    ),
+  ]);
+  if (vehicleResult.status === 'rejected') throw vehicleResult.reason;
+  if (tripUpdateResult.status === 'rejected') {
+    console.warn('[barrie-transit] Trip updates unavailable:',
+      tripUpdateResult.reason && tripUpdateResult.reason.message || tripUpdateResult.reason);
+  }
+  const tripUpdates = tripUpdateResult.status === 'fulfilled'
+    ? tripUpdateResult.value.trip_updates
+    : {};
+  return addBarrieAgencyMetadata(vehicleResult.value, tripUpdates);
 }
 
 function maxTimestamp(values) {
@@ -247,7 +328,7 @@ function maxTimestamp(values) {
 
 async function getCombinedVehiclePayload() {
   const barriePromise = RT_URL
-    ? fetchVehicles(RT_URL).then(addBarrieAgencyMetadata)
+    ? fetchBarrieRealtime()
     : Promise.resolve({
       generated_at: Date.now(),
       feed_timestamp: null,
@@ -397,6 +478,8 @@ apiRouter.get('/stops.geojson', (req, res) => {
 });
 
 apiRouter.get('/config', (req, res) => {
+  const basemap = buildBasemapConfig();
+  const platformBasemap = buildBasemapConfig(PLATFORM_MAPBOX_STYLE_ID);
   res.json({
     poll_ms: POLL_MS,
     feed_delayed_after_ms: Number.isFinite(FEED_DELAYED_AFTER_MS) && FEED_DELAYED_AFTER_MS > 0
@@ -406,9 +489,10 @@ apiRouter.get('/config', (req, res) => {
       ? FEED_OFFLINE_AFTER_MS
       : 15 * 60 * 1000,
     base_path: BASE_PATH,
-    tiles: MAPTILER_KEY
-      ? `https://api.maptiler.com/maps/streets/{z}/{x}/{y}.png?key=${MAPTILER_KEY}`
-      : `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`,
+    basemap,
+    platform_basemap: platformBasemap,
+    // Keep the original field during the client migration.
+    tiles: basemap.url,
     rt_feed_configured: Boolean(RT_URL) || ONTARIO_NORTHLAND_ENABLED || GO_TRANSIT_ENABLED,
     transit_sources: {
       barrie_transit: Boolean(RT_URL),

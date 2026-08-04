@@ -2,7 +2,8 @@ import { describe, expect, test } from 'vitest';
 import {
   buildNearbyRenderSignature,
   buildTrackedAgencySummaries,
-  buildTrackedServiceSummaries
+  buildTrackedServiceSummaries,
+  getAgencyBranding
 } from '../frontend/src/map/tracked-services.js';
 
 describe('tracked service summaries', () => {
@@ -71,6 +72,15 @@ describe('tracked service summaries', () => {
     expect(agencies[3].services[0].statusLabel).toBe('Not tracked');
   });
 
+  test('shares Live Services agency branding with terminal rows', () => {
+    expect(getAgencyBranding('barrie-transit').logoSrc)
+      .toBe('./assets/agency-barrie-transit.png');
+    expect(getAgencyBranding('go-transit').logoSrc)
+      .toBe('./assets/agency-go-transit.svg');
+    expect(getAgencyBranding('ontario-northland').logoSrc)
+      .toBe('./assets/agency-ontario-northland.png');
+  });
+
   test('uses feed-health wording instead of claiming delayed or offline vehicles are live', () => {
     const summaries = buildTrackedServiceSummaries({
       vehicles: [
@@ -123,6 +133,12 @@ describe('nearby vehicle render signatures', () => {
     ])).not.toBe(first);
     expect(buildNearbyRenderSignature([
       { ...rows[0], directionLabel: 'North' }
+    ])).not.toBe(first);
+    expect(buildNearbyRenderSignature([
+      { ...rows[0], platformLabel: 'PLATFORM 5' }
+    ])).not.toBe(first);
+    expect(buildNearbyRenderSignature([
+      { ...rows[0], agencyLogoSrc: './assets/agency-barrie-transit.png' }
     ])).not.toBe(first);
   });
 });

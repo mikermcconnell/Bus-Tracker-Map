@@ -1,0 +1,178 @@
+{
+  "version": 8,
+  "name": "Barrie Transit TV v1",
+  "metadata": {
+    "barrie:purpose": "Neutral TV basemap for transit route and vehicle overlays",
+    "barrie:defaultZoom": 13.5
+  },
+  "sources": {
+    "composite": {
+      "type": "vector",
+      "url": "mapbox://mapbox.mapbox-streets-v8"
+    }
+  },
+  "glyphs": "mapbox://fonts/mapbox/{fontstack}/{range}.pbf",
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": { "background-color": "#f3f6f7" }
+    },
+    {
+      "id": "parks",
+      "type": "fill",
+      "source": "composite",
+      "source-layer": "landuse",
+      "filter": ["match", ["get", "class"], ["park", "pitch", "grass", "cemetery"], true, false],
+      "paint": { "fill-color": "#e5eee7", "fill-opacity": 1 }
+    },
+    {
+      "id": "education-medical",
+      "type": "fill",
+      "source": "composite",
+      "source-layer": "landuse",
+      "filter": ["match", ["get", "class"], ["school", "hospital"], true, false],
+      "paint": { "fill-color": "#e8edf0", "fill-opacity": 1 }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "composite",
+      "source-layer": "water",
+      "paint": { "fill-color": "#dbeaf1" }
+    },
+    {
+      "id": "waterways",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "waterway",
+      "paint": { "line-color": "#c7dde8", "line-width": 1.2 }
+    },
+    {
+      "id": "buildings",
+      "type": "fill",
+      "source": "composite",
+      "source-layer": "building",
+      "minzoom": 13,
+      "paint": {
+        "fill-color": "#dce3e6",
+        "fill-opacity": 1
+      }
+    },
+    {
+      "id": "rail",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["==", ["get", "class"], "major_rail"],
+      "paint": {
+        "line-color": "#9ba8af",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.8, 16, 1.8],
+        "line-dasharray": [2, 2],
+        "line-opacity": 1
+      }
+    },
+    {
+      "id": "local-road-casing",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["match", ["get", "class"], ["street", "street_limited", "service", "path"], true, false],
+      "paint": {
+        "line-color": "#d8e0e4",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.35, 16, 2.6],
+        "line-opacity": 1
+      }
+    },
+    {
+      "id": "local-road-fill",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["match", ["get", "class"], ["street", "street_limited", "service", "path"], true, false],
+      "paint": {
+        "line-color": "#f8fafb",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.15, 16, 1.5],
+        "line-opacity": 1
+      }
+    },
+    {
+      "id": "major-road-casing",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["match", ["get", "class"], ["motorway", "trunk", "primary", "secondary", "tertiary"], true, false],
+      "paint": {
+        "line-color": "#aebbc2",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.2, 14, 4.6, 16, 7],
+        "line-opacity": 1
+      }
+    },
+    {
+      "id": "major-road-fill",
+      "type": "line",
+      "source": "composite",
+      "source-layer": "road",
+      "filter": ["match", ["get", "class"], ["motorway", "trunk", "primary", "secondary", "tertiary"], true, false],
+      "paint": {
+        "line-color": "#ffffff",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 0.7, 14, 2.8, 16, 4.5],
+        "line-opacity": 1
+      }
+    },
+    {
+      "id": "major-road-labels",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "road",
+      "minzoom": 11.5,
+      "filter": ["all", ["has", "name"], ["match", ["get", "class"], ["motorway", "trunk", "primary", "secondary", "tertiary"], true, false]],
+      "layout": {
+        "symbol-placement": "line",
+        "symbol-spacing": 420,
+        "text-field": ["coalesce", ["get", "name_en"], ["get", "name"]],
+        "text-font": ["DIN Pro Medium", "Arial Unicode MS Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 12, 12, 13.5, 15, 16, 17],
+        "text-letter-spacing": 0.035,
+        "text-max-angle": 30,
+        "text-padding": 5,
+        "text-rotation-alignment": "map"
+      },
+      "paint": {
+        "text-color": "#334854",
+        "text-halo-color": "#f7fafb",
+        "text-halo-width": 2,
+        "text-halo-blur": 0.3
+      }
+    },
+    {
+      "id": "nearby-road-labels",
+      "type": "symbol",
+      "source": "composite",
+      "source-layer": "road",
+      "minzoom": 13.2,
+      "filter": [
+        "all",
+        ["has", "name"],
+        ["match", ["get", "name"], ["Bradford Street", "Tiffin Street", "Lakeshore Drive", "Burton Avenue", "Innisfil Street", "Gowan Street", "Anne Street"], true, false]
+      ],
+      "layout": {
+        "symbol-placement": "line",
+        "symbol-spacing": 300,
+        "text-field": ["coalesce", ["get", "name_en"], ["get", "name"]],
+        "text-font": ["DIN Pro Medium", "Arial Unicode MS Regular"],
+        "text-size": ["interpolate", ["linear"], ["zoom"], 13.2, 11, 16, 13],
+        "text-letter-spacing": 0.02,
+        "text-max-angle": 35,
+        "text-padding": 4,
+        "text-rotation-alignment": "map"
+      },
+      "paint": {
+        "text-color": "#62717d",
+        "text-halo-color": "#f7fafb",
+        "text-halo-width": 1.5,
+        "text-halo-blur": 0.3
+      }
+    }
+  ]
+}
