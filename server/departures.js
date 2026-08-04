@@ -148,6 +148,14 @@ function readGoTime(value) {
   }
   const dotNet = String(value || '').match(/^\/Date\((\d+)/);
   if (dotNet) return Math.floor(Number(dotNet[1]) / 1000);
+  const local = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2}):(\d{2})/);
+  if (local && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(String(value || ''))) {
+    return scheduledTimeToEpochSeconds(
+      `${local[1]}${local[2]}${local[3]}`,
+      `${local[4]}:${local[5]}:${local[6]}`,
+      TIME_ZONE
+    );
+  }
   const parsed = Date.parse(value || '');
   return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null;
 }

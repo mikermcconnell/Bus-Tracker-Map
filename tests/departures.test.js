@@ -73,6 +73,7 @@ describe('departure aggregation', () => {
     const now = Date.parse('2026-08-04T16:00:00Z');
     const rows = parseGoNextService({ NextService: { Lines: [{ LineCode: '68', Destination: 'Aurora GO', Platform: '7', TripNumber: '123', ScheduledDepartureTime: '/Date(1785859800000)/', ComputedDepartureTime: '/Date(1785860100000)/' }] } }, '08049', now);
     expect(readGoTime('/Date(1785860100000)/')).toBe(1785860100);
+    expect(readGoTime('2026-08-04T11:40:34')).toBe(Date.parse('2026-08-04T15:40:34Z') / 1000);
     expect(rows[0]).toMatchObject({ agency_id: 'go-transit', route_label: '68', platform: '7', departure_source: 'realtime' });
   });
 });
