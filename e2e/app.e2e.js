@@ -164,6 +164,16 @@ test('departures board matches the ten-row Allandale TV layout without scrolling
   await expect(page.locator('.platform strong').first()).toHaveText('01');
   await expect(page.locator('.departure').first()).toHaveCSS('background-color', 'rgb(217, 217, 216)');
   await expect(page.locator('.departure').nth(1)).toHaveCSS('background-color', 'rgb(187, 187, 188)');
+  const logoAlignment = await page.locator('.departure').first().evaluate((row) => {
+    const cell = row.querySelector('.agency-logo').getBoundingClientRect();
+    const logo = row.querySelector('.agency-logo img').getBoundingClientRect();
+    return {
+      horizontal: Math.abs((cell.left + cell.width / 2) - (logo.left + logo.width / 2)),
+      vertical: Math.abs((cell.top + cell.height / 2) - (logo.top + logo.height / 2)),
+    };
+  });
+  expect(logoAlignment.horizontal).toBeLessThanOrEqual(1);
+  expect(logoAlignment.vertical).toBeLessThanOrEqual(1);
   const dimensions = await page.locator('html').evaluate((element) => ({
     height: element.scrollHeight,
     viewport: element.clientHeight,
