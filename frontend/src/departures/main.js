@@ -61,12 +61,13 @@ function renderDepartures(rows) {
     const agencyKey = String(row.agency_id || '').replace(/-/g, '_');
     const agency = AGENCIES[agencyKey] || { name: row.agency_name, short: row.agency_name, logo: '' };
     const bay = platform(row);
+    const displayedDeparture = Number(row.scheduled_departure_time || row.expected_departure_time);
     const logo = agency.logo ? `<img src="${asset(agency.logo)}" alt="">` : '';
     return `<li class="departure agency-${escapeHtml(agencyKey)}">
       <div class="agency-logo">${logo}<span class="visually-hidden">${escapeHtml(agency.name)}</span></div>
       <div class="route">${escapeHtml(row.route_label)}</div>
       <div class="destination">${escapeHtml(String(row.destination || 'Destination unavailable').toUpperCase())}</div>
-      <div class="departure-time" data-departure-time="${Number(row.expected_departure_time)}">${departureLabel(row.expected_departure_time)}</div>
+      <div class="departure-time" data-departure-time="${displayedDeparture}">${departureLabel(displayedDeparture)}</div>
       <div class="platform"><span>${escapeHtml(bay.label)}</span><strong>${escapeHtml(bay.number)}</strong></div>
     </li>`;
   }).join('');

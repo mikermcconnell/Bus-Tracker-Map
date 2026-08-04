@@ -39,10 +39,14 @@ function routeDetails(agencyKey, metadata, trip, stopId) {
   }
   if (agencyKey === 'ontario_northland') {
     const route = metadata.routes && metadata.routes[sourceRoute] || {};
-    return { route_id: sourceRoute, route_label: route.short_name || sourceRoute, mode: 'coach', destination: cleanHeadsign(trip.headsign, 'ontario-northland') || route.long_name || 'Ontario Northland' };
+    return { route_id: sourceRoute, route_label: sourceRoute, mode: 'coach', destination: cleanHeadsign(trip.headsign, 'ontario-northland') || route.long_name || 'Ontario Northland' };
   }
   if (agencyKey === 'simcoe_linx') {
-    return { route_id: sourceRoute, route_label: '2', mode: 'bus', destination: cleanHeadsign(trip.headsign, 'simcoe-linx') || 'Wasaga Beach' };
+    const sourceDestination = cleanHeadsign(trip.headsign, 'simcoe-linx');
+    const destination = /Wasaga.*45(?:th)?\s+Street/i.test(sourceDestination)
+      ? 'Wasaga Beach 45th St'
+      : sourceDestination || 'Wasaga Beach';
+    return { route_id: sourceRoute, route_label: '2', mode: 'bus', destination };
   }
   const train = stopId === 'AD' || /(?:^|-)BR(?:$|-)/i.test(sourceRoute);
   return { route_id: sourceRoute, route_label: train ? 'TRAIN' : '68', mode: train ? 'train' : 'bus', destination: cleanHeadsign(trip.headsign, 'go-transit') || (train ? 'Toronto / Union Station' : 'Aurora / East Gwillimbury') };
@@ -200,6 +204,29 @@ function unavailableSource(reason) {
   return { display_mode: 'scheduled', realtime_status: 'offline', status_reason: reason, latest_data_timestamp: null };
 }
 
+function selectScheduledDepartures(departures, nowMs, limit, horizonHours = HORIZON_HOURS) {
+  const start = nowMs / 1000;
+  const end = nowMs / 1000 + horizonHours * 3600;
+  const seenServices = new Set();
+  return departures
+    .filter((row) => row.scheduled_departure_time >= start && row.scheduled_departure_time <= end)
+    .sort((a, b) => (
+      a.scheduled_departure_time - b.scheduled_departure_time ||
+      Number(a.platform) - Number(b.platform) ||
+      String(a.route_label || '').localeCompare(String(b.route_label || '')) ||
+      a.id.localeCompare(b.id)
+    ))
+    .filter((row) => {
+      const serviceKey = [row.agency_id, row.route_label, row.destination, row.platform]
+        .map((value) => String(value || '').trim().toUpperCase())
+        .join('|');
+      if (seenServices.has(serviceKey)) return false;
+      seenServices.add(serviceKey);
+      return true;
+    })
+    .slice(0, limit);
+}
+
 function createDeparturesService(options = {}) {
   const metadata = options.metadata || {};
   const delayedAfterMs = options.delayedAfterMs || 120000;
@@ -243,13 +270,9 @@ function createDeparturesService(options = {}) {
         sources[key] = merged.source;
       }
     });
-    const end = nowMs / 1000 + HORIZON_HOURS * 3600;
-    const departures = combined
-      .filter((row) => row.expected_departure_time >= nowMs / 1000 - GRACE_SECONDS && row.expected_departure_time <= end)
-      .sort((a, b) => a.expected_departure_time - b.expected_departure_time || a.id.localeCompare(b.id))
-      .slice(0, limit);
+    const departures = selectScheduledDepartures(combined, nowMs, limit);
     return { generated_at: nowMs, time_zone: TIME_ZONE, horizon_hours: HORIZON_HOURS, departures, sources };
   };
 }
 
-module.exports = { collectScheduledDepartures, createDeparturesService, freshness, mergeTripUpdates, parseGoNextService, readGoTime };
+module.exports = { collectScheduledDepartures, createDeparturesService, freshness, mergeTripUpdates, parseGoNextService, readGoTime, selectScheduledDepartures };

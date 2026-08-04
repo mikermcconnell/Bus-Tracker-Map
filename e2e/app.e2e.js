@@ -144,6 +144,7 @@ test('departures board matches the ten-row Allandale TV layout without scrolling
           destination: index % 4 === 0 ? 'Toronto / Union Station' : 'Yonge Southbound',
           platform: index % 4 === 0 ? '1' : '3',
           platform_type: 'platform',
+          scheduled_departure_time: nowSeconds + (index + 1) * 300,
           expected_departure_time: nowSeconds + (index + 1) * 300,
           departure_source: index % 2 ? 'scheduled' : 'realtime',
         })),

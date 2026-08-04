@@ -7,6 +7,7 @@ const {
   mergeTripUpdates,
   parseGoNextService,
   readGoTime,
+  selectScheduledDepartures,
 } = departuresModule;
 
 function metadata() {
@@ -67,6 +68,37 @@ describe('departure aggregation', () => {
     const now = Date.parse('2026-08-04T16:00:00Z');
     expect(freshness(now / 1000 - 300, now, 120000, 900000).realtime_status).toBe('delayed');
     expect(freshness(null, now, 120000, 900000)).toMatchObject({ realtime_status: 'offline', status_reason: 'missing_timestamp' });
+  });
+
+  test('selects and orders visible rows by published departure time, not realtime delay', () => {
+    const now = Date.parse('2026-08-04T16:00:00Z');
+    const start = now / 1000;
+    const rows = selectScheduledDepartures([
+      { id: 'expired', agency_id: 'barrie-transit', route_label: '7A', destination: 'Grove', platform: '6', scheduled_departure_time: start - 1, expected_departure_time: start + 300 },
+      { id: 'first', agency_id: 'barrie-transit', route_label: '12B', destination: 'Barrie South GO', platform: '14', scheduled_departure_time: start + 300, expected_departure_time: start + 900 },
+      { id: 'duplicate', agency_id: 'barrie-transit', route_label: '12B', destination: 'Barrie South GO', platform: '14', scheduled_departure_time: start + 400, expected_departure_time: start + 400 },
+      { id: 'second', agency_id: 'ontario-northland', route_label: '101', destination: 'North Bay', platform: '8', scheduled_departure_time: start + 600, expected_departure_time: start + 600 },
+      { id: 'same-time-later-platform', agency_id: 'barrie-transit', route_label: '8B', destination: 'Crosstown', platform: '12', scheduled_departure_time: start + 600, expected_departure_time: start + 600 },
+    ], now, 10);
+    expect(rows.map((row) => row.id)).toEqual(['first', 'second', 'same-time-later-platform']);
+  });
+
+  test('uses public-facing Ontario Northland route numbers and target LINX wording', () => {
+    const now = Date.parse('2026-08-04T16:00:00Z');
+    const common = metadata().service_calendars;
+    const northland = collectScheduledDepartures({
+      service_calendars: common,
+      service_exceptions: {},
+      routes: { 101: { short_name: 'ONTC', long_name: 'Toronto - North Bay' } },
+      trips: { north: { route_id: '101', service_id: 'weekday', headsign: 'NORTH BAY', terminal_stops: [{ stop_id: '315', departure_time: '12:10:00', is_departure: true }] } },
+    }, 'ontario_northland', now);
+    const linx = collectScheduledDepartures({
+      service_calendars: common,
+      service_exceptions: {},
+      trips: { beach: { route_id: '2', service_id: 'weekday', headsign: 'Wasaga Beach, 25 45th Street S', terminal_stops: [{ stop_id: 'SCSTOP210', departure_time: '12:10:00', is_departure: true }] } },
+    }, 'simcoe_linx', now);
+    expect(northland[0]).toMatchObject({ route_label: '101', destination: 'NORTH BAY' });
+    expect(linx[0]).toMatchObject({ route_label: '2', destination: 'Wasaga Beach 45th St' });
   });
 
   test('parses GO NextService timestamps and platform data', () => {
