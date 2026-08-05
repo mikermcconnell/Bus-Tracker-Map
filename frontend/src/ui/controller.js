@@ -187,9 +187,12 @@ export function createUiController() {
     parts.routeCode.textContent = String(entry.routeCode || entry.routeLabel || 'Bus');
     parts.route.style.setProperty('--route-color', String(entry.color || '#004e80'));
     parts.route.style.setProperty('--route-text-color', String(entry.textColor || '#ffffff'));
-    parts.agencyLogo.src = String(entry.agencyLogoSrc || '');
+    const agencyLogoSrc = String(entry.agencyLogoSrc || '');
+    parts.agencyLogo.src = agencyLogoSrc;
     parts.agencyLogo.alt = String(entry.agencyLogoAlt || entry.agencyLabel || 'Transit agency');
-    parts.agencyBrand.hidden = !entry.agencyLogoSrc;
+    parts.agencyLogo.hidden = !agencyLogoSrc;
+    parts.agencyBrand.hidden = !agencyLogoSrc;
+    parts.agencyBrand.setAttribute('aria-label', String(entry.agencyLabel || 'Transit agency'));
     const destination = entry.destination
       ? String(entry.destination)
       : String(entry.agencyLabel || 'Live bus');

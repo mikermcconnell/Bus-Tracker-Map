@@ -114,6 +114,9 @@ test('build-geojson emits routes and stops artefacts', async () => {
     expect(routes.features.length).toBeGreaterThan(0);
     const firstRoute = routes.features[0];
     expect(firstRoute.properties.route_short_name).toBe('1');
+    expect(firstRoute.properties.direction_id).toBe('0');
+    expect(firstRoute.properties.trip_headsign).toBe('Downtown');
+    expect(firstRoute.properties.trip_count).toBe(2);
 
     const stops = JSON.parse(fs.readFileSync(stopsPath, 'utf8'));
     expect(stops.features[0].properties.stop_name).toBe('Terminal');
@@ -143,6 +146,7 @@ test('build-geojson emits routes and stops artefacts', async () => {
     ]);
     expect(metadata.trips['trip-1'].service_id).toBe('weekday');
     expect(metadata.trips['trip-1'].direction_id).toBe('0');
+    expect(metadata.trips['trip-1'].shape_id).toBe('shape-1');
     expect(metadata.terminal_approach_fallbacks['1|0|1002']).toEqual({
       route_id: '1',
       direction_id: '0',

@@ -867,26 +867,41 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 24px;
-  border-radius: 999px;
+  min-height: 32px;
+  padding: 4px 8px 4px 7px;
+  box-sizing: border-box;
+  border: 1px solid rgba(15, 23, 42, 0.38);
+  border-left: 6px solid var(--route-color, #1a73e8);
+  border-radius: 5px;
   font-family: var(--font-display);
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: var(--route-text-color, #1f1f1f);
-  background: var(--route-label-bg, rgba(255, 255, 255, 0.96));
-  border: 3px solid var(--route-color, rgba(0, 78, 128, 0.7));
-  box-shadow: var(--shadow-soft);
-  transform: translate(-50%, -50%) rotate(var(--route-bearing, 0deg));
+  color: #111827;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 6px rgba(9, 30, 66, 0.24);
+  transform: translate(-50%, -50%);
   transform-origin: center center;
   text-transform: uppercase;
   white-space: nowrap;
   pointer-events: none;
 }
 
-.route-label span {
-  display: inline-block;
-  transform: rotate(var(--route-bearing-inverse, 0deg));
+.route-label__prefix {
+  display: block;
+  margin-right: 6px;
+  padding-right: 6px;
+  border-right: 1px solid rgba(15, 23, 42, 0.18);
+  color: #526172;
+  font-size: clamp(7px, 0.5vw, 9px);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  line-height: 1;
+}
+
+.route-label__code {
+  display: block;
+  font-size: clamp(15px, 1.05vw, 19px);
+  font-weight: 900;
+  letter-spacing: 0.015em;
+  line-height: 1;
 }
 
 /* ── Mini-map (BATT terminal inset) ─────────────────────────── */
@@ -1834,6 +1849,63 @@ body {
   text-align: center;
 }
 
+.route-map-key {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 7px 11px;
+  border-top: 1px solid rgba(0, 78, 128, 0.16);
+  background: #f4f8fa;
+  color: var(--text-secondary);
+  font-size: clamp(9px, 0.7vw, 11px);
+  font-weight: 800;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.route-map-key__title {
+  color: var(--transit-blue);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.route-map-key__item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.route-map-key__line {
+  width: 24px;
+  height: 5px;
+  border: 1px solid #ffffff;
+  border-radius: 999px;
+  background: #f58220;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.28);
+}
+
+.route-map-key__vehicle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 25px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #000000;
+  color: #ffffff;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.28);
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 900;
+}
+
 .tracked-agency {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
@@ -2127,14 +2199,26 @@ body {
   object-fit: contain;
 }
 
+.nearby-bus__agency-logo[hidden] {
+  display: none;
+}
+
 .nearby-bus[data-agency-id="go-transit"] .nearby-bus__agency-logo {
   max-width: 42px;
   max-height: 26px;
 }
 
+.nearby-bus[data-agency-id="ontario-northland"] .nearby-bus__agency-brand {
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
 .nearby-bus[data-agency-id="ontario-northland"] .nearby-bus__agency-logo {
-  max-width: 58px;
-  max-height: 20px;
+  width: auto;
+  max-width: none;
+  height: 32px;
+  max-height: none;
+  flex: 0 0 auto;
 }
 
 .nearby-bus[data-agency-id="go-transit"] .nearby-bus__route {
@@ -2267,17 +2351,6 @@ body {
   text-align: center;
 }
 
-.nearby-buses__footer {
-  padding: 9px 16px 11px;
-  border-top: 1px solid rgba(0, 78, 128, 0.12);
-  color: var(--text-secondary);
-  background: rgba(241, 245, 249, 0.85);
-  font-size: clamp(10px, 0.75vw, 12px);
-  font-weight: 600;
-  line-height: 1.2;
-  text-align: center;
-}
-
 .vehicle-bubble {
   --bubble-shadow:
     0 0 0 3px rgba(15, 23, 42, 0.2),
@@ -2376,7 +2449,6 @@ body {
 
 @media (max-width: 760px), (max-height: 560px) {
   .tracked-services,
-  .nearby-buses__footer,
   .nearby-bus__agency,
   .nearby-bus__proximity,
   .nearby-bus__agency-brand {

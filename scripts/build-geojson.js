@@ -158,6 +158,7 @@ function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
     );
 
     const shapeToRouteCounts = new Map();
+    const shapeTripMetadata = new Map();
     let tripsRows = [];
     if (tripsTxt) {
       tripsRows = parse(tripsTxt, { columns: true, skip_empty_lines: true });
@@ -168,8 +169,33 @@ function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
         if (!shapeToRouteCounts.has(shapeId)) shapeToRouteCounts.set(shapeId, {});
         const counts = shapeToRouteCounts.get(shapeId);
         counts[routeId] = (counts[routeId] || 0) + 1;
+
+        if (!shapeTripMetadata.has(shapeId)) {
+          shapeTripMetadata.set(shapeId, {});
+        }
+        const shapeStats = shapeTripMetadata.get(shapeId);
+        if (!shapeStats[routeId]) {
+          shapeStats[routeId] = {
+            tripCount: 0,
+            directions: {},
+            headsigns: {},
+          };
+        }
+        const stats = shapeStats[routeId];
+        stats.tripCount += 1;
+        const directionId = String(trip.direction_id || '').trim();
+        const headsign = String(trip.trip_headsign || '').trim();
+        if (directionId) stats.directions[directionId] = (stats.directions[directionId] || 0) + 1;
+        if (headsign) stats.headsigns[headsign] = (stats.headsigns[headsign] || 0) + 1;
       });
     }
+
+    const mostFrequentValue = (counts) => {
+      const entries = Object.entries(counts || {});
+      if (!entries.length) return null;
+      entries.sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]));
+      return entries[0][0];
+    };
 
     const routeInfoById = new Map();
     if (routesTxt) {
@@ -194,12 +220,16 @@ function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
         .sort((a, b) => counts[b] - counts[a])[0];
       if (!routeId) return null;
       const info = routeInfoById.get(routeId) || {};
+      const tripStats = shapeTripMetadata.get(shapeId) && shapeTripMetadata.get(shapeId)[routeId] || {};
       return {
         route_id: routeId,
         route_short_name: info.shortName,
         route_long_name: info.longName,
         route_color: info.color,
         route_text_color: info.textColor,
+        direction_id: mostFrequentValue(tripStats.directions),
+        trip_headsign: mostFrequentValue(tripStats.headsigns),
+        trip_count: Number(tripStats.tripCount) || 0,
       };
     };
 
@@ -234,6 +264,9 @@ function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
           route_long_name: meta.route_long_name || null,
           route_color: meta.route_color || null,
           route_text_color: meta.route_text_color || null,
+          direction_id: meta.direction_id || null,
+          trip_headsign: meta.trip_headsign || null,
+          trip_count: meta.trip_count || 0,
         };
         shapeFeatures.push({
           type: 'Feature',
@@ -328,6 +361,7 @@ function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
           ? String(trip.direction_id)
           : null,
         service_id: String(trip.service_id || ''),
+        shape_id: String(trip.shape_id || '') || null,
         headsign: trip.trip_headsign || null,
         terminal_stops: tripTerminalStops.sort((a, b) => a.stop_sequence - b.stop_sequence),
       };
