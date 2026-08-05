@@ -369,7 +369,7 @@ function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
 
     const terminalApproachFallbacks = buildTerminalApproachFallbacks(
       tripsRows,
-      stopTimesRows,
+      stopTimeRows,
       terminalStopIds
     );
 
