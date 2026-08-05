@@ -25,9 +25,9 @@ test('main map loads its locally bundled Leaflet runtime', async ({ page }) => {
   });
   await page.goto('/');
 
-  await expect(page).toHaveTitle(/Find Your Bus/);
+  await expect(page).toHaveTitle('FIND YOUR BUS - LIVE MAP');
   await expect(page.locator('#map')).toHaveClass(/leaflet-container/);
-  await expect(page.locator('.map-title__main')).toHaveText('Find Your Bus');
+  await expect(page.locator('.map-title__main')).toHaveText('FIND YOUR BUS - LIVE MAP');
   await expect(page.locator('.service-notice__heading')).toHaveText('Upcoming Holiday Service -');
   await expect(page.locator('.service-notice__text')).toContainText(
     'Civic Holiday Service: Sunday Schedules on Monday, August 3.'

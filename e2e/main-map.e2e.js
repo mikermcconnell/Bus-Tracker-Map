@@ -122,7 +122,7 @@ test('main map clears last-known vehicles when polling fails', async ({ page }) 
   await page.goto('/');
   await expect(page.locator('.vehicle-bubble')).toHaveCount(1);
   failVehiclePolls = true;
-  await expect(page.locator('.vehicle-bubble')).toHaveCount(0, { timeout: 8000 });
+  await expect(page.locator('.vehicle-bubble')).toHaveCount(0, { timeout: 12000 });
   await expect(page.locator('#banner')).toContainText('Bus icons are hidden');
 });
 

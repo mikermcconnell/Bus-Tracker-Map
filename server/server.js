@@ -251,6 +251,7 @@ function sendCachedJson(res, filePath, maxAgeSeconds) {
   res.sendFile(filePath, (err) => {
     if (err) {
       console.error('Failed to send cached JSON:', filePath, err.message);
+      if (res.headersSent || res.destroyed) return;
       res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
