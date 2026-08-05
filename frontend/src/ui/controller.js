@@ -107,6 +107,13 @@ export function createUiController() {
     const routeCode = document.createElement('span');
     routeCode.className = 'nearby-bus__route-code';
 
+    const agencyBrand = document.createElement('span');
+    agencyBrand.className = 'nearby-bus__agency-brand';
+
+    const agencyLogo = document.createElement('img');
+    agencyLogo.className = 'nearby-bus__agency-logo';
+    agencyBrand.appendChild(agencyLogo);
+
     const details = document.createElement('span');
     details.className = 'nearby-bus__details';
 
@@ -116,32 +123,50 @@ export function createUiController() {
     const agency = document.createElement('span');
     agency.className = 'nearby-bus__agency';
 
-    const distance = document.createElement('strong');
-    distance.className = 'nearby-bus__distance';
+    const proximity = document.createElement('span');
+    proximity.className = 'nearby-bus__proximity';
 
-    const distanceMain = document.createElement('span');
-    distanceMain.className = 'nearby-bus__distance-main';
+    const wayfinding = document.createElement('strong');
+    wayfinding.className = 'nearby-bus__wayfinding';
+
+    const platform = document.createElement('span');
+    platform.className = 'nearby-bus__platform';
+
+    const platformType = document.createElement('small');
+    platformType.className = 'nearby-bus__platform-type';
+
+    const platformNumber = document.createElement('span');
+    platformNumber.className = 'nearby-bus__platform-number';
 
     const departure = document.createElement('small');
     departure.className = 'nearby-bus__departure';
 
     details.appendChild(title);
     details.appendChild(agency);
-    distance.appendChild(distanceMain);
-    distance.appendChild(departure);
+    details.appendChild(proximity);
+    platform.appendChild(platformType);
+    platform.appendChild(platformNumber);
+    wayfinding.appendChild(platform);
+    wayfinding.appendChild(departure);
     route.appendChild(routeAgency);
     route.appendChild(routeCode);
+    item.appendChild(agencyBrand);
     item.appendChild(route);
     item.appendChild(details);
-    item.appendChild(distance);
+    item.appendChild(wayfinding);
     item.__nearbyParts = {
       route,
       routeAgency,
       routeCode,
+      agencyBrand,
+      agencyLogo,
       title,
       agency,
-      distance,
-      distanceMain,
+      proximity,
+      wayfinding,
+      platform,
+      platformType,
+      platformNumber,
       departure,
     };
     return item;
@@ -162,6 +187,12 @@ export function createUiController() {
     parts.routeCode.textContent = String(entry.routeCode || entry.routeLabel || 'Bus');
     parts.route.style.setProperty('--route-color', String(entry.color || '#004e80'));
     parts.route.style.setProperty('--route-text-color', String(entry.textColor || '#ffffff'));
+    const agencyLogoSrc = String(entry.agencyLogoSrc || '');
+    parts.agencyLogo.src = agencyLogoSrc;
+    parts.agencyLogo.alt = String(entry.agencyLogoAlt || entry.agencyLabel || 'Transit agency');
+    parts.agencyLogo.hidden = !agencyLogoSrc;
+    parts.agencyBrand.hidden = !agencyLogoSrc;
+    parts.agencyBrand.setAttribute('aria-label', String(entry.agencyLabel || 'Transit agency'));
     const destination = entry.destination
       ? String(entry.destination)
       : String(entry.agencyLabel || 'Live bus');
@@ -170,9 +201,22 @@ export function createUiController() {
     parts.agency.textContent = entry.directionLabel
       ? `${String(entry.directionLabel)} · ${serviceLabel}`
       : serviceLabel;
-    parts.distanceMain.textContent = String(entry.distanceLabel || '');
+    parts.proximity.textContent = String(entry.distanceLabel || '');
+    const platformLabel = String(entry.platformLabel || 'CHECK BOARD');
+    const platformMatch = platformLabel.match(/^(PLATFORM|STOP)\s+(.+)$/i);
+    parts.platform.dataset.kind = platformMatch ? 'assigned' : 'check';
+    parts.platformType.textContent = platformMatch ? platformMatch[1] : 'CHECK';
+    parts.platformNumber.textContent = platformMatch ? platformMatch[2] : 'BOARD';
+    parts.platform.setAttribute('aria-label', platformLabel);
     parts.departure.textContent = String(entry.departureLabel || '');
     parts.departure.hidden = !entry.departureLabel;
+    item.setAttribute('aria-label', [
+      String(entry.routeLabel || entry.routeCode || 'Bus'),
+      destination,
+      String(entry.platformLabel || 'Check terminal board'),
+      String(entry.distanceLabel || ''),
+      String(entry.departureLabel || '')
+    ].filter(Boolean).join(', '));
   }
 
   function renderNearbyVehicles(rows) {

@@ -867,26 +867,41 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 24px;
-  border-radius: 999px;
+  min-height: 32px;
+  padding: 4px 8px 4px 7px;
+  box-sizing: border-box;
+  border: 1px solid rgba(15, 23, 42, 0.38);
+  border-left: 6px solid var(--route-color, #1a73e8);
+  border-radius: 5px;
   font-family: var(--font-display);
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: var(--route-text-color, #1f1f1f);
-  background: var(--route-label-bg, rgba(255, 255, 255, 0.96));
-  border: 3px solid var(--route-color, rgba(0, 78, 128, 0.7));
-  box-shadow: var(--shadow-soft);
-  transform: translate(-50%, -50%) rotate(var(--route-bearing, 0deg));
+  color: #111827;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 2px 6px rgba(9, 30, 66, 0.24);
+  transform: translate(-50%, -50%);
   transform-origin: center center;
   text-transform: uppercase;
   white-space: nowrap;
   pointer-events: none;
 }
 
-.route-label span {
-  display: inline-block;
-  transform: rotate(var(--route-bearing-inverse, 0deg));
+.route-label__prefix {
+  display: block;
+  margin-right: 6px;
+  padding-right: 6px;
+  border-right: 1px solid rgba(15, 23, 42, 0.18);
+  color: #526172;
+  font-size: clamp(7px, 0.5vw, 9px);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  line-height: 1;
+}
+
+.route-label__code {
+  display: block;
+  font-size: clamp(15px, 1.05vw, 19px);
+  font-weight: 900;
+  letter-spacing: 0.015em;
+  line-height: 1;
 }
 
 /* ── Mini-map (BATT terminal inset) ─────────────────────────── */
@@ -1776,7 +1791,7 @@ body {
 .map-overlay-column--right {
   top: clamp(86px, 10vh, 104px);
   right: clamp(14px, 1.4vw, 28px);
-  width: min(25vw, 420px);
+  width: min(43vw, 550px);
   margin-left: 0;
   overflow: visible;
 }
@@ -1832,6 +1847,63 @@ body {
   font-size: 14px;
   font-weight: 700;
   text-align: center;
+}
+
+.route-map-key {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 7px 11px;
+  border-top: 1px solid rgba(0, 78, 128, 0.16);
+  background: #f4f8fa;
+  color: var(--text-secondary);
+  font-size: clamp(9px, 0.7vw, 11px);
+  font-weight: 800;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.route-map-key__title {
+  color: var(--transit-blue);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.route-map-key__item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.route-map-key__line {
+  width: 24px;
+  height: 5px;
+  border: 1px solid #ffffff;
+  border-radius: 999px;
+  background: #f58220;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.28);
+}
+
+.route-map-key__vehicle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 25px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #000000;
+  color: #ffffff;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.28);
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 900;
 }
 
 .tracked-agency {
@@ -2046,9 +2118,9 @@ body {
 
 .nearby-bus {
   display: grid;
-  grid-template-columns: 60px minmax(0, 1fr) auto;
+  grid-template-columns: 62px 60px minmax(0, 1fr) 128px;
   align-items: center;
-  gap: 12px;
+  gap: 9px;
   min-height: 74px;
   padding: 10px 16px;
   border-bottom: 1px solid rgba(0, 78, 128, 0.13);
@@ -2102,6 +2174,53 @@ body {
   line-height: 0.95;
 }
 
+.nearby-bus__agency-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  min-height: 42px;
+  padding: 4px;
+  border: 1px solid rgba(0, 78, 128, 0.12);
+  border-radius: 9px;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.nearby-bus__agency-brand[hidden] {
+  display: none;
+}
+
+.nearby-bus__agency-logo {
+  display: block;
+  width: 100%;
+  max-width: 54px;
+  max-height: 30px;
+  object-fit: contain;
+}
+
+.nearby-bus__agency-logo[hidden] {
+  display: none;
+}
+
+.nearby-bus[data-agency-id="go-transit"] .nearby-bus__agency-logo {
+  max-width: 42px;
+  max-height: 26px;
+}
+
+.nearby-bus[data-agency-id="ontario-northland"] .nearby-bus__agency-brand {
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.nearby-bus[data-agency-id="ontario-northland"] .nearby-bus__agency-logo {
+  width: auto;
+  max-width: none;
+  height: 32px;
+  max-height: none;
+  flex: 0 0 auto;
+}
+
 .nearby-bus[data-agency-id="go-transit"] .nearby-bus__route {
   color: #ffffff;
   background: #007a33;
@@ -2127,7 +2246,7 @@ body {
   overflow: hidden;
   color: var(--text-primary);
   font-family: var(--font-display);
-  font-size: clamp(20px, 1.55vw, 25px);
+  font-size: clamp(17px, 1.35vw, 23px);
   font-weight: 700;
   letter-spacing: 0.015em;
   line-height: 1.05;
@@ -2145,31 +2264,61 @@ body {
   white-space: nowrap;
 }
 
-.nearby-bus__distance {
+.nearby-bus__proximity {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: clamp(16px, 1.25vw, 19px);
+  font-weight: 800;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nearby-bus__wayfinding {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 3px;
-  max-width: 92px;
+  width: 128px;
   color: var(--transit-blue);
   font-family: var(--font-display);
-  font-size: clamp(18px, 1.4vw, 23px);
+  font-size: clamp(16px, 1.22vw, 20px);
   font-weight: 800;
-  line-height: 1;
+  line-height: 0.95;
   text-align: right;
   text-transform: uppercase;
 }
 
-.nearby-bus__distance-main {
-  display: block;
+.nearby-bus__platform {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.nearby-bus__platform-type {
+  font-family: var(--font-body);
+  font-size: clamp(9px, 0.68vw, 11px);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+.nearby-bus__platform-number {
+  font-size: clamp(23px, 1.8vw, 29px);
+  line-height: 0.9;
+}
+
+.nearby-bus__platform[data-kind="check"] .nearby-bus__platform-number {
+  font-size: clamp(13px, 1vw, 16px);
+  line-height: 1;
 }
 
 .nearby-bus__departure {
   display: block;
   color: #007a33;
   font-family: var(--font-body);
-  font-size: clamp(10px, 0.72vw, 12px);
-  font-weight: 800;
+  font-size: clamp(16px, 1.25vw, 19px);
+  font-weight: 900;
   line-height: 1.05;
   text-align: right;
   text-transform: none;
@@ -2180,12 +2329,16 @@ body {
   display: none;
 }
 
-.nearby-bus--terminal .nearby-bus__distance {
-  width: 116px;
-  max-width: 116px;
+.nearby-bus--terminal .nearby-bus__proximity {
+  color: #007a33;
+}
+
+.nearby-bus:not(.nearby-bus--terminal) .nearby-bus__departure {
+  color: var(--text-primary);
+}
+
+.nearby-bus--terminal .nearby-bus__wayfinding {
   color: #006b7f;
-  font-size: clamp(16px, 1.2vw, 20px);
-  line-height: 0.95;
 }
 
 .nearby-buses__holding {
@@ -2194,17 +2347,6 @@ body {
   font-family: var(--font-display);
   font-size: clamp(20px, 1.55vw, 25px);
   font-weight: 700;
-  line-height: 1.2;
-  text-align: center;
-}
-
-.nearby-buses__footer {
-  padding: 9px 16px 11px;
-  border-top: 1px solid rgba(0, 78, 128, 0.12);
-  color: var(--text-secondary);
-  background: rgba(241, 245, 249, 0.85);
-  font-size: clamp(10px, 0.75vw, 12px);
-  font-weight: 600;
   line-height: 1.2;
   text-align: center;
 }
@@ -2297,7 +2439,7 @@ body {
   }
 
   .map-overlay-column--right {
-    width: min(34vw, 380px);
+    width: min(46vw, 510px);
   }
 
   .map-overlay-column--left {
@@ -2307,8 +2449,9 @@ body {
 
 @media (max-width: 760px), (max-height: 560px) {
   .tracked-services,
-  .nearby-buses__footer,
-  .nearby-bus__agency {
+  .nearby-bus__agency,
+  .nearby-bus__proximity,
+  .nearby-bus__agency-brand {
     display: none;
   }
 
@@ -2334,14 +2477,16 @@ body {
     border-width: 3px;
   }
 
-  .nearby-bus__distance {
+  .nearby-bus__wayfinding {
     grid-column: 2;
-    max-width: none;
+    flex-direction: row;
+    align-items: baseline;
+    width: auto;
+    gap: 8px;
     text-align: left;
   }
 
-  .nearby-bus--terminal .nearby-bus__distance {
-    width: auto;
-    max-width: none;
+  .nearby-bus__departure {
+    text-align: left;
   }
 }

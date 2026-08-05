@@ -1,26 +1,44 @@
 import { clusterVehicles, DEFAULT_CLUSTER_THRESHOLD_METERS, distanceBetweenMeters } from './vehicle-groups.js';
 import {
+  formatTerminalArrival,
   formatTerminalDeparture,
   formatTerminalDistance,
   getRouteEightDirectionLabel,
   getTerminalListStatus,
   selectNearestVehicles
 } from './nearby-vehicles.js';
-import { buildTrackedAgencySummaries } from './tracked-services.js';
+import { buildTrackedAgencySummaries, getAgencyBranding } from './tracked-services.js';
+import {
+  buildTerminalAssignmentIndex,
+  formatPlatformLabel,
+  resolveTerminalAssignment
+} from './terminal-platforms.js';
 import feedFreshness from '../../../shared/feed-freshness.js';
 
 const { assessVehicleFeedFreshness, selectVehiclesForDisplay } = feedFreshness;
 
 export function createMapController({ dataClient, ui }) {
-  var map, routesGroup, vehicleLayer, highlightLayer, majorRoadLineLayer, majorRoadLabelLayer;
+  var map, routesGroup, vehicleLayer, highlightLayer;
+  // Retained only for the dormant legacy helper functions below. The custom
+  // road overlay is intentionally never initialized now that Mapbox owns roads.
+  var majorRoadLineLayer = null;
+  var majorRoadLabelLayer = null;
   var pollMs = 5000;
   var feedDelayedAfterMs = 2 * 60 * 1000;
   var feedOfflineAfterMs = 15 * 60 * 1000;
-  var tileUrl;
+  var tileLayer;
+  var miniBasemapLayer;
+  var basemapTileErrors = 0;
+  var basemapFallbackActive = false;
+  var basemapConfig;
   var basePath = '/';
   var routeLayers = {};
   var routeMetadata = {};
   var routeKeyIndex = {};
+  var activeBoardRouteKeys = Object.create(null);
+  var activeBoardShapeKeys = Object.create(null);
+  var activeBoardFocusSignature = '';
+  var terminalAssignments = [];
   var markers = {}; // key -> marker metadata
   var vehicleClusterThreshold = DEFAULT_CLUSTER_THRESHOLD_METERS;
   var anonymousVehicleCounter = 0;
@@ -36,11 +54,11 @@ export function createMapController({ dataClient, ui }) {
     },
     '725': {
       label: 'Barrie South GO',
-      shortLabel: 'BSG'
+      shortLabel: 'South GO'
     },
     '330': {
       label: 'Georgian College',
-      shortLabel: 'GC',
+      shortLabel: 'Georgian',
       labelCoords: { lat: 44.4165781268583, lng: -79.6754198957161 },
       offsetPx: { x: 0, y: 0 }
     },
@@ -50,19 +68,19 @@ export function createMapController({ dataClient, ui }) {
     },
     '76': {
       label: 'Georgian Mall',
-      shortLabel: 'GM',
-      labelCoords: { lat: 44.4118745345584, lng: -79.7211518849986 },
+      shortLabel: 'Georgian Mall',
+      labelCoords: { lat: 44.4105, lng: -79.731 },
       offsetPx: { x: 0, y: 0 }
     },
     '777': {
       label: 'Park Place',
-      shortLabel: 'PP',
+      shortLabel: 'Park Place',
       labelCoords: { lat: 44.3403906345005, lng: -79.6928865258419 },
       offsetPx: { x: 0, y: 0 }
     },
     '488': {
       label: 'Peggy Hill Community Centre',
-      shortLabel: 'PHCC',
+      shortLabel: 'Peggy Hill',
       cssOffsets: { x: '-55%', y: '-20%' },
       labelCoords: { lat: 44.34436966587496, lng: -79.71668472 },
       offsetPx: { x: 0, y: 0 }
@@ -77,7 +95,7 @@ export function createMapController({ dataClient, ui }) {
     },
     '1': {
       label: 'Downtown Barrie',
-      shortLabel: 'DB',
+      shortLabel: 'Downtown',
       labelCoords: { lat: 44.387588, lng: -79.68660088028756 },
       offsetPx: { x: 0, y: 0 }
     }
@@ -92,14 +110,12 @@ export function createMapController({ dataClient, ui }) {
     '101': 22
   };
 
-  var hiddenRouteLabels = {
-    '7B': true
-  };
+  var hiddenRouteLabels = {};
 
   var routeLabelCountOverrides = {
     '100': 2,
     '11': 2,
-    '8': 3
+    '8': 2
   };
 
   var routeLabelTargetOverrides = {
@@ -176,7 +192,7 @@ export function createMapController({ dataClient, ui }) {
     }
     return map;
   })();
-  var ROUTE_OFFSET_SCALE = 0;
+  var ROUTE_OFFSET_SCALE = 1.5;
   var ROUTE_LABELS_ENABLED = false;
   var LABEL_CLUSTER_SPACING_METERS = 45;
   var LABEL_CLUSTER_KEY_SCALE = 10000;
@@ -192,11 +208,16 @@ export function createMapController({ dataClient, ui }) {
   // Terminal focus constants keep the inset map centered on Barrie Allandale Transit Terminal.
   var TERMINAL_COORDS = { lat: 44.3740170437343, lng: -79.6899831810679 };
   var TERMINAL_RADIUS_METERS = 150;
+  // Keep the default TV view focused on Allandale and the nearby south-end
+  // network, with additional room on the right for the terminal board.
+  var DEFAULT_MAP_CENTER = { lat: 44.3798, lng: -79.672 };
+  var DEFAULT_MAP_ZOOM = 13.5;
   // TV zoom ends up shrinking the effective viewport well below the panel's native size,
   // so loosen the breakpoint so the mini-map still renders on smaller CSS viewports.
   var MINI_MAP_MEDIA_QUERY = '(min-width: 500px) and (min-height: 360px)';
   var MINI_MAP_ZOOM = 16.5;
   var MINI_MAP_ICON_SCALE = 0.8;
+  var STANDALONE_MAP_ICON_SCALE = 0.75;
   var MINI_MAP_ANIMATION_RATIO = 0.85;
 
   var miniMapContainer = null;
@@ -216,7 +237,9 @@ export function createMapController({ dataClient, ui }) {
   var DEAD_RECKON_MAX_DURATION_FACTOR = 1.6;
   var ANIMATION_DURATION_FACTOR = 2.0;
   var SERVICE_STATUS_REFRESH_MS = 15 * 60 * 1000;
+  var TERMINAL_LAYOUT_REFRESH_MS = 5 * 60 * 1000;
   var serviceStatusRefreshTimer = null;
+  var terminalLayoutRefreshTimer = null;
 
   function updateDebugState(key, value) {
     if (typeof window === 'undefined') return;
@@ -242,7 +265,19 @@ export function createMapController({ dataClient, ui }) {
 
   function initialize() {
     var DEFAULT_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-    tileUrl = DEFAULT_TILE_URL;
+    var DEFAULT_ATTRIBUTION =
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
+    basemapConfig = {
+      provider: 'osm',
+      url: DEFAULT_TILE_URL,
+      tileSize: 256,
+      zoomOffset: 0,
+      maxZoom: 19,
+      opacity: 1,
+      attribution: DEFAULT_ATTRIBUTION,
+      fallbackUrl: DEFAULT_TILE_URL,
+      fallbackAttribution: DEFAULT_ATTRIBUTION
+    };
 
     ui.showBanner('routes', 'Loading map…');
     ui.showBanner('vehicles', 'Loading vehicles…');
@@ -262,8 +297,10 @@ export function createMapController({ dataClient, ui }) {
           if (Number.isFinite(Number(cfg.feed_offline_after_ms)) && Number(cfg.feed_offline_after_ms) > 0) {
             feedOfflineAfterMs = Number(cfg.feed_offline_after_ms);
           }
-          if (cfg.tiles) {
-            tileUrl = cfg.tiles;
+          if (cfg.basemap && typeof cfg.basemap === 'object' && cfg.basemap.url) {
+            basemapConfig = normalizeBasemapConfig(cfg.basemap, basemapConfig);
+          } else if (cfg.tiles) {
+            basemapConfig.url = cfg.tiles;
           }
           if (cfg.base_path) {
             basePath = cfg.base_path;
@@ -281,9 +318,9 @@ export function createMapController({ dataClient, ui }) {
         ui.setupLegend(createLegendContext());
         updateDebugState('legend', 'rendered');
         return Promise.all([
-          loadMajorRoads(),
           loadRoutes(),
-          loadStopHighlights()
+          loadStopHighlights(),
+          loadTerminalLayout()
         ]);
       })
       .catch(function (err) {
@@ -292,11 +329,30 @@ export function createMapController({ dataClient, ui }) {
         updateDebugState('legend', 'error: init failed');
       })
       .then(function () {
-        scheduleMajorRoadLabelDeclutter();
         loadServiceStatus();
         scheduleServiceStatusRefresh();
+        scheduleTerminalLayoutRefresh();
         startVehiclesPoll();
       });
+  }
+
+  function loadTerminalLayout() {
+    if (!dataClient || typeof dataClient.fetchTerminalLayout !== 'function') {
+      terminalAssignments = [];
+      return Promise.resolve();
+    }
+    return dataClient.fetchTerminalLayout()
+      .then(function (layout) {
+        terminalAssignments = buildTerminalAssignmentIndex(layout);
+      })
+      .catch(function (err) {
+        console.warn('Terminal platform assignments unavailable:', err && err.message ? err.message : err);
+      });
+  }
+
+  function scheduleTerminalLayoutRefresh() {
+    if (terminalLayoutRefreshTimer) clearInterval(terminalLayoutRefreshTimer);
+    terminalLayoutRefreshTimer = setInterval(loadTerminalLayout, TERMINAL_LAYOUT_REFRESH_MS);
   }
 
   function loadServiceStatus() {
@@ -331,17 +387,81 @@ export function createMapController({ dataClient, ui }) {
     return match ? decodeURIComponent(match[1]) : null;
   }
 
+  function normalizeBasemapConfig(raw, fallback) {
+    var source = raw && typeof raw === 'object' ? raw : {};
+    var defaults = fallback || {};
+    var tileSize = Number(source.tile_size);
+    var zoomOffset = Number(source.zoom_offset);
+    var maxZoom = Number(source.max_zoom);
+    var opacity = Number(source.opacity);
+    return {
+      provider: String(source.provider || defaults.provider || 'osm').toLowerCase(),
+      url: String(source.url || defaults.url || ''),
+      tileSize: Number.isFinite(tileSize) && tileSize > 0 ? tileSize : Number(defaults.tileSize) || 256,
+      zoomOffset: Number.isFinite(zoomOffset) ? zoomOffset : Number(defaults.zoomOffset) || 0,
+      maxZoom: Number.isFinite(maxZoom) && maxZoom > 0 ? maxZoom : Number(defaults.maxZoom) || 19,
+      opacity: Number.isFinite(opacity) && opacity >= 0 && opacity <= 1
+        ? opacity
+        : (Number.isFinite(Number(defaults.opacity)) ? Number(defaults.opacity) : 1),
+      attribution: String(source.attribution || defaults.attribution || ''),
+      fallbackUrl: String(source.fallback_url || defaults.fallbackUrl || ''),
+      fallbackAttribution: String(
+        source.fallback_attribution || defaults.fallbackAttribution || defaults.attribution || ''
+      )
+    };
+  }
+
+  function getTileLayerOptions(config, opacityOverride) {
+    return {
+      tileSize: config.tileSize,
+      zoomOffset: config.zoomOffset,
+      maxZoom: config.maxZoom,
+      attribution: config.attribution,
+      opacity: Number.isFinite(Number(opacityOverride)) ? Number(opacityOverride) : config.opacity,
+      detectRetina: false,
+      crossOrigin: true
+    };
+  }
+
+  function createBasemapLayer(config, opacityOverride) {
+    return L.tileLayer(config.url, getTileLayerOptions(config, opacityOverride));
+  }
+
+  function handleBasemapTileError() {
+    if (!basemapConfig || basemapConfig.provider !== 'mapbox' || basemapFallbackActive) return;
+    basemapTileErrors += 1;
+    if (basemapTileErrors < 3) return;
+    basemapFallbackActive = true;
+    setTimeout(activateBasemapFallback, 0);
+  }
+
+  function activateBasemapFallback() {
+    if (!map || !basemapConfig || !basemapConfig.fallbackUrl) return;
+    var fallback = {
+      provider: 'osm',
+      url: basemapConfig.fallbackUrl,
+      tileSize: 256,
+      zoomOffset: 0,
+      maxZoom: 19,
+      opacity: 1,
+      attribution: basemapConfig.fallbackAttribution,
+      fallbackUrl: basemapConfig.fallbackUrl,
+      fallbackAttribution: basemapConfig.fallbackAttribution
+    };
+    if (tileLayer) map.removeLayer(tileLayer);
+    tileLayer = createBasemapLayer(fallback).addTo(map);
+    if (miniMap && miniBasemapLayer) {
+      miniMap.removeLayer(miniBasemapLayer);
+      miniBasemapLayer = createBasemapLayer(fallback, 1).addTo(miniMap);
+    }
+    console.warn('Mapbox tiles unavailable; switched to the OpenStreetMap fallback.');
+    updateDebugState('basemap', 'osm-fallback');
+  }
+
   function setupMap() {
-    map = L.map('map', { zoomControl: true, zoomSnap: 0.5, zoomDelta: 0.5 }).setView([44.3894, -79.6903], 13);
+    map = L.map('map', { zoomControl: true, zoomSnap: 0.5, zoomDelta: 0.5 })
+      .setView([DEFAULT_MAP_CENTER.lat, DEFAULT_MAP_CENTER.lng], DEFAULT_MAP_ZOOM);
     map.zoomControl.setPosition('bottomright');
-
-    map.createPane('majorRoadPane');
-    map.getPane('majorRoadPane').style.zIndex = 410;
-    map.getPane('majorRoadPane').style.pointerEvents = 'none';
-
-    map.createPane('majorRoadLabelPane');
-    map.getPane('majorRoadLabelPane').style.zIndex = 434;
-    map.getPane('majorRoadLabelPane').style.pointerEvents = 'none';
 
     map.createPane('routeOutlinePane');
     map.getPane('routeOutlinePane').style.zIndex = 420;
@@ -366,20 +486,12 @@ export function createMapController({ dataClient, ui }) {
     map.getPane('stopHighlightPane').style.zIndex = 500;
     map.getPane('stopHighlightPane').style.pointerEvents = 'none';
 
-    L.tileLayer(tileUrl, {
-      maxZoom: 19,
-      attribution: ' OpenStreetMap contributors',
-      opacity: 0.34,
-      detectRetina: true
-    }).addTo(map);
-    majorRoadLineLayer = L.layerGroup().addTo(map);
-    majorRoadLabelLayer = L.layerGroup();
+    tileLayer = createBasemapLayer(basemapConfig).addTo(map);
+    tileLayer.on('tileerror', handleBasemapTileError);
+    updateDebugState('basemap', basemapConfig.provider);
     routesGroup = L.layerGroup().addTo(map);
     vehicleLayer = L.layerGroup().addTo(map);
     highlightLayer = L.layerGroup().addTo(map);
-    map.on('zoomend', updateMajorRoadLabelVisibility);
-    map.on('zoomend moveend', scheduleMajorRoadLabelDeclutter);
-    updateMajorRoadLabelVisibility();
     initializeMiniMapSupport();
   }
 
@@ -452,13 +564,8 @@ export function createMapController({ dataClient, ui }) {
       zoomDelta: 0.5
     }).setView([TERMINAL_COORDS.lat, TERMINAL_COORDS.lng], MINI_MAP_ZOOM);
 
-    L.tileLayer(tileUrl, {
-      maxZoom: 20,
-      attribution: ' OpenStreetMap contributors',
-      opacity: 1,
-      detectRetina: true,
-      interactive: false
-    }).addTo(miniMap);
+    miniBasemapLayer = createBasemapLayer(basemapConfig, 1)
+      .addTo(miniMap);
 
     miniVehicleLayer = L.layerGroup().addTo(miniMap);
     miniBorderLayer = L.layerGroup().addTo(miniMap);
@@ -483,6 +590,7 @@ export function createMapController({ dataClient, ui }) {
       miniMap.remove();
       miniMap = null;
     }
+    miniBasemapLayer = null;
   }
 
   function clearMiniMapMarkers() {
@@ -1689,7 +1797,8 @@ export function createMapController({ dataClient, ui }) {
           return {
             lat: lat,
             lng: lng,
-            bearing: computeBearingBetween(start.lat, start.lng, end.lat, end.lng)
+            bearing: computeBearingBetween(start.lat, start.lng, end.lat, end.lng),
+            lineIndex: i
           };
         }
         traversed += segmentLength;
@@ -1815,7 +1924,9 @@ export function createMapController({ dataClient, ui }) {
     for (var i = 0; i < candidates.length; i++) {
       var candidate = candidates[i];
       if (!candidate) continue;
-      var match = String(candidate).trim().match(/[0-9]+/);
+      var normalized = String(candidate).trim().toUpperCase();
+      if (/^[0-9]+[A-Z]?$/.test(normalized)) return normalized.match(/^[0-9]+/)[0];
+      var match = normalized.match(/[0-9]+/);
       if (match && match[0]) return match[0];
     }
     var fallback = meta.displayName || meta.id || '';
@@ -2010,24 +2121,11 @@ export function createMapController({ dataClient, ui }) {
     var rawColor = meta.color || '#1A73E8';
     var normalizedColor = normalizeHexColor(rawColor);
     var colorValue = normalizedColor || String(rawColor).trim() || '#1A73E8';
-    var labelBg = normalizedColor ? hexToRgba(normalizedColor, 0.18) : 'rgba(255, 255, 255, 0.92)';
-
-    var textSource = meta.textColor || (normalizedColor ? computeTextColor(normalizedColor) : '#202124');
-    var textValue = normalizeHexColor(textSource) || String(textSource).trim() || '#202124';
 
     var safeColor = String(colorValue).replace(/[^#0-9a-zA-Z(),.% -]/g, '');
-    var safeText = String(textValue).replace(/[^#0-9a-zA-Z(),.% -]/g, '');
-    var safeBg = String(labelBg).replace(/[^#0-9a-zA-Z(),.% -]/g, '');
 
     var adjustedPosition = applyRouteLabelOffset(meta, position, routeId) || position;
-    var bearing = Number.isFinite(adjustedPosition.bearing) ? adjustedPosition.bearing : 0;
-    var bearingValue = bearing.toFixed(1) + 'deg';
-    var inverseBearingValue = (-bearing).toFixed(1) + 'deg';
-
-    var safeBearing = String(bearingValue).replace(/[^0-9a-zA-Z.-]/g, '');
-    var safeInverseBearing = String(inverseBearingValue).replace(/[^0-9a-zA-Z.-]/g, '');
-
-    var html = '<div class="route-label" style="--route-color:' + safeColor + ';--route-text-color:' + safeText + ';--route-label-bg:' + safeBg + ';--route-bearing:' + safeBearing + ';--route-bearing-inverse:' + safeInverseBearing + '"><span>' + safeLabel + '</span></div>';
+    var html = '<div class="route-label" style="--route-color:' + safeColor + '"><span class="route-label__prefix">Route</span><span class="route-label__code">' + safeLabel + '</span></div>';
 
     return L.marker([adjustedPosition.lat, adjustedPosition.lng], {
       icon: L.divIcon({
@@ -2412,7 +2510,14 @@ export function createMapController({ dataClient, ui }) {
       var meta = getVehicleDisplayMeta(vehicle, baseMeta) || {};
       var routeLabel = vehicle.route_label || meta.displayName || vehicle.route_id || 'Bus';
       var agencyLabel = vehicle.agency_name || meta.agencyName || 'Barrie Transit';
+      var agencyId = vehicle.agency_id || meta.agencyId || 'barrie-transit';
+      var agencyBranding = getAgencyBranding(agencyId);
+      var assignment = resolveTerminalAssignment(vehicle, terminalAssignments);
       var destination = getNearbyDestination(vehicle, meta, routeLabel);
+      var assignmentDestination = String(assignment && assignment.destination || '').trim();
+      if (assignmentDestination && assignmentDestination.toLowerCase() !== agencyLabel.toLowerCase()) {
+        destination = assignmentDestination;
+      }
       var terminalStatus = getTerminalListStatus(
         vehicle,
         entry.distanceMeters,
@@ -2425,12 +2530,17 @@ export function createMapController({ dataClient, ui }) {
 
       return {
         id: vehicle.id || routeLabel,
+        routeId: resolved && resolved.id || vehicle.route_id || null,
+        shapeId: vehicle.shape_id || null,
         routeLabel: routeLabel,
         routeCode: meta.routeCode || routeLabel,
-        agencyId: vehicle.agency_id || meta.agencyId || 'barrie-transit',
+        agencyId: agencyId,
         agencyLabel: agencyLabel,
+        agencyLogoSrc: agencyBranding.logoSrc,
+        agencyLogoAlt: agencyBranding.logoAlt || agencyLabel,
         serviceLabel: getVehicleServiceLabel(vehicle, agencyLabel),
         destination: destination,
+        platformLabel: formatPlatformLabel(assignment),
         directionLabel: routeEightDirection,
         terminalStatus: terminalStatus,
         distanceMeters: entry.distanceMeters,
@@ -2440,7 +2550,11 @@ export function createMapController({ dataClient, ui }) {
         ),
         departureLabel: terminalStatus === 'at_terminal'
           ? formatTerminalDeparture(vehicle.terminal_departure_time)
-          : '',
+          : formatTerminalArrival(
+              vehicle.terminal_arrival_time,
+              Date.now(),
+              entry.distanceMeters
+            ),
         color: meta.color || '#004e80',
         textColor: meta.textColor || '#ffffff'
       };
@@ -2808,6 +2922,89 @@ export function createMapController({ dataClient, ui }) {
     routeKeyIndex = {};
   }
 
+  function getRouteVisualState(routeId, shapeId) {
+    var focusedRouteIds = Object.keys(activeBoardRouteKeys);
+    if (!focusedRouteIds.length) return 'normal';
+    if (!activeBoardRouteKeys[normalizeRouteKey(routeId)]) return 'context';
+
+    var focusedShapeIds = Object.keys(activeBoardShapeKeys);
+    if (
+      focusedShapeIds.length && shapeId &&
+      !activeBoardShapeKeys[normalizeRouteKey(shapeId)]
+    ) {
+      return 'related';
+    }
+    return 'active';
+  }
+
+  function getRouteLineStyle(kind, state) {
+    var outline = kind === 'outline';
+    if (state === 'active') {
+      return outline
+        ? { color: '#ffffff', weight: 8.5, opacity: 0.92 }
+        : { weight: 5.5, opacity: 1 };
+    }
+    if (state === 'context') {
+      return outline
+        ? { color: '#ffffff', weight: 5.5, opacity: 0.28 }
+        : { weight: 3.25, opacity: 0.25 };
+    }
+    if (state === 'related') {
+      return outline
+        ? { color: '#ffffff', weight: 6, opacity: 0.38 }
+        : { weight: 3.5, opacity: 0.34 };
+    }
+    return outline
+      ? { color: '#ffffff', weight: 7.5, opacity: 0.72 }
+      : { weight: 4.75, opacity: 0.9 };
+  }
+
+  function applyRouteEmphasisStyles() {
+    Object.keys(routeLayers).forEach(function (routeId) {
+      var entry = routeLayers[routeId];
+      if (!entry) return;
+      var records = Array.isArray(entry.shapeLayers) ? entry.shapeLayers : [];
+      records.forEach(function (record) {
+        var state = getRouteVisualState(routeId, record.shapeId);
+        if (record.outline && typeof record.outline.setStyle === 'function') {
+          record.outline.setStyle(getRouteLineStyle('outline', state));
+        }
+        if (record.segment && typeof record.segment.setStyle === 'function') {
+          var segmentStyle = getRouteLineStyle('segment', state);
+          segmentStyle.color = entry.meta && entry.meta.color || '#004e80';
+          record.segment.setStyle(segmentStyle);
+        }
+      });
+
+      if (entry.labelLayer && typeof entry.labelLayer.eachLayer === 'function') {
+        var routeState = getRouteVisualState(routeId, null);
+        var labelOpacity = routeState === 'context' ? 0.32 : (routeState === 'related' ? 0.5 : 1);
+        entry.labelLayer.eachLayer(function (marker) {
+          if (marker && typeof marker.setOpacity === 'function') marker.setOpacity(labelOpacity);
+        });
+      }
+    });
+  }
+
+  function updateRouteEmphasis(rows) {
+    var routeKeys = Object.create(null);
+    var shapeKeys = Object.create(null);
+    (Array.isArray(rows) ? rows : []).forEach(function (row) {
+      var routeKey = normalizeRouteKey(row && row.routeId);
+      var shapeKey = normalizeRouteKey(row && row.shapeId);
+      if (routeKey) routeKeys[routeKey] = true;
+      if (shapeKey) shapeKeys[shapeKey] = true;
+    });
+
+    var signature = Object.keys(routeKeys).sort().join('|') + '::' + Object.keys(shapeKeys).sort().join('|');
+    if (signature === activeBoardFocusSignature) return;
+    activeBoardRouteKeys = routeKeys;
+    activeBoardShapeKeys = shapeKeys;
+    activeBoardFocusSignature = signature;
+    buildRouteLabels();
+    applyRouteEmphasisStyles();
+  }
+
   function resolveRouteEntry(routeId) {
     if (!routeId) return null;
     var directEntry = routeLayers[routeId];
@@ -2863,6 +3060,41 @@ export function createMapController({ dataClient, ui }) {
     ui.updateRouteLegendState(createLegendContext());
   }
 
+  function selectRouteLabelFeatures(routeId, entry) {
+    var features = entry && Array.isArray(entry.labelFeatures) ? entry.labelFeatures : [];
+    if (!features.length && entry && Array.isArray(entry.labelGeometries)) {
+      return entry.labelGeometries.map(function (geometry) {
+        return { geometry: geometry, properties: {} };
+      });
+    }
+
+    var routeFocused = Boolean(activeBoardRouteKeys[normalizeRouteKey(routeId)]);
+    if (routeFocused) {
+      var activeShapes = features.filter(function (feature) {
+        var shapeId = feature && feature.properties && feature.properties.shape_id;
+        return shapeId && activeBoardShapeKeys[normalizeRouteKey(shapeId)];
+      });
+      if (activeShapes.length) return activeShapes;
+    }
+
+    var representatives = Object.create(null);
+    features.forEach(function (feature, index) {
+      var props = feature && feature.properties || {};
+      var direction = props.direction_id !== null && props.direction_id !== undefined && String(props.direction_id) !== ''
+        ? String(props.direction_id)
+        : 'unknown';
+      var current = representatives[direction];
+      var tripCount = Number(props.trip_count) || 0;
+      if (!current || tripCount > current.tripCount) {
+        representatives[direction] = { feature: feature, tripCount: tripCount, index: index };
+      }
+    });
+
+    return Object.keys(representatives)
+      .sort()
+      .map(function (key) { return representatives[key].feature; });
+  }
+
   function buildRouteLabels() {
     if (!ROUTE_LABELS_ENABLED) {
       Object.keys(routeLayers).forEach(function (routeId) {
@@ -2901,8 +3133,13 @@ export function createMapController({ dataClient, ui }) {
       }
 
       var coordinateSets = [];
-      for (var i = 0; i < entry.labelGeometries.length; i++) {
-        coordinateSets = coordinateSets.concat(extractLineCoordinateSets(entry.labelGeometries[i]));
+      var labelFeatures = selectRouteLabelFeatures(routeId, entry);
+      for (var i = 0; i < labelFeatures.length; i++) {
+        var labelFeature = labelFeatures[i] || {};
+        var sets = extractLineCoordinateSets(labelFeature.geometry);
+        for (var setIndex = 0; setIndex < sets.length; setIndex++) {
+          coordinateSets.push(sets[setIndex]);
+        }
       }
       if (!coordinateSets.length) return;
 
@@ -3051,6 +3288,8 @@ export function createMapController({ dataClient, ui }) {
             entry = routeLayers[routeId] = { layer: layerGroup, visible: startVisible };
             entry.labelLayer = L.layerGroup();
             entry.labelGeometries = [];
+            entry.labelFeatures = [];
+            entry.shapeLayers = [];
             entry.overlapLayers = [];
             layerGroup.addLayer(entry.labelLayer);
           } else {
@@ -3060,6 +3299,12 @@ export function createMapController({ dataClient, ui }) {
             }
             if (!entry.labelGeometries) {
               entry.labelGeometries = [];
+            }
+            if (!entry.labelFeatures) {
+              entry.labelFeatures = [];
+            }
+            if (!entry.shapeLayers) {
+              entry.shapeLayers = [];
             }
             if (!entry.overlapLayers) {
               entry.overlapLayers = [];
@@ -3118,7 +3363,18 @@ export function createMapController({ dataClient, ui }) {
 
           if (featureForDisplay && featureForDisplay.geometry && entry.labelGeometries) {
             entry.labelGeometries.push(featureForDisplay.geometry);
+            entry.labelFeatures.push({
+              geometry: featureForDisplay.geometry,
+              properties: props
+            });
           }
+
+          var initialRouteState = getRouteVisualState(routeId, props.shape_id);
+          var initialOutlineStyle = getRouteLineStyle('outline', initialRouteState);
+          var initialSegmentStyle = getRouteLineStyle('segment', initialRouteState);
+          initialSegmentStyle.color = meta.color;
+          var shapeClass = 'route-shape-' + String(props.shape_id || routeId)
+            .replace(/[^a-zA-Z0-9_-]/g, '-');
 
           var outline = L.geoJSON(featureForDisplay, {
             pane: 'routeOutlinePane',
@@ -3126,7 +3382,11 @@ export function createMapController({ dataClient, ui }) {
             smoothFactor: 1.5,
             filter: onlyLinework,
             style: function () {
-              return { color: '#ffffff', weight: 8, opacity: 0.58, lineJoin: 'round', lineCap: 'round' };
+              return Object.assign({}, initialOutlineStyle, {
+                className: 'route-line route-line--outline ' + shapeClass,
+                lineJoin: 'round',
+                lineCap: 'round'
+              });
             }
           });
 
@@ -3136,8 +3396,18 @@ export function createMapController({ dataClient, ui }) {
             smoothFactor: 1.5,
             filter: onlyLinework,
             style: function () {
-              return { color: meta.color, weight: 4.5, opacity: 0.58, lineJoin: 'round', lineCap: 'round' };
+              return Object.assign({}, initialSegmentStyle, {
+                className: 'route-line route-line--core ' + shapeClass,
+                lineJoin: 'round',
+                lineCap: 'round'
+              });
             }
+          });
+
+          entry.shapeLayers.push({
+            shapeId: props.shape_id || null,
+            outline: outline,
+            segment: segment
           });
 
           if (outline.getLayers().length) {
@@ -3159,6 +3429,7 @@ export function createMapController({ dataClient, ui }) {
         renderRouteOverlaps(overlapCandidates);
 
         buildRouteLabels();
+        applyRouteEmphasisStyles();
         var legendContext = createLegendContext();
         ui.renderRouteLegend(legendContext);
         updateDebugState('legend', 'rendered');
@@ -3169,10 +3440,6 @@ export function createMapController({ dataClient, ui }) {
           updateDebugState('stopLegend', 'missing renderer');
         }
         ui.clearBanner('routes');
-        if (combinedBounds && combinedBounds.isValid()) {
-          map.fitBounds(combinedBounds, { padding: [12, 12] });
-        }
-
         Object.keys(routeLayers).forEach(function (routeId) {
           applyRouteVisibilityToVehicles(routeId);
         });
@@ -3305,7 +3572,10 @@ export function createMapController({ dataClient, ui }) {
         icon = createCombinedBusIcon(members);
       } else {
         signature = 'single|' + routeIds[0] + '|' + (members[0].meta.displayName || '') + '|' + (members[0].meta.color || '') + '|' + (members[0].meta.textColor || '') + '|' + (bearing === null ? 'na' : bearing.toFixed(1)) + '|' + vehicleIdsForSignature[0];
-        icon = createBusIcon(members[0].meta, bearing, { directionHint: members[0].directionHint });
+        icon = createBusIcon(members[0].meta, bearing, {
+          directionHint: members[0].directionHint,
+          scale: STANDALONE_MAP_ICON_SCALE
+        });
       }
 
       var popupContent = buildVehiclePopupContent(members);
@@ -3563,9 +3833,11 @@ export function createMapController({ dataClient, ui }) {
       });
       var eligibleVehicles = getDisplayEligibleVehicles(visibleVehicles);
       var onMapVehicles = eligibleVehicles.filter(isVehicleOnMainMap);
+      var nearbyVehicles = buildNearbyVehicleSummaries(onMapVehicles);
       updateVehicles(visibleVehicles);
+      updateRouteEmphasis(nearbyVehicles);
       if (typeof ui.renderNearbyVehicles === 'function') {
-        ui.renderNearbyVehicles(buildNearbyVehicleSummaries(onMapVehicles));
+        ui.renderNearbyVehicles(nearbyVehicles);
       }
       if (typeof ui.renderTrackedServices === 'function') {
         ui.renderTrackedServices(buildTrackedAgencySummaries({

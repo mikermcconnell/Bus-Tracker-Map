@@ -34,6 +34,9 @@ describe('API smoke tests', () => {
     process.env.ONTARIO_NORTHLAND_ENABLED = 'false';
     process.env.GO_TRANSIT_ENABLED = 'false';
     process.env.METROLINX_API_KEY = '';
+    process.env.MAPBOX_ACCESS_TOKEN = '';
+    process.env.MAPBOX_USERNAME = '';
+    process.env.MAPBOX_STYLE_ID = '';
     process.env.LOG_LEVEL = 'info';
     mockNoticeService.getManifest.mockReset();
     mockNoticeService.getPageImage.mockReset();
@@ -77,6 +80,9 @@ describe('API smoke tests', () => {
     delete process.env.ONTARIO_NORTHLAND_ENABLED;
     delete process.env.GO_TRANSIT_ENABLED;
     delete process.env.METROLINX_API_KEY;
+    delete process.env.MAPBOX_ACCESS_TOKEN;
+    delete process.env.MAPBOX_USERNAME;
+    delete process.env.MAPBOX_STYLE_ID;
     delete process.env.ALLOWED_ORIGINS;
     delete process.env.LOG_LEVEL;
     delete process.env.FEED_DELAYED_AFTER_MIN;
@@ -152,6 +158,48 @@ describe('API smoke tests', () => {
       feed_offline_after_ms: 900000,
     });
     expect(res.body.poll_ms).toBeGreaterThan(0);
+    expect(res.body.basemap).toMatchObject({
+      provider: 'osm',
+      tile_size: 256,
+      zoom_offset: 0,
+      opacity: 1,
+    });
+    expect(res.body.tiles).toBe(res.body.basemap.url);
+  });
+
+  test('returns a 512-pixel Mapbox TV basemap when all settings are configured', async () => {
+    const app = await initApp({
+      MAPBOX_ACCESS_TOKEN: 'pk.test-token',
+      MAPBOX_USERNAME: 'barrie maps',
+      MAPBOX_STYLE_ID: 'tv/style-v1',
+    });
+    const res = await request(app).get('/api/config');
+
+    expect(res.status).toBe(200);
+    expect(res.body.basemap).toMatchObject({
+      provider: 'mapbox',
+      tile_size: 512,
+      zoom_offset: -1,
+      max_zoom: 19,
+      opacity: 1,
+    });
+    expect(res.body.basemap.url).toContain('/barrie%20maps/tv%2Fstyle-v1/tiles/512/{z}/{x}/{y}');
+    expect(res.body.basemap.url).toContain('access_token=pk.test-token');
+    expect(res.body.basemap.attribution).toContain('Mapbox');
+    expect(res.body.tiles).toBe(res.body.basemap.url);
+  });
+
+  test('does not expose a partial Mapbox configuration', async () => {
+    const app = await initApp({
+      MAPBOX_ACCESS_TOKEN: 'pk.test-token',
+      MAPBOX_USERNAME: 'barrie',
+      MAPBOX_STYLE_ID: '',
+    });
+    const res = await request(app).get('/api/config');
+
+    expect(res.body.basemap.provider).toBe('osm');
+    expect(res.body.basemap.url).toContain('tile.openstreetmap.org');
+    expect(res.body.basemap.url).not.toContain('pk.test-token');
   });
 
   test('validates the departure-board limit before accessing feeds', async () => {

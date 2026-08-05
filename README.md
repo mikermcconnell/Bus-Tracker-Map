@@ -14,7 +14,7 @@ A single-page Leaflet app that shows Barrie Transit routes and live vehicle posi
    - Keep the four `ONTARIO_NORTHLAND_*` feed URLs from `.env.example`; set `ONTARIO_NORTHLAND_ENABLED=false` only if that source must be disabled.
    - Keep the `LINX_*` static and trip-update feed URLs to include route 2 departures from Allandale Platform 2.
    - Set `METROLINX_API_KEY` to the server-side Metrolinx Open Data API key and leave `GO_TRANSIT_ENABLED=true`.
-   - Leave `MAPTILER_KEY` blank to use OpenStreetMap tiles, or supply your MapTiler key if you have one.
+   - Set `MAPBOX_ACCESS_TOKEN`, `MAPBOX_USERNAME`, and `MAPBOX_STYLE_ID` to use the custom TV basemap. When they are omitted or Mapbox tiles fail, the map falls back to OpenStreetMap. See `mapbox/README.md` for style publishing and token restrictions.
    - Leave `POLL_MS=10000` unless you need a different polling interval.
    - Optional: set `BASE_PATH` if the app is hosted from a subdirectory (for example `/transit`).
    - Optional: set `ALLOWED_ORIGINS` (comma separated) to explicitly allow trusted cross-origin clients; otherwise the API is same-origin only.
@@ -143,6 +143,8 @@ barrie-bus/
 - `.github/workflows/bus-monitor.yml` is now a manual backup only. Do not re-enable its schedule unless Railway is disabled first, otherwise duplicate notification emails can be sent.
 - Railway variables required for the monitor service: `GTFS_STATIC_URL`, `GTFS_RT_VEHICLES_URL`, `GTFS_RT_TRIP_UPDATES_URL`, `ALERT_RECIPIENT`, either SMTP settings or Resend settings, and ideally `HEARTBEAT_URL`.
 - The monitor sends a dedicated `NO_RECENT_VEHICLE_GPS` alert when buses are expected but no buses have recent GPS updates. It exits quietly when the schedule says no buses are expected, including configured no-service holidays.
+- The monitor sends `Barrie Transit GTFS Integrity Alert | ...` when required GTFS tables, service dates, Allandale parent/platform/timed-transfer records, or static/realtime trip, route, and stop IDs are inconsistent. Persistent GTFS integrity issues resend no more than once every 12 hours by default (`GTFS_INTEGRITY_RESEND_MIN=720`).
+- The monitor sends `Barrie Transit Email Volume Alert | ...` after 4 operational alert emails within a rolling 60-minute window. The warning has a 180-minute cooldown and does not count daily check-ins, test messages, or itself. Configure this with `EMAIL_VOLUME_ALERT_THRESHOLD`, `EMAIL_VOLUME_WINDOW_MIN`, and `EMAIL_VOLUME_ALERT_COOLDOWN_MIN`.
 - The monitor now ships with a local holiday/service override calendar in `monitor/service-overrides.json` for the current operating year. Update that file annually or whenever special service changes are approved.
 - The scheduled monitor job now refreshes GTFS static more aggressively (`GTFS_CACHE_MAX_AGE_HOURS=6`) to reduce stale service-calendar risk.
 - Holiday dates use explicit GTFS `calendar_dates.txt` service when published; the local Sunday schedule is fallback-only and is never combined with a separate GTFS holiday service. Monitor emails name the holiday, selected schedule, source, and feed coverage used for the expected-bus count.

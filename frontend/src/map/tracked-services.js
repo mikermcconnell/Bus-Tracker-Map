@@ -85,6 +85,15 @@ const AGENCY_DEFINITIONS = Object.freeze([
   })
 ]);
 
+export function getAgencyBranding(agencyId) {
+  const normalizedId = String(agencyId || '').trim().toLowerCase();
+  const definition = AGENCY_DEFINITIONS.find((agency) => agency.id === normalizedId);
+  return definition ? {
+    logoSrc: definition.logoSrc,
+    logoAlt: definition.logoAlt,
+  } : { logoSrc: '', logoAlt: '' };
+}
+
 function normalizeStatus(source) {
   if (!source) return 'unavailable';
   const status = String(source.feed_status || '').trim().toLowerCase();
@@ -160,9 +169,12 @@ export function buildNearbyRenderSignature(rows) {
       routeLabel: String(entry && entry.routeLabel || ''),
       agencyLabel: String(entry && entry.agencyLabel || ''),
       agencyId: String(entry && entry.agencyId || ''),
+      agencyLogoSrc: String(entry && entry.agencyLogoSrc || ''),
+      agencyLogoAlt: String(entry && entry.agencyLogoAlt || ''),
       routeCode: String(entry && entry.routeCode || ''),
       serviceLabel: String(entry && entry.serviceLabel || ''),
       destination: String(entry && entry.destination || ''),
+      platformLabel: String(entry && entry.platformLabel || ''),
       terminalStatus: String(entry && entry.terminalStatus || ''),
       distanceMeters: Math.round(Number(entry && entry.distanceMeters) || 0),
       distanceLabel: String(entry && entry.distanceLabel || ''),

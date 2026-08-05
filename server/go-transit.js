@@ -218,6 +218,7 @@ function parseVehicleFeed(feed, metadata) {
       source_route_id: sourceRouteId,
       route_long_name: route.long_name || null,
       trip_id: trip.trip_id || null,
+      shape_id: tripMetadata.shape_id ? `GO:${tripMetadata.shape_id}` : null,
       trip_headsign: String(vehicle.vehicle && vehicle.vehicle.label || '').split(' - ').slice(1).join(' - ') ||
         tripMetadata.headsign ||
         null,

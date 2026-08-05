@@ -11,6 +11,71 @@ function readFeedTimestamp(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function parseTerminalTripUpdates(feed, terminalStopIds) {
+  const terminalIds = new Set((terminalStopIds || []).map(String));
+  const updates = {};
+
+  (feed && Array.isArray(feed.entity) ? feed.entity : []).forEach((entity) => {
+    const tripUpdate = entity && entity.tripUpdate;
+    const tripId = tripUpdate && tripUpdate.trip && tripUpdate.trip.tripId;
+    if (!tripId) return;
+
+    const terminalUpdates = (tripUpdate.stopTimeUpdate || [])
+      .filter((stopUpdate) => (
+        stopUpdate && terminalIds.has(String(stopUpdate.stopId || ''))
+      ))
+      .map((stopUpdate) => {
+        const arrivalEvent = stopUpdate.arrival || stopUpdate.departure || null;
+        const departureEvent = stopUpdate.departure || stopUpdate.arrival || null;
+        return {
+          stop_id: String(stopUpdate.stopId || ''),
+          stop_sequence: Number.isFinite(Number(stopUpdate.stopSequence))
+            ? Number(stopUpdate.stopSequence)
+            : null,
+          arrival_time: readFeedTimestamp(arrivalEvent && arrivalEvent.time),
+          departure_time: readFeedTimestamp(departureEvent && departureEvent.time),
+        };
+      });
+
+    if (terminalUpdates.length) updates[String(tripId)] = terminalUpdates;
+  });
+
+  return updates;
+}
+
+function selectTerminalTripUpdate(vehicle, tripUpdates) {
+  const updates = vehicle && vehicle.trip_id && tripUpdates && tripUpdates[vehicle.trip_id];
+  if (!Array.isArray(updates) || !updates.length) return null;
+  const rawCurrentSequence = vehicle.current_stop_sequence;
+  const currentSequence = Number(rawCurrentSequence);
+  const hasCurrentSequence = rawCurrentSequence !== null &&
+    rawCurrentSequence !== undefined && rawCurrentSequence !== '' &&
+    Number.isFinite(currentSequence);
+  const upcoming = updates.filter((update) => (
+    !hasCurrentSequence ||
+    !Number.isFinite(Number(update.stop_sequence)) ||
+    Number(update.stop_sequence) >= currentSequence
+  ));
+  const candidates = upcoming.length ? upcoming : updates;
+  return candidates.slice().sort((a, b) => {
+    const aSequence = Number.isFinite(Number(a.stop_sequence)) ? Number(a.stop_sequence) : Infinity;
+    const bSequence = Number.isFinite(Number(b.stop_sequence)) ? Number(b.stop_sequence) : Infinity;
+    return aSequence - bSequence;
+  })[0] || null;
+}
+
+async function fetchTerminalTripUpdates(rtUrl, terminalStopIds) {
+  if (!rtUrl) return { feed_timestamp: null, trip_updates: {} };
+  const res = await fetch(rtUrl, { timeout: 10_000 });
+  if (!res.ok) throw new Error('GTFS-RT trip updates fetch failed: ' + res.status);
+  const buffer = await res.buffer();
+  const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buffer);
+  return {
+    feed_timestamp: readFeedTimestamp(feed.header && feed.header.timestamp),
+    trip_updates: parseTerminalTripUpdates(feed, terminalStopIds),
+  };
+}
+
 async function fetchGtfsRtFeedMeta(rtUrl) {
   if (!rtUrl) {
     return {
@@ -125,4 +190,10 @@ async function fetchVehicles(rtUrl) {
   }
 }
 
-module.exports = { fetchVehicles, fetchGtfsRtFeedMeta };
+module.exports = {
+  fetchVehicles,
+  fetchGtfsRtFeedMeta,
+  fetchTerminalTripUpdates,
+  parseTerminalTripUpdates,
+  selectTerminalTripUpdate,
+};
