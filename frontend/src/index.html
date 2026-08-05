@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="utf-8">
-  <title>Find Your Bus - Live Bus Map</title>
+  <title>FIND YOUR BUS - LIVE MAP</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="%APP_CSS%">
   <meta name="app-build-id" content="%BUILD_ID%">
@@ -16,7 +16,7 @@
       <span class="live-feed-summary__text">CONNECTING</span>
     </div>
     <div class="map-title__left">
-      <span class="map-title__main">Find Your Bus</span>
+      <span class="map-title__main">FIND YOUR BUS - LIVE MAP</span>
       <span id="service-status" class="service-status-pill" hidden></span>
     </div>
     <div class="map-title__right">
@@ -40,6 +40,17 @@
           <ul id="tracked-services-list" class="tracked-services__list">
             <li class="tracked-services__holding">Connecting to vehicle feeds…</li>
           </ul>
+          <div class="route-map-key" aria-label="Map key: coloured lines are bus routes and numbered circles are live vehicles">
+            <span class="route-map-key__title">Map key</span>
+            <span class="route-map-key__item">
+              <span class="route-map-key__line" aria-hidden="true"></span>
+              Bus route
+            </span>
+            <span class="route-map-key__item">
+              <span class="route-map-key__vehicle" aria-hidden="true">8A</span>
+              Live bus
+            </span>
+          </div>
         </section>
       </div>
       <div class="map-overlay-column map-overlay-column--right">
@@ -54,9 +65,6 @@
           <ol id="nearby-buses-list" class="nearby-buses__list">
             <li class="nearby-buses__holding">Locating approaching vehicles…</li>
           </ol>
-          <div class="nearby-buses__footer">
-            Platform assignments may change. Follow posted terminal signs.
-          </div>
         </section>
       </div>
     </div>

@@ -164,6 +164,7 @@ function qualifyVehicle(vehicle, metadata, tripUpdates) {
     route_label: agency.map_label || 'ON',
     source_route_id: sourceRouteId,
     route_long_name: route.long_name || null,
+    shape_id: trip.shape_id ? `ONTC:${trip.shape_id}` : null,
     trip_headsign: trip.headsign || null,
     agency_id: agency.id || 'ontario-northland',
     agency_name: agency.name || 'Ontario Northland',
