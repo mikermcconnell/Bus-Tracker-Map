@@ -12,6 +12,7 @@ A single-page Leaflet app that shows Barrie Transit routes and live vehicle posi
    - Keep `GTFS_STATIC_URL=https://www.myridebarrie.ca/gtfs/google_transit.zip`.
    - Set `GTFS_RT_VEHICLES_URL` to your exact Vehicle Positions protobuf URL (for example `https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb`).
    - Keep the four `ONTARIO_NORTHLAND_*` feed URLs from `.env.example`; set `ONTARIO_NORTHLAND_ENABLED=false` only if that source must be disabled.
+   - Keep the five `SIMCOE_LINX_*` settings from `.env.example`; LINX live vehicles come from a shared Ontario feed and are accepted only when both trip and route IDs match the Simcoe schedule.
    - Keep the `LINX_*` static and trip-update feed URLs to include route 2 departures from Allandale Platform 2.
    - Set `METROLINX_API_KEY` to the server-side Metrolinx Open Data API key and leave `GO_TRANSIT_ENABLED=true`.
    - Set `MAPBOX_ACCESS_TOKEN`, `MAPBOX_USERNAME`, and `MAPBOX_STYLE_ID` to use the custom TV basemap. When they are omitted or Mapbox tiles fail, the map falls back to OpenStreetMap. See `mapbox/README.md` for style publishing and token restrictions.
@@ -31,9 +32,9 @@ npm install
 ```bash
 npm run build
 ```
-This bundles the frontend into `frontend/dist/` (hashed assets for long-lived caching), refreshes Barrie GTFS GeoJSON, creates a compact Ontario Northland layer containing only the routes that serve Barrie, creates GO bus/train layers containing only trips serving Allandale stops `08049` and `AD`, and generates Simcoe LINX route 2 departure metadata.
+This bundles the frontend into `frontend/dist/` (hashed assets for long-lived caching), refreshes Barrie GTFS GeoJSON, creates compact Ontario Northland and Simcoe LINX layers containing only routes that serve Barrie, creates GO bus/train layers containing only trips serving Allandale stops `08049` and `AD`, and generates Simcoe LINX route 2 departure metadata.
 
-> Tip: Run `npm run build:northland` to refresh only Ontario Northland data, `npm run build:go` to refresh only GO Allandale data, or `npm run build:frontend` to rebuild the SPA bundle by itself.
+> Tip: Run `npm run build:northland` to refresh only Ontario Northland data, `npm run build:simcoe` to refresh LINX live-map data, `npm run build:linx` to refresh LINX departure-board data, `npm run build:go` to refresh only GO Allandale data, or `npm run build:frontend` to rebuild the SPA bundle by itself.
 
 ## 4. Start the server
 ```bash
@@ -88,6 +89,7 @@ For the terminal TV, disable its sleep/screensaver setting and bookmark the prod
 - `npm run build` - bundle the frontend and rebuild GeoJSON caches.
 - `npm run build:data` - regenerate the cached GeoJSON from the latest GTFS ZIP.
 - `npm run build:northland` - refresh the Barrie-serving Ontario Northland route and trip metadata.
+- `npm run build:simcoe` - refresh Barrie-serving Simcoe LINX routes and live-map trip metadata.
 - `npm run build:go` - refresh only GO route 68 and Barrie line data serving Allandale.
 - `npm run build:linx` - refresh only Simcoe LINX route 2 metadata at Allandale.
 - `npm run build:frontend` - produce hashed frontend assets in `frontend/dist/`.

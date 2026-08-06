@@ -181,7 +181,10 @@ export function createMapController({ dataClient, ui }) {
     ]
   };
   var MAJOR_ROAD_LABEL_MANUAL_OFFSETS = {};
-  var DEFAULT_VISIBLE_ROUTE_IDS = ['7A', '7B', '8A', '8B', '12A', '12B', 'ONTC', 'GO-BUS', 'GO-TRAIN'];
+  var DEFAULT_VISIBLE_ROUTE_IDS = [
+    '7A', '7B', '8A', '8B', '12A', '12B',
+    'ONTC', 'GO-BUS', 'GO-TRAIN', 'LINX-1', 'LINX-2', 'LINX-3'
+  ];
   var DEFAULT_VISIBLE_ROUTE_KEYS = (function () {
     var map = Object.create(null);
     for (var i = 0; i < DEFAULT_VISIBLE_ROUTE_IDS.length; i++) {
@@ -2197,7 +2200,9 @@ export function createMapController({ dataClient, ui }) {
     var agencyName = (props && props.agency_name) || (existing && existing.agencyName) ||
       (agencyId === 'ontario-northland'
         ? 'Ontario Northland'
-        : (agencyId === 'go-transit' ? 'GO Transit' : 'Barrie Transit'));
+        : (agencyId === 'go-transit'
+          ? 'GO Transit'
+          : (agencyId === 'simcoe-linx' ? 'Simcoe County LINX' : 'Barrie Transit')));
 
     var meta = {
       id: id,
@@ -2372,7 +2377,9 @@ export function createMapController({ dataClient, ui }) {
       var vehicle = member.vehicle;
       var meta = member.meta;
       var label = sanitizeVehicleText(vehicle && vehicle.route_label || meta.displayName || meta.longName || meta.id || 'Route');
-      var rawBusId = vehicle && vehicle.id ? String(vehicle.id).replace(/^ontario-northland:/, '') : '';
+      var rawBusId = vehicle && vehicle.id
+        ? String(vehicle.id).replace(/^(?:ontario-northland|simcoe-linx):/, '')
+        : '';
       var busId = rawBusId ? sanitizeVehicleText(rawBusId) : 'Unknown bus';
       var agencyName = vehicle && vehicle.agency_name ? sanitizeVehicleText(vehicle.agency_name) : '';
       var sourceRouteId = vehicle && vehicle.source_route_id ? sanitizeVehicleText(vehicle.source_route_id) : '';
@@ -2422,6 +2429,21 @@ export function createMapController({ dataClient, ui }) {
         offsetMeters: routeMeta.offsetMeters || 0
       };
     }
+    if (vehicle.agency_id === 'simcoe-linx') {
+      var linxRouteId = vehicle.source_route_id ? String(vehicle.source_route_id).trim() : '';
+      return {
+        id: routeMeta.id,
+        color: vehicle.route_color || routeMeta.color,
+        textColor: vehicle.route_text_color || routeMeta.textColor,
+        displayName: linxRouteId ? 'LINX ' + linxRouteId : 'LINX',
+        longName: vehicle.route_long_name || routeMeta.longName || 'Simcoe County LINX',
+        agencyId: 'simcoe-linx',
+        agencyName: 'Simcoe County LINX',
+        routeMode: 'bus',
+        routeCode: linxRouteId || 'LINX',
+        offsetMeters: routeMeta.offsetMeters || 0
+      };
+    }
     if (vehicle.agency_id !== 'ontario-northland') return routeMeta;
     var sourceRouteId = vehicle.source_route_id ? String(vehicle.source_route_id).trim() : '';
     return {
@@ -2440,7 +2462,7 @@ export function createMapController({ dataClient, ui }) {
 
   function getRegionalRouteCode(vehicle, fallback) {
     var routeLabel = vehicle && vehicle.route_label ? String(vehicle.route_label).trim() : '';
-    var withoutAgency = routeLabel.replace(/^(?:GO|ON)\s+/i, '').trim();
+    var withoutAgency = routeLabel.replace(/^(?:GO|ON|LINX)\s+/i, '').trim();
     if (withoutAgency) return withoutAgency;
 
     var sourceRouteId = vehicle && vehicle.source_route_id
@@ -2476,6 +2498,9 @@ export function createMapController({ dataClient, ui }) {
     }
     if (vehicle && vehicle.agency_id === 'ontario-northland') {
       return 'Ontario Northland · Coach';
+    }
+    if (vehicle && vehicle.agency_id === 'simcoe-linx') {
+      return 'Simcoe County LINX · Regional bus';
     }
     return (agencyLabel || 'Barrie Transit') + ' · Local bus';
   }
@@ -2597,7 +2622,9 @@ export function createMapController({ dataClient, ui }) {
       var agencyId = String(meta.agencyId || '');
       var agencyClass = agencyId === 'go-transit'
         ? ' vehicle-mini--go-transit'
-        : (agencyId === 'ontario-northland' ? ' vehicle-mini--ontario-northland' : '');
+        : (agencyId === 'ontario-northland'
+          ? ' vehicle-mini--ontario-northland'
+          : (agencyId === 'simcoe-linx' ? ' vehicle-mini--simcoe-linx' : ''));
       var label = sanitizeVehicleText(meta.routeCode || meta.displayName || meta.id || '?');
       var chipBg = sanitizeColorValue(meta.color, '#444444');
       var chipFg = sanitizeColorValue(meta.textColor, '#ffffff');
@@ -2685,8 +2712,10 @@ export function createMapController({ dataClient, ui }) {
       bubbleExtraClass = ' ' + opts.bubbleClassName.trim();
     }
     var agencyId = meta.agencyId || '';
-    var isRegional = agencyId === 'go-transit' || agencyId === 'ontario-northland';
-    var agencyMark = agencyId === 'go-transit' ? 'GO' : (agencyId === 'ontario-northland' ? 'ON' : '');
+    var isRegional = agencyId === 'go-transit' || agencyId === 'ontario-northland' || agencyId === 'simcoe-linx';
+    var agencyMark = agencyId === 'go-transit'
+      ? 'GO'
+      : (agencyId === 'ontario-northland' ? 'ON' : (agencyId === 'simcoe-linx' ? 'LINX' : ''));
     var label = isRegional ? (meta.routeCode || meta.displayName || agencyMark) : (meta.displayName || '');
     var background = meta.color || '#444444';
     var textColor = meta.textColor || '#FFFFFF';
@@ -3506,7 +3535,11 @@ export function createMapController({ dataClient, ui }) {
           key: vehicleKey,
           vehicle: vehicle,
           routeId: resolved.id,
-          displayRouteId: (vehicle.agency_id === 'ontario-northland' || vehicle.agency_id === 'go-transit') &&
+          displayRouteId: (
+            vehicle.agency_id === 'ontario-northland' ||
+            vehicle.agency_id === 'go-transit' ||
+            vehicle.agency_id === 'simcoe-linx'
+          ) &&
             (vehicle.route_label || vehicle.source_route_id)
             ? resolved.id + ':' + (vehicle.route_label || vehicle.source_route_id)
             : resolved.id,

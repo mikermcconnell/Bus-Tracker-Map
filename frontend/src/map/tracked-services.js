@@ -43,14 +43,13 @@ const SERVICE_DEFINITIONS = Object.freeze([
   }),
   Object.freeze({
     id: 'simcoe-linx',
-    sourceKey: null,
+    sourceKey: 'simcoe_linx',
     agencyId: 'simcoe-linx',
     agencyLabel: 'Simcoe County LINX',
     serviceType: 'Regional Buses',
     badgeLabel: 'LINX',
-    color: '#005596',
-    textColor: '#ffffff',
-    tracked: false
+    color: '#006747',
+    textColor: '#ffffff'
   })
 ]);
 

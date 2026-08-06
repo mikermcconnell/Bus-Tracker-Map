@@ -28,6 +28,9 @@ export const ROUTE_COLORS = Object.freeze({
   ONTC: '#00214D',
   'GO-BUS': '#007A33',
   'GO-TRAIN': '#007A33',
+  'LINX-1': '#FF7733',
+  'LINX-2': '#006747',
+  'LINX-3': '#339966',
 });
 
 function referenceImageRect() {
@@ -174,6 +177,10 @@ export function getVehicleLabel(vehicle) {
     if (String(vehicle.route_mode || '').toLowerCase() === 'train') return 'GO TRAIN';
     const label = String(vehicle.route_label || '').replace(/^GO\s*/i, '').trim();
     return label ? `GO ${label}` : 'GO BUS';
+  }
+  if (vehicle.agency_id === 'simcoe-linx') {
+    const label = String(vehicle.source_route_id || vehicle.route_label || '').replace(/^LINX\s*/i, '').trim();
+    return label ? `LINX ${label}` : 'LINX';
   }
   return String(vehicle.route_label || vehicle.route_id || '?');
 }

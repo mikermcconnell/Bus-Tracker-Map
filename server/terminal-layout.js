@@ -6,6 +6,12 @@ const PLATFORM_BY_EXTERNAL_STOP = Object.freeze({
     '08049': '7',
     AD: '1',
   }),
+  // Operational override: the published LINX GTFS identifies the Allandale
+  // stop but does not publish a platform_code. Reconfirm this assignment with
+  // terminal operations whenever the physical bay plan changes.
+  'simcoe-linx': Object.freeze({
+    SCSTOP210: '2',
+  }),
 });
 
 const BARRIE_PLATFORM_LABELS = Object.freeze({
@@ -58,6 +64,15 @@ function normalizeRoute(agencyId, trip, stopId) {
       source_route_id: sourceRouteId,
       mode: 'coach',
       destination: 'Ontario Northland',
+    };
+  }
+  if (agencyId === 'simcoe-linx') {
+    return {
+      route_id: `LINX-${sourceRouteId}`,
+      route_label: sourceRouteId,
+      source_route_id: sourceRouteId,
+      mode: 'bus',
+      destination: sourceRouteId === '2' ? 'Wasaga Beach' : cleanHeadsign(trip.headsign, agencyId),
     };
   }
   return {
@@ -170,16 +185,18 @@ function buildTerminalLayout({
   barrie = {},
   ontarioNorthland = {},
   goTransit = {},
+  simcoeLinx = {},
   now = Date.now(),
 } = {}) {
   const parsedNow = now instanceof Date ? now.getTime() : Number(now);
   const nowMs = Number.isFinite(parsedNow) ? parsedNow : Date.parse(now);
   const nowSeconds = Number.isFinite(nowMs) ? nowMs / 1000 : Date.now() / 1000;
-  const metadataList = [barrie, ontarioNorthland, goTransit];
+  const metadataList = [barrie, ontarioNorthland, goTransit, simcoeLinx];
   const assignments = []
     .concat(collectAssignments(barrie, 'barrie-transit', 'Barrie Transit', nowSeconds))
     .concat(collectAssignments(ontarioNorthland, 'ontario-northland', 'Ontario Northland', nowSeconds))
     .concat(collectAssignments(goTransit, 'go-transit', 'GO Transit', nowSeconds))
+    .concat(collectAssignments(simcoeLinx, 'simcoe-linx', 'Simcoe County LINX', nowSeconds))
     .sort((a, b) => (
       Number(a.platform) - Number(b.platform) ||
       a.agency_id.localeCompare(b.agency_id) ||

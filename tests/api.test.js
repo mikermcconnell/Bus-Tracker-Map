@@ -32,6 +32,7 @@ describe('API smoke tests', () => {
     process.env.CACHE_DIR = cacheDir;
     process.env.GTFS_RT_VEHICLES_URL = '';
     process.env.ONTARIO_NORTHLAND_ENABLED = 'false';
+    process.env.SIMCOE_LINX_ENABLED = 'false';
     process.env.GO_TRANSIT_ENABLED = 'false';
     process.env.METROLINX_API_KEY = '';
     process.env.MAPBOX_ACCESS_TOKEN = '';
@@ -78,6 +79,7 @@ describe('API smoke tests', () => {
     delete process.env.CACHE_DIR;
     delete process.env.GTFS_RT_VEHICLES_URL;
     delete process.env.ONTARIO_NORTHLAND_ENABLED;
+    delete process.env.SIMCOE_LINX_ENABLED;
     delete process.env.GO_TRANSIT_ENABLED;
     delete process.env.METROLINX_API_KEY;
     delete process.env.MAPBOX_ACCESS_TOKEN;
@@ -118,6 +120,23 @@ describe('API smoke tests', () => {
 
     expect(routesRes.status).toBe(200);
     expect(routesRes.body.features.map((feature) => feature.properties.route_id)).toEqual(['1', 'ONTC']);
+  });
+
+  test('merges Simcoe LINX Barrie route segments when enabled', async () => {
+    writeJson(path.join(cacheDir, 'simcoe-linx-routes.geojson'), {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: [[-79.70, 44.37], [-79.68, 44.41]] },
+        properties: { route_id: 'LINX-2', route_short_name: 'LINX 2', agency_id: 'simcoe-linx' }
+      }]
+    });
+    const app = await initApp({ SIMCOE_LINX_ENABLED: 'true' });
+    const routesRes = await request(app).get('/api/routes.geojson');
+
+    expect(routesRes.status).toBe(200);
+    expect(routesRes.body.features.map((feature) => feature.properties.route_id))
+      .toEqual(['1', 'LINX-2']);
   });
 
   test('merges the two GO Allandale layers when Metrolinx is configured', async () => {

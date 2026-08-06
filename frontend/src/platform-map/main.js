@@ -21,7 +21,7 @@ const SOURCE_DEFINITIONS = Object.freeze([
   Object.freeze({ key: 'barrie_transit', agencyId: 'barrie-transit', label: 'Barrie Transit', short: 'BT' }),
   Object.freeze({ key: 'go_transit', agencyId: 'go-transit', label: 'GO Transit', short: 'GO' }),
   Object.freeze({ key: 'ontario_northland', agencyId: 'ontario-northland', label: 'Ontario Northland', short: 'ON' }),
-  Object.freeze({ key: null, agencyId: 'simcoe-linx', label: 'Simcoe LINX', short: 'LINX', untracked: true }),
+  Object.freeze({ key: 'simcoe_linx', agencyId: 'simcoe-linx', label: 'Simcoe LINX', short: 'LINX' }),
 ]);
 const AGENCY_BRANDING = Object.freeze({
   'barrie-transit': Object.freeze({
@@ -50,9 +50,10 @@ const AGENCY_BRANDING = Object.freeze({
   }),
 });
 
-const PLATFORM_DISPLAY_ORDER = Object.freeze(['12', '6', '13', '5', '4', '3', '14', '1', '7', '8']);
+const PLATFORM_DISPLAY_ORDER = Object.freeze(['12', '6', '13', '5', '4', '3', '14', '1', '2', '7', '8']);
 const PLATFORM_MAP_POSITIONS = Object.freeze({
   '1': Object.freeze({ left: 73.8, top: 52, scrubLeft: 75.6, scrubWidth: 13.4, scrubHeight: 5.5, wide: true }),
+  '2': Object.freeze({ left: 68.8, top: 43.8, scrubLeft: 68.6, scrubWidth: 12.4, scrubHeight: 8.5 }),
   '3': Object.freeze({ left: 48.4, top: 60.7, scrubLeft: 47.3, scrubWidth: 10.2, scrubHeight: 6.6 }),
   '4': Object.freeze({ left: 37.8, top: 60.7, scrubLeft: 37.6, scrubWidth: 10.2, scrubHeight: 6.6 }),
   '5': Object.freeze({ left: 27, top: 60.7, scrubLeft: 27.4, scrubWidth: 10.6, scrubHeight: 6.6 }),
@@ -81,22 +82,6 @@ const MAP_CONNECTIONS = Object.freeze([
     scrubWidth: 10.2,
     scrubHeight: 8.1,
   }),
-  Object.freeze({
-    platform: '2',
-    stop: 'Wasaga Beach',
-    agency: 'Simcoe LINX',
-    serviceLabel: 'Simcoe LINX',
-    brand: AGENCY_BRANDING['simcoe-linx'],
-    routes: Object.freeze([
-      Object.freeze({ label: '2', color: '#f4b41a', textColor: '#092337' }),
-    ]),
-    left: 68.8,
-    top: 43.8,
-    scrubLeft: 68.6,
-    scrubTop: 43.6,
-    scrubWidth: 12.4,
-    scrubHeight: 8.5,
-  }),
 ]);
 const PLATFORM_BY_STOP_ID = Object.freeze({
   '14': '14',
@@ -117,6 +102,7 @@ function sourceKeyForVehicle(vehicle) {
   if (!vehicle) return '';
   if (vehicle.agency_id === 'go-transit') return 'go_transit';
   if (vehicle.agency_id === 'ontario-northland') return 'ontario_northland';
+  if (vehicle.agency_id === 'simcoe-linx') return 'simcoe_linx';
   return 'barrie_transit';
 }
 
@@ -358,6 +344,10 @@ function vehicleRouteCode(vehicle) {
     if (String(vehicle && vehicle.route_mode || '').toLowerCase() === 'train') return 'TRAIN';
     return String(vehicle.route_label || vehicle.source_route_id || 'GO').replace(/^GO\s*/i, '').trim() || 'GO';
   }
+  if (agencyId === 'simcoe-linx') {
+    return String(vehicle.source_route_id || vehicle.route_label || 'LINX')
+      .replace(/^LINX\s*/i, '').trim() || 'LINX';
+  }
   return String(vehicle && (vehicle.route_label || vehicle.route_id) || '?');
 }
 
@@ -365,7 +355,7 @@ function normalizeRouteIdentity(value) {
   return String(value || '')
     .trim()
     .toUpperCase()
-    .replace(/^(?:GO|ON)[\s-]+/, '')
+    .replace(/^(?:GO|ON|LINX)[\s-]+/, '')
     .replace(/[^A-Z0-9]/g, '');
 }
 
