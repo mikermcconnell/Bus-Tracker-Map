@@ -73,9 +73,17 @@ h2 { margin: 0; font-size: 24px; }
 .map-key span { display: inline-flex; align-items: center; gap: 5px; }
 .key-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); }
 .key-line { width: 18px; height: 4px; border-radius: 4px; background: #3073a8; }
-.vehicle-marker { display: grid; place-items: center; width: 31px; height: 31px; border: 3px solid white; border-radius: 50% 50% 50% 10%; transform: rotate(-45deg); color: white; background: var(--vehicle-color, var(--green)); box-shadow: 0 4px 10px rgba(22,46,40,.35); }
-.vehicle-marker span { transform: rotate(45deg); font-size: 9px; line-height: 1; font-weight: 900; text-align: center; }
-.stop-marker { width: 8px; height: 8px; border: 2px solid white; border-radius: 50%; background: #263f38; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.regional-vehicle-icon { border: 0 !important; background: transparent !important; }
+.vehicle-marker { position: relative; display: grid; place-items: center; width: 44px; height: 44px; border: 3.5px solid rgba(255,255,255,.98); border-radius: 50%; color: white; background: var(--vehicle-color, var(--green)); box-shadow: 0 5px 13px rgba(22,46,40,.34); }
+.vehicle-marker::after { content: ""; position: absolute; inset: 5.5px; border: 1.3px solid rgba(255,255,255,.42); border-radius: 50%; }
+.vehicle-marker__label { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; margin: 0; padding: 0; font-size: 14px; line-height: 1; font-weight: 850; font-variant-numeric: tabular-nums; letter-spacing: .02em; text-align: center; }
+.vehicle-marker--train { background: #007a33; box-shadow: 0 0 0 2px #007a33, 0 5px 13px rgba(22,46,40,.34); }
+.vehicle-marker--train .vehicle-marker__label { font-size: 11px; letter-spacing: .06em; }
+.vehicle-marker__arrow { position: absolute; left: 50%; top: -13px; z-index: 1; width: 20px; height: 14px; margin-left: -10px; transform: rotate(var(--bearing, 0deg)); transform-origin: 50% 35px; filter: drop-shadow(0 3px 4px rgba(0,0,0,.3)); pointer-events: none; }
+.vehicle-marker__arrow path { fill: #15251f; stroke: rgba(255,255,255,.9); stroke-width: 1; stroke-linejoin: round; }
+.regional-stop-icon { border: 0 !important; background: transparent !important; }
+.stop-marker { position: relative; display: block; width: 16px; height: 16px; border: 2.5px solid rgba(255,255,255,.98); border-radius: 50% 50% 50% 5px; background: #173f35; box-shadow: 0 3px 8px rgba(20,48,40,.34); transform: rotate(-45deg); }
+.stop-marker::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: white; }
 .leaflet-popup-content-wrapper { border-radius: 10px; }
 .popup-title { font-weight: 850; margin-bottom: 4px; }
 .popup-meta { color: #526861; font-size: 12px; line-height: 1.4; }

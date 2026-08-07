@@ -38,14 +38,18 @@ test('regional map loads, focuses a route, and reveals live service status', asy
   await page.route('**/api/simcoe/stops.geojson?*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ type: 'FeatureCollection', features: [] }),
+    body: JSON.stringify({ type: 'FeatureCollection', features: [{
+      type: 'Feature',
+      properties: { stop_id: 'simcoe-linx:stop-4', stop_name: 'Wasaga Beach stop', agency_id: 'simcoe-linx', agency_name: 'Simcoe County LINX', route_ids: ['LINX-4'] },
+      geometry: { type: 'Point', coordinates: [-80.1, 44.51] },
+    }] }),
   }));
   await page.route('**/api/simcoe/vehicles.json?*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
       feed_status: 'live',
-      vehicles: [{ id: 'linx-4', route_id: 'LINX-4', route_label: 'LINX 4', agency_id: 'simcoe-linx', agency_name: 'Simcoe County LINX', lat: 44.51, lon: -80.1, last_reported: now, route_color: '#006747', trip_headsign: 'Wasaga Beach' }],
+      vehicles: [{ id: 'linx-4', route_id: 'LINX-4', route_label: 'LINX 4', agency_id: 'simcoe-linx', agency_name: 'Simcoe County LINX', lat: 44.51, lon: -80.1, bearing: 90, last_reported: now, route_color: '#006747', trip_headsign: 'Wasaga Beach' }],
       sources: {
         simcoe_linx: { feed_status: 'live', vehicle_count: 1 },
         go_transit: { feed_status: 'live', vehicle_count: 0 },
@@ -64,5 +68,7 @@ test('regional map loads, focuses a route, and reveals live service status', asy
   await expect(page.locator('#selection-card')).toBeVisible();
   await expect(page.locator('#selection-title')).toHaveText('LINX 4');
   await expect(page.locator('.vehicle-marker')).toHaveCount(1);
+  await expect(page.locator('.vehicle-marker__arrow')).toHaveCount(1);
+  await expect(page.locator('.stop-marker')).toHaveCount(1);
   expect(errors).toEqual([]);
 });

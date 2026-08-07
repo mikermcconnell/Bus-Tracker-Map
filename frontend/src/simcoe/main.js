@@ -204,7 +204,13 @@ function renderStops() {
     if (selected && !(Array.isArray(properties.route_ids) && properties.route_ids.includes(selected.routeId))) return;
     const coordinates = feature.geometry && feature.geometry.coordinates;
     if (!coordinates || !viewBounds.contains([coordinates[1], coordinates[0]])) return;
-    const icon = L.divIcon({ className: '', html: '<span class="stop-marker"></span>', iconSize: [8, 8], iconAnchor: [4, 4] });
+    const icon = L.divIcon({
+      className: 'regional-stop-icon',
+      html: '<span class="stop-marker" aria-hidden="true"></span>',
+      iconSize: [18, 18],
+      iconAnchor: [9, 15],
+      popupAnchor: [0, -16],
+    });
     L.marker([coordinates[1], coordinates[0]], { icon, keyboard: true })
       .bindPopup(`<div class="popup-title">${escapeHtml(properties.stop_name || 'Transit stop')}</div><div class="popup-meta">${escapeHtml(properties.agency_name || AGENCY_LABELS[agencyId] || '')}</div>`)
       .addTo(state.stopLayer);
@@ -278,12 +284,24 @@ function renderVehicles() {
     if (agencyId === 'barrie-transit' && zoom < barrieRevealZoom && (!selected || selected.agencyId !== agencyId)) return;
     if (selected && (selected.agencyId !== agencyId || selected.routeId !== vehicle.route_id)) return;
     const color = normalizeColor(vehicle.route_color, agencyId === 'simcoe-linx' ? '#006747' : '#176B57');
-    const label = String(vehicle.route_label || vehicle.route_id || 'BUS').replace(/^LINX\s*/i, '').slice(0, 6);
+    const isTrain = String(vehicle.route_mode || '').toLowerCase() === 'train';
+    const label = isTrain
+      ? 'GO'
+      : String(vehicle.route_label || vehicle.route_id || 'BUS')
+        .replace(/^LINX\s*/i, '')
+        .replace(/^GO\s+BUS\s*/i, '')
+        .slice(0, 6);
+    const bearing = Number(vehicle.bearing);
+    const hasBearing = Number.isFinite(bearing);
+    const arrow = hasBearing
+      ? `<svg class="vehicle-marker__arrow" style="--bearing:${((bearing % 360) + 360) % 360}deg" viewBox="0 0 24 16" aria-hidden="true"><path d="M12 0L24 16H0Z"/></svg>`
+      : '';
     const icon = L.divIcon({
-      className: '',
-      html: `<span class="vehicle-marker" style="--vehicle-color:${color}"><span>${escapeHtml(label)}</span></span>`,
-      iconSize: [31, 31],
-      iconAnchor: [15, 28],
+      className: 'regional-vehicle-icon',
+      html: `<span class="vehicle-marker${isTrain ? ' vehicle-marker--train' : ''}" style="--vehicle-color:${color}">${arrow}<span class="vehicle-marker__label">${escapeHtml(label)}</span></span>`,
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+      popupAnchor: [0, -22],
     });
     const lastReported = vehicle.last_reported ? new Date(Number(vehicle.last_reported) * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'Unknown';
     L.marker([Number(vehicle.lat), Number(vehicle.lon)], { icon, keyboard: true, zIndexOffset: 1000 })
