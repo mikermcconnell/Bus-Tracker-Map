@@ -5,10 +5,10 @@
   --paper: #fff;
   --mist: #eef3f6;
   --line: #cfdae2;
-  --barrie: #a6192e;
+  --barrie: #0067b1;
   --linx: #00539b;
   --go: #007a33;
-  --northland: #d86b28;
+  --northland: #f4b41a;
   font-family: Lato, Arial, ui-sans-serif, system-ui, sans-serif;
   color: var(--navy);
   background: var(--mist);
@@ -51,18 +51,19 @@ main { padding: 24px clamp(16px, 4vw, 60px) 50px; }
 .route-line-one { left: 9%; top: 34%; width: 66%; background: #a6192e; transform: rotate(16deg); }
 .route-line-two { left: 20%; top: 77%; width: 66%; background: #00539b; transform: rotate(-47deg); }
 .route-line-three { left: 8%; top: 62%; width: 66%; background: #007a33; transform: rotate(-9deg); }
-.vehicle { --agency: var(--navy); position: absolute; z-index: 5; width: 48px; height: 48px; transform: translate(-50%, -50%); filter: drop-shadow(0 5px 7px rgba(8,31,48,.28)); }
-.vehicle--barrie { --agency: var(--barrie); }
-.vehicle--linx { --agency: var(--linx); }
-.vehicle--go { --agency: var(--go); }
-.vehicle--northland { --agency: var(--northland); }
+.vehicle { --agency: var(--navy); --agency-core: var(--navy); --agency-code: var(--navy); --agency-code-ink: white; position: absolute; z-index: 5; width: 48px; height: 48px; transform: translate(-50%, -50%); filter: drop-shadow(0 5px 7px rgba(8,31,48,.28)); }
+.vehicle--barrie { --agency: #004f86; --agency-core: var(--barrie); --agency-code: var(--barrie); }
+.vehicle--linx { --agency: var(--gold); --agency-core: var(--linx); --agency-code: var(--gold); --agency-code-ink: var(--navy); }
+.vehicle--go { --agency: #005a27; --agency-core: var(--go); --agency-code: var(--go); }
+.vehicle--northland { --agency: #d88900; --agency-core: var(--northland); --agency-code: var(--northland); --agency-code-ink: var(--navy); }
 .vehicle-one { left: 27%; top: 32%; }.vehicle-two { left: 57%; top: 44%; }.vehicle-three { left: 43%; top: 69%; }.vehicle-four { left: 67%; top: 25%; }.vehicle-five { left: 69%; top: 59%; }.vehicle-six { left: 20%; top: 69%; }
 .marker-core { position: absolute; inset: 3px; display: grid; place-items: center; border: 3px solid white; border-radius: 50%; color: white; background: var(--route); }
 .route-number { font-size: 14px; font-weight: 900; line-height: 1; }.route-number--dark { color: var(--navy); }
-.agency-code { position: absolute; right: -11px; bottom: -7px; min-width: 25px; padding: 3px 5px; border: 2px solid white; border-radius: 7px; color: white; background: var(--agency); font-size: 8px; line-height: 1; font-weight: 900; letter-spacing: .03em; text-align: center; }
+.agency-code { position: absolute; right: -11px; bottom: -7px; min-width: 25px; padding: 3px 5px; border: 2px solid white; border-radius: 7px; color: var(--agency-code-ink); background: var(--agency-code); font-size: 8px; line-height: 1; font-weight: 900; letter-spacing: .03em; text-align: center; }
 .direction { position: absolute; left: 50%; top: -12px; color: var(--agency); font-size: 17px; line-height: 1; transform: translateX(-50%); }
 .logo-flag { display: none; }
-.view-a .marker-core { box-shadow: 0 0 0 3px var(--agency); }
+.view-a .marker-core { color: white; background: var(--agency-core); box-shadow: 0 0 0 3px var(--agency); }
+.view-a .vehicle--northland .marker-core { color: var(--navy); }
 .view-b .agency-code { display: none; }
 .view-b .direction { color: var(--navy); }
 .view-b .vehicle--barrie .marker-core { border-radius: 50%; box-shadow: 0 0 0 3px var(--agency); }

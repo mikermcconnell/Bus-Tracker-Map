@@ -2,11 +2,11 @@ const options = {
   a: {
     name: 'Option A · Agency halo + code',
     title: 'Use an agency halo and short code',
-    copy: 'Keep the circle and route number people already understand. Add a consistent agency-colour ring and a small agency code so colour is never the only identifier.',
+    copy: 'Keep the circle and route number people already understand. Colour each marker by agency, then add a matching halo and short code so colour is never the only identifier.',
     points: [
-      "Preserves each provider's published route colour",
+      'Barrie is blue, LINX is blue and yellow, GO is green, and Ontario Northland is yellow',
+      "Published route colours remain on the route lines",
       'Works at the current 44 px marker size',
-      'Still understandable for colour-blind riders',
     ],
   },
   b: {

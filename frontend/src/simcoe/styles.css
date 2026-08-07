@@ -77,13 +77,17 @@ h2 { margin: 0; font-size: 24px; }
 .key-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); }
 .key-line { width: 18px; height: 4px; border-radius: 4px; background: #00539b; }
 .regional-vehicle-icon { border: 0 !important; background: transparent !important; }
-.vehicle-marker { position: relative; display: grid; place-items: center; width: 44px; height: 44px; border: 3.5px solid rgba(255,255,255,.98); border-radius: 50%; color: white; background: var(--vehicle-color, var(--green)); box-shadow: 0 5px 13px rgba(22,46,40,.34); }
+.vehicle-marker { --agency-core: var(--green); --agency-halo: var(--green-dark); --agency-ink: white; --agency-code: var(--green-dark); --agency-code-ink: white; position: relative; display: grid; place-items: center; width: 44px; height: 44px; border: 3.5px solid rgba(255,255,255,.98); border-radius: 50%; color: var(--agency-ink); background: var(--agency-core); box-shadow: 0 0 0 3px var(--agency-halo), 0 5px 13px rgba(22,46,40,.34); }
+.vehicle-marker--barrie-transit { --agency-core: #0067b1; --agency-halo: #004f86; --agency-code: #0067b1; }
+.vehicle-marker--simcoe-linx { --agency-core: #00539b; --agency-halo: #e7a614; --agency-code: #e7a614; --agency-code-ink: #083357; }
+.vehicle-marker--go-transit { --agency-core: #007a33; --agency-halo: #005a27; --agency-code: #007a33; }
+.vehicle-marker--ontario-northland { --agency-core: #f4b41a; --agency-halo: #d88900; --agency-ink: #083357; --agency-code: #f4b41a; --agency-code-ink: #083357; }
 .vehicle-marker::after { content: ""; position: absolute; inset: 5.5px; border: 1.3px solid rgba(255,255,255,.42); border-radius: 50%; }
 .vehicle-marker__label { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; margin: 0; padding: 0; font-size: 14px; line-height: 1; font-weight: 850; font-variant-numeric: tabular-nums; letter-spacing: .02em; text-align: center; }
-.vehicle-marker--train { background: #007a33; box-shadow: 0 0 0 2px #007a33, 0 5px 13px rgba(22,46,40,.34); }
+.vehicle-marker__agency { position: absolute; right: -12px; bottom: -8px; z-index: 3; min-width: 25px; padding: 3px 5px; border: 2px solid white; border-radius: 7px; color: var(--agency-code-ink); background: var(--agency-code); box-shadow: 0 2px 5px rgba(8,51,87,.22); font-size: 8px; line-height: 1; font-weight: 900; letter-spacing: .025em; text-align: center; }
 .vehicle-marker--train .vehicle-marker__label { font-size: 11px; letter-spacing: .06em; }
 .vehicle-marker__arrow { position: absolute; left: 50%; top: -13px; z-index: 1; width: 20px; height: 14px; margin-left: -10px; transform: rotate(var(--bearing, 0deg)); transform-origin: 50% 35px; filter: drop-shadow(0 3px 4px rgba(0,0,0,.3)); pointer-events: none; }
-.vehicle-marker__arrow path { fill: #15251f; stroke: rgba(255,255,255,.9); stroke-width: 1; stroke-linejoin: round; }
+.vehicle-marker__arrow path { fill: var(--agency-halo); stroke: rgba(255,255,255,.95); stroke-width: 1; stroke-linejoin: round; }
 .regional-stop-icon { border: 0 !important; background: transparent !important; }
 .stop-marker { position: relative; display: block; width: 16px; height: 16px; border: 2.5px solid rgba(255,255,255,.98); border-radius: 50% 50% 50% 5px; background: #083357; box-shadow: 0 3px 8px rgba(8,51,87,.34); transform: rotate(-45deg); }
 .stop-marker::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: var(--gold); }

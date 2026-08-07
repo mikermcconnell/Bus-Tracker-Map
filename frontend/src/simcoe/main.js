@@ -19,6 +19,12 @@ const SOURCE_KEYS = {
   'ontario-northland': 'ontario_northland',
   'barrie-transit': 'barrie_transit',
 };
+const AGENCY_MARKER_CODES = {
+  'simcoe-linx': 'LINX',
+  'go-transit': 'GO',
+  'ontario-northland': 'ONTC',
+  'barrie-transit': 'BT',
+};
 
 const state = {
   config: null,
@@ -313,7 +319,6 @@ function renderVehicles() {
     if (state.agencyEnabled.get(agencyId) === false) return;
     if (agencyId === 'barrie-transit' && zoom < barrieRevealZoom && (!selected || selected.agencyId !== agencyId)) return;
     if (selected && (selected.agencyId !== agencyId || selected.routeId !== vehicle.route_id)) return;
-    const color = normalizeColor(vehicle.route_color, agencyId === 'simcoe-linx' ? '#006747' : '#176B57');
     const isTrain = String(vehicle.route_mode || '').toLowerCase() === 'train';
     const label = isTrain
       ? 'GO'
@@ -328,7 +333,9 @@ function renderVehicles() {
       : '';
     const icon = L.divIcon({
       className: 'regional-vehicle-icon',
-      html: `<span class="vehicle-marker${isTrain ? ' vehicle-marker--train' : ''}" style="--vehicle-color:${color}">${arrow}<span class="vehicle-marker__label">${escapeHtml(label)}</span></span>`,
+      html: `<span class="vehicle-marker vehicle-marker--${escapeHtml(agencyId)}${isTrain ? ' vehicle-marker--train' : ''}">${arrow}` +
+        `<span class="vehicle-marker__label">${escapeHtml(label)}</span>` +
+        `<span class="vehicle-marker__agency">${escapeHtml(AGENCY_MARKER_CODES[agencyId] || 'BUS')}</span></span>`,
       iconSize: [44, 44],
       iconAnchor: [22, 22],
       popupAnchor: [0, -22],

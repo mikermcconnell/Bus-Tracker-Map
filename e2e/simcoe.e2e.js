@@ -73,6 +73,10 @@ test('regional map loads, focuses a route, and reveals live service status', asy
   await expect(page.locator('#selection-card')).toBeVisible();
   await expect(page.locator('#selection-title')).toHaveText('LINX 4');
   await expect(page.locator('.vehicle-marker')).toHaveCount(1);
+  await expect(page.locator('.vehicle-marker')).toHaveClass(/vehicle-marker--simcoe-linx/);
+  await expect(page.locator('.vehicle-marker__agency')).toHaveText('LINX');
+  await expect(page.locator('.vehicle-marker')).toHaveCSS('background-color', 'rgb(0, 83, 155)');
+  await expect(page.locator('.vehicle-marker__agency')).toHaveCSS('background-color', 'rgb(231, 166, 20)');
   await expect(page.locator('.vehicle-marker__arrow')).toHaveCount(1);
   await expect(page.locator('.stop-marker')).toHaveCount(1);
   await page.locator('.stop-marker').click();
