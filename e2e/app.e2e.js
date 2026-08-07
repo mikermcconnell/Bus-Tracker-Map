@@ -266,6 +266,38 @@ test('departures board shows every departure in the one-hour window without scro
   expect(errors).toEqual([]);
 });
 
+test('departures board keeps longer waits as minute countdowns', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.route('**/api/config', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ poll_ms: 10000, base_path: '/' }) });
+  });
+  await page.route('**/api/departures?*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        generated_at: Date.now(),
+        departures: [{
+          id: 'long-wait',
+          agency_id: 'ontario-northland',
+          agency_name: 'Ontario Northland',
+          route_id: '101',
+          route_label: 'ONTC',
+          destination: 'North Bay',
+          platform: '8',
+          scheduled_departure_time: nowSeconds + 90 * 60,
+          expected_departure_time: nowSeconds + 90 * 60,
+          departure_source: 'realtime',
+        }],
+        sources: {},
+      }),
+    });
+  });
+
+  await page.goto('/departures');
+  await expect(page.locator('[data-departure-time]')).toHaveText('90 min');
+});
+
 test('platform map renders current assignments and updates markers in place', async ({ page }) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   let vehiclePoll = 0;

@@ -9,6 +9,9 @@ const HORIZON_HOURS = 1;
 const GRACE_SECONDS = 60;
 const GO_BUS_DESTINATION = 'Barrie / Newmarket';
 const BARRIE_ALLANDALE_STOP_IDS = new Set(['9003', '9004', '9005', '9006', '9012', '9013']);
+const LINX_ALLANDALE_STOP_ID = 'SCSTOP210';
+const LINX_HANDOFF_MAX_GAP_SECONDS = 20 * 60;
+const LINX_HANDOFF_EARLY_TOLERANCE_SECONDS = 2 * 60;
 
 const AGENCIES = Object.freeze({
   barrie_transit: { id: 'barrie-transit', name: 'Barrie Transit', mode: 'bus' },
@@ -231,6 +234,40 @@ function isFreshVehiclePosition(vehicle, nowMs, maxAgeMs) {
   return ageMs >= -60_000 && ageMs <= maxAgeMs;
 }
 
+function linxTerminalHandoffGap(vehicle, departure) {
+  if (
+    String(departure && departure.agency_id || '') !== 'simcoe-linx' ||
+    String(departure && departure.route_id || '') !== '2' ||
+    String(departure && departure.stop_id || '') !== LINX_ALLANDALE_STOP_ID ||
+    String(vehicle && vehicle.agency_id || '') !== 'simcoe-linx' ||
+    String(vehicle && (vehicle.source_route_id || vehicle.route_id) || '').replace(/^LINX-/, '') !== '2' ||
+    String(vehicle && vehicle.terminal_stop_id || '') !== LINX_ALLANDALE_STOP_ID ||
+    !/Barrie Allandale/i.test(String(vehicle && vehicle.trip_headsign || ''))
+  ) return null;
+  if (
+    vehicle.start_date && departure.service_date &&
+    String(vehicle.start_date) !== String(departure.service_date)
+  ) return null;
+  const incomingTerminalTime = Number(vehicle.terminal_departure_time);
+  const outgoingDepartureTime = Number(departure.expected_departure_time);
+  if (!Number.isFinite(incomingTerminalTime) || !Number.isFinite(outgoingDepartureTime)) return null;
+  const gap = outgoingDepartureTime - incomingTerminalTime;
+  return gap >= -LINX_HANDOFF_EARLY_TOLERANCE_SECONDS && gap <= LINX_HANDOFF_MAX_GAP_SECONDS
+    ? Math.abs(gap)
+    : null;
+}
+
+function findLinxTerminalHandoffVehicle(vehicles, departure, nowMs, maxAgeMs) {
+  return vehicles
+    .filter((vehicle) => (
+      isFreshVehiclePosition(vehicle, nowMs, maxAgeMs) &&
+      linxTerminalHandoffGap(vehicle, departure) !== null
+    ))
+    .sort((left, right) => (
+      linxTerminalHandoffGap(left, departure) - linxTerminalHandoffGap(right, departure)
+    ))[0] || null;
+}
+
 function applyVehicleEvidence(departures, vehiclePayload, nowMs, maxAgeMs) {
   const vehicles = Array.isArray(vehiclePayload && vehiclePayload.vehicles)
     ? vehiclePayload.vehicles
@@ -246,13 +283,17 @@ function applyVehicleEvidence(departures, vehiclePayload, nowMs, maxAgeMs) {
       departure.prediction_match_type === 'exact' &&
       String(departure.prediction_trip_id || '') === String(departure.trip_id || '')
     );
-    const matchingVehicle = exactPrediction
+    const exactTripVehicle = exactPrediction
       ? vehicles.find((vehicle) => (
         String(vehicle.agency_id || '') === String(departure.agency_id || '') &&
         vehicleMatchesDepartureTrip(vehicle, departure) &&
         isFreshVehiclePosition(vehicle, nowMs, maxAgeMs)
       ))
       : null;
+    const handoffVehicle = exactPrediction && !exactTripVehicle
+      ? findLinxTerminalHandoffVehicle(vehicles, departure, nowMs, maxAgeMs)
+      : null;
+    const matchingVehicle = exactTripVehicle || handoffVehicle;
 
     const barrieExactPrediction = (
       String(departure.agency_id || '') === 'barrie-transit' &&
@@ -272,7 +313,9 @@ function applyVehicleEvidence(departures, vehiclePayload, nowMs, maxAgeMs) {
     return {
       ...departure,
       departure_source: 'realtime',
-      live_evidence: 'trip_update_and_vehicle',
+      live_evidence: handoffVehicle
+        ? 'trip_update_and_terminal_handoff_vehicle'
+        : 'trip_update_and_vehicle',
       live_vehicle_id: String(matchingVehicle.id || ''),
       live_vehicle_last_reported: Number(matchingVehicle.last_reported),
     };
@@ -347,12 +390,14 @@ function selectScheduledDepartures(departures, nowMs, limit, horizonHours = HORI
   const seenServices = new Set();
   return departures
     .filter((row) => {
-      if (row.scheduled_departure_time < start || row.scheduled_departure_time > end) return false;
       const hasPrediction = (
         row.departure_source === 'estimated' ||
         row.departure_source === 'realtime'
       ) && Number.isFinite(Number(row.expected_departure_time));
-      return !hasPrediction || Number(row.expected_departure_time) >= start;
+      if (row.scheduled_departure_time > end) return false;
+      return hasPrediction
+        ? Number(row.expected_departure_time) >= start
+        : row.scheduled_departure_time >= start;
     })
     .sort((a, b) => (
       a.scheduled_departure_time - b.scheduled_departure_time ||
