@@ -167,6 +167,47 @@ function normalizeEpochMilliseconds(value) {
   return numeric > 1e12 ? numeric : numeric * 1000;
 }
 
+function serviceDateFromEpochSeconds(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(numeric * 1000));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}${values.month}${values.day}`;
+}
+
+function parsePrefixedGoTripId(value) {
+  const match = String(value || '').match(/^(\d{8})-([^-]+)-(.+)$/);
+  if (!match) return null;
+  return { service_date: match[1], route_id: match[2], trip_id: match[3] };
+}
+
+function vehicleMatchesDepartureTrip(vehicle, departure) {
+  const vehicleTripId = String(vehicle && vehicle.trip_id || '');
+  const departureTripId = String(departure && departure.trip_id || '');
+  if (vehicleTripId === departureTripId) {
+    return !vehicle.start_date || !departure.service_date ||
+      String(vehicle.start_date) === String(departure.service_date);
+  }
+  if (String(departure && departure.agency_id || '') !== 'go-transit') return false;
+
+  const prefixedTrip = parsePrefixedGoTripId(vehicleTripId);
+  const departureServiceDate = String(
+    departure.service_date || serviceDateFromEpochSeconds(departure.scheduled_departure_time) || ''
+  );
+  return Boolean(
+    prefixedTrip &&
+    prefixedTrip.trip_id === departureTripId &&
+    prefixedTrip.route_id === String(departure.route_id || '') &&
+    prefixedTrip.service_date === departureServiceDate &&
+    (!vehicle.start_date || String(vehicle.start_date) === departureServiceDate)
+  );
+}
+
 function isFreshVehiclePosition(vehicle, nowMs, maxAgeMs) {
   const reportedAt = normalizeEpochMilliseconds(vehicle && vehicle.last_reported);
   if (!vehicle || vehicle.lat === null || vehicle.lat === undefined || vehicle.lon === null || vehicle.lon === undefined) return false;
@@ -196,8 +237,7 @@ function applyVehicleEvidence(departures, vehiclePayload, nowMs, maxAgeMs) {
     const matchingVehicle = exactPrediction
       ? vehicles.find((vehicle) => (
         String(vehicle.agency_id || '') === String(departure.agency_id || '') &&
-        String(vehicle.trip_id || '') === String(departure.trip_id || '') &&
-        (!vehicle.start_date || !departure.service_date || String(vehicle.start_date) === String(departure.service_date)) &&
+        vehicleMatchesDepartureTrip(vehicle, departure) &&
         isFreshVehiclePosition(vehicle, nowMs, maxAgeMs)
       ))
       : null;
@@ -254,7 +294,8 @@ function parseGoNextService(payload, stopCode, nowMs) {
       route_label: train ? 'TRAIN' : String(row.LineCode || row.RouteNumber || '68').replace(/[^0-9].*$/, '') || '68',
       destination: train ? String(row.Destination || row.TripName || 'Toronto / Union Station') : GO_BUS_DESTINATION,
       platform: String(row.Platform || (train ? '1' : '7')), platform_type: 'platform', stop_id: stopCode,
-      trip_id: String(row.TripNumber || row.TripId || ''), service_date: null,
+      trip_id: String(row.TripNumber || row.TripId || ''),
+      service_date: serviceDateFromEpochSeconds(readGoTime(row.ScheduledDepartureTime || row.DepartureTime) || time),
       scheduled_departure_time: readGoTime(row.ScheduledDepartureTime || row.DepartureTime) || time,
       expected_departure_time: time, departure_source: 'estimated',
       prediction_source: 'go_next_service', prediction_trip_id: String(row.TripNumber || row.TripId || ''),
@@ -377,7 +418,9 @@ module.exports = {
   freshness,
   isFreshVehiclePosition,
   mergeTripUpdates,
+  parsePrefixedGoTripId,
   parseGoNextService,
   readGoTime,
   selectScheduledDepartures,
+  vehicleMatchesDepartureTrip,
 };

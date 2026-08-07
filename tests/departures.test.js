@@ -7,9 +7,11 @@ const {
   freshness,
   isFreshVehiclePosition,
   mergeTripUpdates,
+  parsePrefixedGoTripId,
   parseGoNextService,
   readGoTime,
   selectScheduledDepartures,
+  vehicleMatchesDepartureTrip,
 } = departuresModule;
 
 function metadata() {
@@ -127,6 +129,52 @@ describe('departure aggregation', () => {
     expect(result[0]).toMatchObject({ departure_source: 'estimated', live_vehicle_id: null });
   });
 
+  test('matches a prefixed GO vehicle trip only on the same date and route', () => {
+    const now = Date.parse('2026-08-07T14:46:00Z');
+    const departure = {
+      agency_id: 'go-transit', route_id: '68', trip_id: '68550', service_date: '20260807',
+      scheduled_departure_time: Date.parse('2026-08-07T15:00:00Z') / 1000,
+      expected_departure_time: Date.parse('2026-08-07T15:00:00Z') / 1000,
+      departure_source: 'estimated', prediction_match_type: 'exact', prediction_trip_id: '68550',
+    };
+    const vehicle = {
+      id: 'go-transit:2546', agency_id: 'go-transit', trip_id: '20260807-68-68550',
+      start_date: '20260807', lat: 44.37, lon: -79.69, last_reported: now / 1000 - 10,
+    };
+
+    expect(parsePrefixedGoTripId(vehicle.trip_id)).toEqual({
+      service_date: '20260807', route_id: '68', trip_id: '68550',
+    });
+    expect(vehicleMatchesDepartureTrip(vehicle, departure)).toBe(true);
+    expect(applyVehicleEvidence([departure], { vehicles: [vehicle] }, now, 120000)[0])
+      .toMatchObject({ departure_source: 'realtime', live_vehicle_id: 'go-transit:2546' });
+
+    ['20260806-68-68550', '20260807-69-68550'].forEach((tripId) => {
+      expect(applyVehicleEvidence([departure], {
+        vehicles: [{ ...vehicle, trip_id: tripId, start_date: null }],
+      }, now, 120000)[0].departure_source).toBe('estimated');
+    });
+    expect(applyVehicleEvidence([departure], {
+      vehicles: [{ ...vehicle, last_reported: now / 1000 - 121 }],
+    }, now, 120000)[0].departure_source).toBe('estimated');
+  });
+
+  test('matches the equivalent prefixed GO train trip format', () => {
+    const now = Date.parse('2026-08-07T14:46:00Z');
+    const departure = {
+      agency_id: 'go-transit', route_id: 'BR', route_label: 'TRAIN', trip_id: '407',
+      service_date: '20260807', scheduled_departure_time: now / 1000 + 600,
+      expected_departure_time: now / 1000 + 600, departure_source: 'estimated',
+      prediction_match_type: 'exact', prediction_trip_id: '407',
+    };
+    const vehicle = {
+      id: 'go-transit:620', agency_id: 'go-transit', trip_id: '20260807-BR-407',
+      start_date: '20260807', lat: 44.38, lon: -79.68, last_reported: now / 1000 - 10,
+    };
+    expect(applyVehicleEvidence([departure], { vehicles: [vehicle] }, now, 120000)[0].departure_source)
+      .toBe('realtime');
+  });
+
   test('reports delayed and missing realtime timestamps explicitly', () => {
     const now = Date.parse('2026-08-04T16:00:00Z');
     expect(freshness(now / 1000 - 300, now, 120000, 900000).realtime_status).toBe('delayed');
@@ -172,7 +220,7 @@ describe('departure aggregation', () => {
     expect(readGoTime('2026-08-04T11:40:34')).toBe(Date.parse('2026-08-04T15:40:34Z') / 1000);
     expect(rows[0]).toMatchObject({
       agency_id: 'go-transit', route_label: '68', destination: 'Barrie / Newmarket', platform: '7',
-      departure_source: 'estimated', prediction_match_type: 'exact', prediction_trip_id: '123',
+      service_date: '20260804', departure_source: 'estimated', prediction_match_type: 'exact', prediction_trip_id: '123',
     });
   });
 });
