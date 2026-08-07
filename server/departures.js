@@ -8,6 +8,7 @@ const TIME_ZONE = 'America/Toronto';
 const HORIZON_HOURS = 1;
 const GRACE_SECONDS = 60;
 const GO_BUS_DESTINATION = 'Barrie / Newmarket';
+const BARRIE_ALLANDALE_STOP_IDS = new Set(['9003', '9004', '9005', '9006', '9012', '9013']);
 
 const AGENCIES = Object.freeze({
   barrie_transit: { id: 'barrie-transit', name: 'Barrie Transit', mode: 'bus' },
@@ -68,6 +69,17 @@ function platformDetails(agencyKey, metadata, stopId) {
   return { platform: stopId === 'AD' ? '1' : '7', platform_type: 'platform' };
 }
 
+function isBoardableTerminalDeparture(agencyKey, stop) {
+  const stopId = String(stop && stop.stop_id || '');
+  if (agencyKey === 'barrie_transit' && BARRIE_ALLANDALE_STOP_IDS.has(stopId)) {
+    // Allandale is a departure board: a trip ending here must not be shown.
+    // Interlined 8A/8B vehicles are represented by a new outgoing GTFS trip,
+    // whose route is the one passengers can board after the changeover.
+    return stop && stop.is_departure === true;
+  }
+  return !stop || stop.is_departure !== false;
+}
+
 function collectScheduledDepartures(metadata, agencyKey, nowMs, horizonHours = HORIZON_HOURS) {
   const agency = AGENCIES[agencyKey];
   if (!agency || !metadata || !metadata.trips) return [];
@@ -76,7 +88,7 @@ function collectScheduledDepartures(metadata, agencyKey, nowMs, horizonHours = H
   const results = [];
   for (const [tripId, trip] of Object.entries(metadata.trips)) {
     for (const stop of trip.terminal_stops || []) {
-      if (stop.is_departure === false) continue;
+      if (!isBoardableTerminalDeparture(agencyKey, stop)) continue;
       const stopId = String(stop.stop_id || '');
       for (const serviceDate of localDateKeys(nowMs)) {
         if (!isServiceActiveOnDate(metadata, trip.service_id, serviceDate)) continue;
@@ -430,6 +442,7 @@ module.exports = {
   collectScheduledDepartures,
   createDeparturesService,
   freshness,
+  isBoardableTerminalDeparture,
   isFreshVehiclePosition,
   mergeTripUpdates,
   parsePrefixedGoTripId,

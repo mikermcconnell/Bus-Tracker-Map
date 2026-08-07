@@ -5,6 +5,7 @@ const {
   applyVehicleEvidence,
   collectScheduledDepartures,
   freshness,
+  isBoardableTerminalDeparture,
   isFreshVehiclePosition,
   mergeTripUpdates,
   parsePrefixedGoTripId,
@@ -45,6 +46,87 @@ describe('departure aggregation', () => {
     const rows = collectScheduledDepartures(metadata(), 'barrie_transit', now);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ route_label: '8A', platform: '3', destination: 'Yonge Southbound', departure_source: 'scheduled' });
+  });
+
+  test('shows only the outgoing 8A/8B route during Allandale changeovers', () => {
+    const serviceCalendars = {
+      weekday: {
+        start_date: '20260801', end_date: '20260831',
+        sunday: false, monday: true, tuesday: true, wednesday: true,
+        thursday: true, friday: true, saturday: false,
+      },
+      saturday: {
+        start_date: '20260801', end_date: '20260831',
+        sunday: false, monday: false, tuesday: false, wednesday: false,
+        thursday: false, friday: false, saturday: true,
+      },
+      sunday: {
+        start_date: '20260801', end_date: '20260831',
+        sunday: true, monday: false, tuesday: false, wednesday: false,
+        thursday: false, friday: false, saturday: false,
+      },
+    };
+    const trips = {};
+    Object.keys(serviceCalendars).forEach((serviceId) => {
+      trips[`${serviceId}-arriving-8a`] = {
+        route_id: '8A', service_id: serviceId, headsign: 'Allandale',
+        terminal_stops: [{ stop_id: '9005', departure_time: '20:07:00', is_departure: false }],
+      };
+      trips[`${serviceId}-outgoing-8b`] = {
+        route_id: '8B', service_id: serviceId, headsign: 'Georgian College',
+        terminal_stops: [{ stop_id: '9012', departure_time: '20:12:00', is_departure: true }],
+      };
+      trips[`${serviceId}-arriving-8b`] = {
+        route_id: '8B', service_id: serviceId, headsign: 'Allandale',
+        terminal_stops: [{ stop_id: '9012', departure_time: '20:37:00', is_departure: false }],
+      };
+      trips[`${serviceId}-outgoing-8a`] = {
+        route_id: '8A', service_id: serviceId, headsign: 'Georgian College',
+        terminal_stops: [{ stop_id: '9005', departure_time: '20:42:00', is_departure: true }],
+      };
+    });
+    const changeoverMetadata = {
+      terminal_stops: [
+        { id: '9005', platform_code: '5' },
+        { id: '9012', platform_code: '12' },
+      ],
+      service_calendars: serviceCalendars,
+      service_exceptions: {},
+      trips,
+    };
+
+    [
+      '2026-08-07T20:05:00-04:00', // Weekday evening
+      '2026-08-08T20:05:00-04:00', // Saturday evening
+      '2026-08-09T20:05:00-04:00', // Sunday
+    ].forEach((localTime) => {
+      const rows = collectScheduledDepartures(
+        changeoverMetadata,
+        'barrie_transit',
+        Date.parse(localTime)
+      );
+      expect(rows.map((row) => ({
+        route: row.route_label,
+        destination: row.destination,
+        platform: row.platform,
+      }))).toEqual([
+        { route: '8B', destination: 'Crosstown Northbound', platform: '12' },
+        { route: '8A', destination: 'RVH Northbound', platform: '5' },
+      ]);
+      expect(rows.every((row) => !row.id.includes('arriving'))).toBe(true);
+    });
+  });
+
+  test('requires an explicit outgoing marker at an Allandale platform', () => {
+    expect(isBoardableTerminalDeparture('barrie_transit', {
+      stop_id: '9005', is_departure: true,
+    })).toBe(true);
+    expect(isBoardableTerminalDeparture('barrie_transit', {
+      stop_id: '9005', is_departure: false,
+    })).toBe(false);
+    expect(isBoardableTerminalDeparture('barrie_transit', {
+      stop_id: '9005',
+    })).toBe(false);
   });
 
   test('uses fresh trip updates and ignores stale predictions', () => {
