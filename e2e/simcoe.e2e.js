@@ -19,7 +19,7 @@ test('regional map loads, focuses a route, and reveals live service status', asy
     body: JSON.stringify({
       bounds: [-80.23, 44.05, -79.4, 44.79],
       barrie_reveal_zoom: 11,
-      stops_reveal_zoom: 12,
+      stops_reveal_zoom: 13,
       poll_ms: 30000,
       feed_offline_after_ms: 900000,
       basemap: { url: '/region-tile/{z}/{x}/{y}.png', tile_size: 256, zoom_offset: 0, max_zoom: 19 },
@@ -40,8 +40,8 @@ test('regional map loads, focuses a route, and reveals live service status', asy
     contentType: 'application/json',
     body: JSON.stringify({ type: 'FeatureCollection', features: [{
       type: 'Feature',
-      properties: { stop_id: 'simcoe-linx:stop-4', stop_name: 'Wasaga Beach stop', agency_id: 'simcoe-linx', agency_name: 'Simcoe County LINX', route_ids: ['LINX-4'] },
-      geometry: { type: 'Point', coordinates: [-80.1, 44.51] },
+      properties: { stop_id: 'simcoe-linx:SCSTOP4', source_stop_id: 'SCSTOP4', stop_name: 'Wasaga Beach stop', agency_id: 'simcoe-linx', agency_name: 'Simcoe County LINX', route_ids: ['LINX-4'] },
+      geometry: { type: 'Point', coordinates: [-80.18, 44.5] },
     }] }),
   }));
   await page.route('**/api/simcoe/vehicles.json?*', (route) => route.fulfill({
@@ -64,11 +64,14 @@ test('regional map loads, focuses a route, and reveals live service status', asy
   await expect(page.locator('#map')).toHaveClass(/leaflet-container/);
   await expect(page.locator('#overall-status')).toHaveText('1 live vehicle');
   await expect(page.locator('.agency-card')).toHaveCount(4);
+  await expect(page.locator('.stop-marker')).toHaveCount(0);
   await page.getByRole('button', { name: /LINX 4/ }).click();
   await expect(page.locator('#selection-card')).toBeVisible();
   await expect(page.locator('#selection-title')).toHaveText('LINX 4');
   await expect(page.locator('.vehicle-marker')).toHaveCount(1);
   await expect(page.locator('.vehicle-marker__arrow')).toHaveCount(1);
   await expect(page.locator('.stop-marker')).toHaveCount(1);
+  await page.locator('.stop-marker').click();
+  await expect(page.locator('.leaflet-popup-content')).toContainText('Stop 4');
   expect(errors).toEqual([]);
 });

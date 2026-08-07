@@ -204,6 +204,9 @@ function renderStops() {
     if (selected && !(Array.isArray(properties.route_ids) && properties.route_ids.includes(selected.routeId))) return;
     const coordinates = feature.geometry && feature.geometry.coordinates;
     if (!coordinates || !viewBounds.contains([coordinates[1], coordinates[0]])) return;
+    const stopNumber = getStopNumber(properties);
+    const stopName = properties.stop_name || 'Transit stop';
+    const stopNumberLabel = stopNumber ? `Stop ${stopNumber}` : 'Stop number unavailable';
     const icon = L.divIcon({
       className: 'regional-stop-icon',
       html: '<span class="stop-marker" aria-hidden="true"></span>',
@@ -211,10 +214,26 @@ function renderStops() {
       iconAnchor: [9, 15],
       popupAnchor: [0, -16],
     });
-    L.marker([coordinates[1], coordinates[0]], { icon, keyboard: true })
-      .bindPopup(`<div class="popup-title">${escapeHtml(properties.stop_name || 'Transit stop')}</div><div class="popup-meta">${escapeHtml(properties.agency_name || AGENCY_LABELS[agencyId] || '')}</div>`)
+    L.marker([coordinates[1], coordinates[0]], {
+      icon,
+      keyboard: true,
+      title: `${stopNumberLabel}: ${stopName}`,
+    })
+      .bindTooltip(`${escapeHtml(stopNumberLabel)} · ${escapeHtml(stopName)}`, { direction: 'top', offset: [0, -14] })
+      .bindPopup(`<div class="popup-title">${escapeHtml(stopName)}</div><div class="popup-stop-number">${escapeHtml(stopNumberLabel)}</div><div class="popup-meta">${escapeHtml(properties.agency_name || AGENCY_LABELS[agencyId] || '')}</div>`)
       .addTo(state.stopLayer);
   });
+}
+
+function getStopNumber(properties) {
+  const publishedCode = String(properties && properties.stop_code || '').trim();
+  if (publishedCode) return publishedCode;
+  const sourceId = String(properties && properties.source_stop_id || '').trim();
+  if (!sourceId) return '';
+  if (String(properties && properties.agency_id || '') === 'simcoe-linx') {
+    return sourceId.replace(/^SCSTOP/i, '') || sourceId;
+  }
+  return sourceId;
 }
 
 function selectRoute(key) {

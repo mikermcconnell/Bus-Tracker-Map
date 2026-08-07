@@ -441,7 +441,7 @@ async function buildSimcoeRegion(options = {}) {
     generated_at: new Date().toISOString(),
     bounds: regionalBounds,
     barrie_reveal_zoom: 11,
-    stops_reveal_zoom: 12,
+    stops_reveal_zoom: 13,
     agencies: [
       { id: 'simcoe-linx', name: 'Simcoe County LINX' },
       { id: 'go-transit', name: 'GO Transit' },

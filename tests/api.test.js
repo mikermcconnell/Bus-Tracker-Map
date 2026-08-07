@@ -74,7 +74,7 @@ describe('API smoke tests', () => {
     writeJson(path.join(cacheDir, 'simcoe-region.json'), {
       bounds: [-80.23, 44.05, -79.4, 44.79],
       barrie_reveal_zoom: 11,
-      stops_reveal_zoom: 12,
+      stops_reveal_zoom: 13,
       agencies: [{ id: 'simcoe-linx', name: 'Simcoe County LINX' }],
     });
     writeJson(path.join(cacheDir, 'simcoe-region-routes.geojson'), {
