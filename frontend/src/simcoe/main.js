@@ -7,6 +7,12 @@ const AGENCY_LABELS = {
   'ontario-northland': 'Ontario Northland',
   'barrie-transit': 'Barrie Transit',
 };
+const AGENCY_LOGOS = {
+  'simcoe-linx': './assets/agency-simcoe-linx.png',
+  'go-transit': './assets/agency-go-transit.svg',
+  'ontario-northland': './assets/agency-ontario-northland.png',
+  'barrie-transit': './assets/agency-barrie-transit.png',
+};
 const SOURCE_KEYS = {
   'simcoe-linx': 'simcoe_linx',
   'go-transit': 'go_transit',
@@ -142,6 +148,11 @@ function renderServicePanel() {
       if (!checkbox.checked && state.selectedRoute && state.selectedRoute.startsWith(`${agencyId}:`)) clearSelection();
       refreshVisibility();
     });
+    const logo = document.createElement('img');
+    logo.className = 'agency-logo';
+    logo.src = AGENCY_LOGOS[agencyId];
+    logo.alt = '';
+    logo.setAttribute('aria-hidden', 'true');
     const title = document.createElement('div');
     title.innerHTML = `<span class="agency-name">${escapeHtml(AGENCY_LABELS[agencyId])}</span>` +
       `<span class="agency-meta">${routes.length} ${routes.length === 1 ? 'service' : 'services'} · ${Number(source.vehicle_count) || 0} live</span>`;
@@ -150,7 +161,7 @@ function renderServicePanel() {
     status.className = 'feed-state';
     status.dataset.state = feedState;
     status.textContent = feedState;
-    summary.append(checkbox, title, status);
+    summary.append(checkbox, logo, title, status);
     const routeList = document.createElement('div');
     routeList.className = 'route-list';
     routes.forEach((entry) => {

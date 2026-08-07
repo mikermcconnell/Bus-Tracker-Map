@@ -64,6 +64,10 @@ test('regional map loads, focuses a route, and reveals live service status', asy
   await expect(page.locator('#map')).toHaveClass(/leaflet-container/);
   await expect(page.locator('#overall-status')).toHaveText('1 live vehicle');
   await expect(page.locator('.agency-card')).toHaveCount(4);
+  await expect(page.locator('.agency-logo')).toHaveCount(4);
+  expect(await page.locator('.agency-logo').evaluateAll((logos) =>
+    logos.every((logo) => /agency-/.test(logo.getAttribute('src') || ''))
+  )).toBe(true);
   await expect(page.locator('.stop-marker')).toHaveCount(0);
   await page.getByRole('button', { name: /LINX 4/ }).click();
   await expect(page.locator('#selection-card')).toBeVisible();

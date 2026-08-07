@@ -53,6 +53,10 @@
       "destination": "/simcoe.html"
     },
     {
+      "source": "/simcoe-marker-options",
+      "destination": "/simcoe-marker-options.html"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/index.js"
     }

@@ -72,6 +72,13 @@ const entryPoints = [
     includeLeafletCss: true,
     templatePath: path.join(srcDir, 'simcoe', 'index.html'),
     outputHtml: 'simcoe.html'
+  },
+  {
+    key: 'simcoeMarkerMockup',
+    entryPath: path.join(srcDir, 'simcoe-marker-mockup', 'main.js'),
+    cssPath: path.join(srcDir, 'simcoe-marker-mockup', 'styles.css'),
+    templatePath: path.join(srcDir, 'simcoe-marker-mockup', 'index.html'),
+    outputHtml: 'simcoe-marker-options.html'
   }
 ];
 

@@ -50,8 +50,9 @@ h2 { margin: 0; font-size: 24px; }
 .reset-button:hover, .selection-card button:hover { border-color: var(--green); background: #eaf3fa; }
 .agency-list { display: grid; gap: 11px; }
 .agency-card { border: 1px solid var(--line); border-radius: 13px; overflow: hidden; background: white; }
-.agency-card__summary { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 12px; }
+.agency-card__summary { display: grid; grid-template-columns: auto 46px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 12px; }
 .agency-toggle { width: 19px; height: 19px; accent-color: var(--green); }
+.agency-logo { display: block; width: 46px; height: 34px; padding: 3px; object-fit: contain; border: 1px solid #e1e8ee; border-radius: 7px; background: white; }
 .agency-name { font-size: 14px; font-weight: 800; }
 .agency-meta { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
 .feed-state { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 850; text-transform: uppercase; letter-spacing: .05em; }
@@ -59,7 +60,7 @@ h2 { margin: 0; font-size: 24px; }
 .feed-state[data-state="live"]::before { background: #12a879; box-shadow: 0 0 0 3px #d9f4eb; }
 .feed-state[data-state="delayed"]::before { background: #d69c16; }
 .feed-state[data-state="offline"]::before { background: #c9503b; }
-.route-list { padding: 0 10px 10px 41px; display: grid; gap: 4px; }
+.route-list { padding: 0 10px 10px 95px; display: grid; gap: 4px; }
 .route-button { width: 100%; display: grid; grid-template-columns: 12px 1fr; align-items: center; gap: 8px; border: 0; border-radius: 8px; padding: 7px; text-align: left; color: var(--ink); background: transparent; cursor: pointer; font-size: 12px; }
 .route-button:hover, .route-button[aria-pressed="true"] { background: #e8f2f9; box-shadow: inset 3px 0 0 var(--gold); }
 .route-swatch { width: 12px; height: 5px; border-radius: 5px; background: var(--route-color, #176b57); }
@@ -99,6 +100,7 @@ h2 { margin: 0; font-size: 24px; }
   .panel-intro, .data-note { display: none; }
   .agency-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
   .agency-card__summary { padding: 9px; gap: 7px; }
+  .agency-logo { width: 40px; height: 30px; }
   .route-list { display: none; }
   .selection-card { margin-top: 10px; padding: 10px; }
   .map-key { bottom: 8px; font-size: 10px; }
