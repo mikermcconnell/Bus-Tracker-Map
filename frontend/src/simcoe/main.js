@@ -82,6 +82,7 @@ function createMap() {
   const basemap = state.config.basemap || {};
   L.tileLayer(basemap.url || 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: basemap.attribution || '&copy; OpenStreetMap contributors',
+    opacity: 0.8,
     tileSize: Number(basemap.tile_size) || 256,
     zoomOffset: Number(basemap.zoom_offset) || 0,
     maxZoom: Number(basemap.max_zoom) || 19,

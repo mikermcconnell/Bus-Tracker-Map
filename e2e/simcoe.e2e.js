@@ -62,6 +62,7 @@ test('regional map loads, focuses a route, and reveals live service status', asy
   await page.goto('/simcoe');
   await expect(page).toHaveTitle('Simcoe Region Live Transit');
   await expect(page.locator('#map')).toHaveClass(/leaflet-container/);
+  await expect(page.locator('.leaflet-tile-pane > .leaflet-layer')).toHaveCSS('opacity', '0.8');
   await expect(page.locator('#overall-status')).toHaveText('1 live vehicle');
   await expect(page.locator('.agency-card')).toHaveCount(4);
   await expect(page.locator('.agency-logo')).toHaveCount(4);
