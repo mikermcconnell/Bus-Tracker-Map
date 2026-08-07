@@ -123,6 +123,7 @@ function mergeTripUpdates(scheduled, realtime, nowMs, delayedAfterMs, offlineAft
       candidate.stop_id === departure.stop_id &&
       (!candidate.start_date || candidate.start_date === departure.service_date)
     ));
+    let predictionMatchType = updateIndex >= 0 ? 'exact' : null;
     // Some publishers rotate static trip IDs before their realtime producer does.
     // A route/stop/time match keeps predictions usable without crossing services.
     if (updateIndex < 0) {
@@ -135,6 +136,7 @@ function mergeTripUpdates(scheduled, realtime, nowMs, delayedAfterMs, offlineAft
         if (difference < nearestDifference) {
           nearestDifference = difference;
           updateIndex = index;
+          predictionMatchType = 'fallback';
         }
       });
     }
@@ -146,9 +148,76 @@ function mergeTripUpdates(scheduled, realtime, nowMs, delayedAfterMs, offlineAft
       ? update.departure_time
       : departure.scheduled_departure_time + (Number(update.delay_seconds) || 0);
     realtimeCount += 1;
-    return [{ ...departure, expected_departure_time: expected, departure_source: 'realtime', delay_seconds: Math.round(expected - departure.scheduled_departure_time) }];
+    return [{
+      ...departure,
+      expected_departure_time: expected,
+      departure_source: 'estimated',
+      prediction_source: 'trip_update',
+      prediction_trip_id: String(update.trip_id || ''),
+      prediction_match_type: predictionMatchType,
+      delay_seconds: Math.round(expected - departure.scheduled_departure_time),
+    }];
   });
   return { departures, source: { display_mode: realtimeCount ? (realtimeCount === departures.length ? 'realtime' : 'mixed') : 'scheduled', ...state } };
+}
+
+function normalizeEpochMilliseconds(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return numeric > 1e12 ? numeric : numeric * 1000;
+}
+
+function isFreshVehiclePosition(vehicle, nowMs, maxAgeMs) {
+  const reportedAt = normalizeEpochMilliseconds(vehicle && vehicle.last_reported);
+  if (!vehicle || vehicle.lat === null || vehicle.lat === undefined || vehicle.lon === null || vehicle.lon === undefined) return false;
+  const lat = Number(vehicle && vehicle.lat);
+  const lon = Number(vehicle && vehicle.lon);
+  if (!Number.isFinite(reportedAt) || !Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return false;
+  const ageMs = nowMs - reportedAt;
+  return ageMs >= -60_000 && ageMs <= maxAgeMs;
+}
+
+function applyVehicleEvidence(departures, vehiclePayload, nowMs, maxAgeMs) {
+  const vehicles = Array.isArray(vehiclePayload && vehiclePayload.vehicles)
+    ? vehiclePayload.vehicles
+    : [];
+  return departures.map((departure) => {
+    const hasPrediction = (
+      departure.departure_source === 'estimated' ||
+      departure.departure_source === 'realtime'
+    ) && Number.isFinite(Number(departure.expected_departure_time));
+    if (!hasPrediction) return departure;
+
+    const exactPrediction = (
+      departure.prediction_match_type === 'exact' &&
+      String(departure.prediction_trip_id || '') === String(departure.trip_id || '')
+    );
+    const matchingVehicle = exactPrediction
+      ? vehicles.find((vehicle) => (
+        String(vehicle.agency_id || '') === String(departure.agency_id || '') &&
+        String(vehicle.trip_id || '') === String(departure.trip_id || '') &&
+        (!vehicle.start_date || !departure.service_date || String(vehicle.start_date) === String(departure.service_date)) &&
+        isFreshVehiclePosition(vehicle, nowMs, maxAgeMs)
+      ))
+      : null;
+
+    if (!matchingVehicle) {
+      return {
+        ...departure,
+        departure_source: 'estimated',
+        live_vehicle_id: null,
+        live_vehicle_last_reported: null,
+      };
+    }
+
+    return {
+      ...departure,
+      departure_source: 'realtime',
+      live_vehicle_id: String(matchingVehicle.id || ''),
+      live_vehicle_last_reported: Number(matchingVehicle.last_reported),
+    };
+  });
 }
 
 function readGoTime(value) {
@@ -187,7 +256,9 @@ function parseGoNextService(payload, stopCode, nowMs) {
       platform: String(row.Platform || (train ? '1' : '7')), platform_type: 'platform', stop_id: stopCode,
       trip_id: String(row.TripNumber || row.TripId || ''), service_date: null,
       scheduled_departure_time: readGoTime(row.ScheduledDepartureTime || row.DepartureTime) || time,
-      expected_departure_time: time, departure_source: 'realtime',
+      expected_departure_time: time, departure_source: 'estimated',
+      prediction_source: 'go_next_service', prediction_trip_id: String(row.TripNumber || row.TripId || ''),
+      prediction_match_type: 'exact',
       delay_seconds: 0,
     }];
   }).filter((row) => row.expected_departure_time >= nowMs / 1000 - GRACE_SECONDS);
@@ -250,6 +321,9 @@ function createDeparturesService(options = {}) {
       simcoe_linx: options.urls && options.urls.linx ? fetchTripUpdates(options.urls.linx, metadata.simcoe_linx && metadata.simcoe_linx.terminal_stop_ids, { now: nowMs }) : Promise.reject(new Error('not_configured')),
       go_transit: fetchGoNextServices({ apiBase: options.goApiBase, apiKey: options.goApiKey, nowMs }),
     };
+    const vehiclePayloadPromise = typeof options.fetchVehiclePayload === 'function'
+      ? Promise.resolve().then(() => options.fetchVehiclePayload())
+      : Promise.resolve({ vehicles: [] });
     const keys = Object.keys(realtimePromises);
     const settled = await Promise.allSettled(keys.map((key) => realtimePromises[key]));
     const sources = {};
@@ -276,9 +350,34 @@ function createDeparturesService(options = {}) {
         sources[key] = merged.source;
       }
     });
-    const departures = selectScheduledDepartures(combined, nowMs, limit);
+    const vehicleResult = await Promise.allSettled([vehiclePayloadPromise]);
+    const vehiclePayload = vehicleResult[0].status === 'fulfilled'
+      ? vehicleResult[0].value
+      : { vehicles: [] };
+    const classified = applyVehicleEvidence(
+      combined,
+      vehiclePayload,
+      nowMs,
+      options.vehicleLiveMaxAgeMs || delayedAfterMs
+    );
+    const departures = selectScheduledDepartures(classified, nowMs, limit);
+    for (const [key, agency] of Object.entries(AGENCIES)) {
+      const agencyRows = departures.filter((row) => row.agency_id === agency.id);
+      sources[key].live_departure_count = agencyRows.filter((row) => row.departure_source === 'realtime').length;
+      sources[key].estimated_departure_count = agencyRows.filter((row) => row.departure_source === 'estimated').length;
+    }
     return { generated_at: nowMs, time_zone: TIME_ZONE, horizon_hours: HORIZON_HOURS, departures, sources };
   };
 }
 
-module.exports = { collectScheduledDepartures, createDeparturesService, freshness, mergeTripUpdates, parseGoNextService, readGoTime, selectScheduledDepartures };
+module.exports = {
+  applyVehicleEvidence,
+  collectScheduledDepartures,
+  createDeparturesService,
+  freshness,
+  isFreshVehiclePosition,
+  mergeTripUpdates,
+  parseGoNextService,
+  readGoTime,
+  selectScheduledDepartures,
+};

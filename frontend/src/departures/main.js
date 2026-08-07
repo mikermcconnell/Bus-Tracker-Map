@@ -67,11 +67,18 @@ function scheduledDeparture(row) {
 function displayedDeparture(row) {
   const expected = Number(row.expected_departure_time);
   const live = row.departure_source === 'realtime' && Number.isFinite(expected);
+  const estimated = row.departure_source === 'estimated' && Number.isFinite(expected);
   return {
-    time: live ? expected : scheduledDeparture(row),
+    time: live || estimated ? expected : scheduledDeparture(row),
     live,
-    label: live ? 'LIVE' : 'SCHED',
-    description: live ? 'Live prediction' : 'Scheduled time',
+    estimated,
+    state: live ? 'live' : estimated ? 'estimated' : 'scheduled',
+    label: live ? 'LIVE' : estimated ? 'EST' : 'SCHED',
+    description: live
+      ? 'Live prediction from this active vehicle and trip'
+      : estimated
+        ? 'Realtime estimate without a matching active vehicle'
+        : 'Scheduled time',
   };
 }
 
@@ -100,7 +107,7 @@ function renderDepartures(rows) {
       <div class="agency-logo">${logo}<span class="visually-hidden">${escapeHtml(agency.name)}</span></div>
       <div class="route">${escapeHtml(routeLabel)}</div>
       <div class="destination">${escapeHtml(String(row.destination || 'Destination unavailable').toUpperCase())}</div>
-      <div class="departure-time departure-time--${departure.live ? 'live' : 'scheduled'}">
+      <div class="departure-time departure-time--${departure.state}">
         <span class="departure-status" aria-label="${departure.description}">${departure.label}</span>
         <span data-departure-time="${departure.time}">${departureLabel(departure.time)}</span>
       </div>
@@ -113,8 +120,12 @@ function renderHealth(sources) {
   health.textContent = Object.keys(AGENCIES).map((key) => {
     const source = sources && sources[key] || {};
     const agency = AGENCIES[key];
-    const live = source.display_mode === 'realtime' || source.display_mode === 'mixed';
-    const status = source.realtime_status === 'delayed' ? 'Delayed feed' : live ? 'Live' : 'Schedule';
+    const feedActive = source.realtime_status === 'live';
+    const status = source.realtime_status === 'delayed'
+      ? 'Feed delayed'
+      : feedActive
+        ? 'Feed active'
+        : 'Schedule only';
     return `${agency.short} ${status}`;
   }).join('. ');
 }

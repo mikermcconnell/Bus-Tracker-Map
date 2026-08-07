@@ -147,7 +147,7 @@ test('departures board shows every departure in the one-hour window without scro
           platform_type: 'platform',
           scheduled_departure_time: nowSeconds + (index + 1) * 300,
           expected_departure_time: nowSeconds + (index + 1) * 300 + (index === 0 ? 120 : 0),
-          departure_source: index % 2 ? 'scheduled' : 'realtime',
+          departure_source: index === 2 ? 'estimated' : index % 2 ? 'scheduled' : 'realtime',
         })).reverse(),
         sources: {
           barrie_transit: { display_mode: 'mixed', realtime_status: 'live' },
@@ -167,6 +167,12 @@ test('departures board shows every departure in the one-hour window without scro
   await expect(page.locator('.departure').first().locator('.departure-status')).toHaveText('LIVE');
   await expect(page.locator('.departure').first().locator('[data-departure-time]')).toHaveAttribute('data-departure-time', String(nowSeconds + 420));
   await expect(page.locator('.departure').nth(1).locator('.departure-status')).toHaveText('SCHED');
+  await expect(page.locator('.departure').nth(2).locator('.departure-status')).toHaveText('EST');
+  await expect(page.locator('.departure').nth(2).locator('.departure-status'))
+    .toHaveAttribute('aria-label', 'Realtime estimate without a matching active vehicle');
+  await expect(page.locator('#service-health')).toContainText('GO Feed active');
+  await expect(page.locator('#service-health')).toContainText('ON Schedule only');
+  await expect(page.locator('#service-health')).toContainText('LINX Feed delayed');
   await expect(page.locator('.agency-ontario_northland .route')).toHaveText('201');
   await expect(page.locator('.departure').nth(10).locator('.route')).toHaveText('68');
   await expect(page.locator('.departure').nth(10).locator('.destination')).toHaveText('BARRIE / NEWMARKET');
@@ -289,6 +295,14 @@ test('platform map renders current assignments and updates markers in place', as
           agency_id: 'go-transit',
           next_departure_time: nowSeconds + 3600,
         },
+        {
+          platform: '2',
+          route_id: 'LINX-2',
+          route_label: '2',
+          destination: 'Wasaga Beach 45th St',
+          agency_id: 'simcoe-linx',
+          next_departure_time: nowSeconds + 1800,
+        },
       ],
     }),
   }));
@@ -385,21 +399,20 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(page.locator('.platform-card[data-platform="14"]')).toContainText('12B');
   await expect(page.locator('.platform-card[data-platform="14"]')).toContainText('Barrie South GO');
   await expect(page.locator('.platform-card[data-platform="14"] .platform-card__route').first()).toHaveCSS('background-color', 'rgb(244, 154, 193)');
-  await expect(page.locator('#map-platform-layer .map-platform-card')).toHaveCount(10);
+  await expect(page.locator('#map-platform-layer .map-platform-card')).toHaveCount(11);
   await expect(page.locator('.map-platform-card .map-platform-card__logo')).toHaveCount(0);
   await expect(page.locator('.map-platform-card[data-platform="6"] .map-platform-card__brand')).toHaveText('BT');
   await expect(page.locator('.map-platform-card[data-platform="7"] .map-platform-card__brand')).toHaveText('GO');
   await expect(page.locator('.map-platform-card[data-platform="8"] .map-platform-card__brand')).toHaveText('ON');
-  await expect(page.locator('#map-platform-layer .map-connection-card')).toHaveCount(2);
+  await expect(page.locator('.map-platform-card[data-platform="2"] .map-platform-card__brand')).toHaveText('LINX');
+  await expect(page.locator('.map-platform-card[data-platform="2"]')).toContainText('2');
+  await expect(page.locator('#map-platform-layer .map-connection-card')).toHaveCount(1);
   await expect(page.locator('.map-connection-card[data-platform="9"]')).toContainText('On Demand');
-  await expect(page.locator('.map-connection-card[data-platform="2"]')).toContainText('Wasaga Beach');
   await expect(page.locator('.map-connection-card[data-platform="9"] .map-connection-card__logo'))
     .toHaveAttribute('src', './assets/agency-barrie-transit.png');
-  await expect(page.locator('.map-connection-card[data-platform="2"] .map-connection-card__logo'))
-    .toHaveAttribute('src', './assets/agency-simcoe-linx.png');
   await expect(page.locator('.platform-connection[data-platform="9"]')).toContainText('Stop 900');
   await expect(page.locator('.platform-connection[data-platform="9"] .platform-connection__route')).toHaveText('C/D');
-  await expect(page.locator('.platform-connection[data-platform="2"]')).toContainText('Wasaga Beach');
+  await expect(page.locator('.platform-card[data-platform="2"]')).toContainText('Wasaga Beach');
   await expect(page.locator('#source-statuses .source-chip')).toHaveCount(1);
   await expect(page.locator('#source-statuses .source-chip')).toContainText('LINX');
   await expect(page.locator('#service-notice-text'))

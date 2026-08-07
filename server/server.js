@@ -206,6 +206,7 @@ const getDepartures = createDeparturesService({
   },
   goApiBase: METROLINX_API_BASE,
   goApiKey: METROLINX_API_KEY,
+  fetchVehiclePayload: () => getCombinedVehiclePayload(),
   delayedAfterMs: FEED_DELAYED_AFTER_MS,
   offlineAfterMs: FEED_OFFLINE_AFTER_MS,
 });

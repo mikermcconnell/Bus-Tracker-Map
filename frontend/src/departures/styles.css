@@ -148,6 +148,12 @@ h1,
   color: #fff;
 }
 
+.departure-time--estimated .departure-status {
+  border-color: #8a5a00;
+  background: #fff2c2;
+  color: #5c3c00;
+}
+
 .platform {
   justify-content: center;
   gap: clamp(6px, .65vw, 13px);
