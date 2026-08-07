@@ -188,6 +188,20 @@ test('departures board shows every departure in the one-hour window without scro
   });
   expect(logoAlignment.horizontal).toBeLessThanOrEqual(1);
   expect(logoAlignment.vertical).toBeLessThanOrEqual(1);
+  const routeAlignment = await page.locator('.route').evaluateAll((routes) => routes.map((route) => {
+    const cell = route.getBoundingClientRect();
+    const range = route.ownerDocument.createRange();
+    range.selectNodeContents(route);
+    const text = range.getBoundingClientRect();
+    return {
+      horizontal: Math.abs((cell.left + cell.width / 2) - (text.left + text.width / 2)),
+      vertical: Math.abs((cell.top + cell.height / 2) - (text.top + text.height / 2)),
+    };
+  }));
+  expect(Math.max(...routeAlignment.map((alignment) => alignment.horizontal)))
+    .toBeLessThanOrEqual(1);
+  expect(Math.max(...routeAlignment.map((alignment) => alignment.vertical)))
+    .toBeLessThanOrEqual(1);
   const trainLabelGap = await page.locator('.departure').first().evaluate((row) => {
     const textBounds = (element) => {
       const range = element.ownerDocument.createRange();
@@ -215,14 +229,26 @@ test('departures board shows every departure in the one-hour window without scro
     const train = pageDocument.querySelector('.agency-go_transit');
     const rightEdges = Array.from(pageDocument.querySelectorAll('.platform strong'))
       .map((number) => number.getBoundingClientRect().right);
+    const routeAlignment = Array.from(pageDocument.querySelectorAll('.route')).map((route) => {
+      const cell = route.getBoundingClientRect();
+      const text = textBounds(route);
+      return {
+        horizontal: Math.abs((cell.left + cell.width / 2) - (text.left + text.width / 2)),
+        vertical: Math.abs((cell.top + cell.height / 2) - (text.top + text.height / 2)),
+      };
+    });
     return {
       trainLabelGap: textBounds(train.querySelector('.destination')).left -
         textBounds(train.querySelector('.route')).right,
       platformNumberSpread: Math.max(...rightEdges) - Math.min(...rightEdges),
+      routeHorizontalSpread: Math.max(...routeAlignment.map((alignment) => alignment.horizontal)),
+      routeVerticalSpread: Math.max(...routeAlignment.map((alignment) => alignment.vertical)),
     };
   });
   expect(wideLayout.trainLabelGap).toBeGreaterThanOrEqual(24);
   expect(wideLayout.platformNumberSpread).toBeLessThanOrEqual(1);
+  expect(wideLayout.routeHorizontalSpread).toBeLessThanOrEqual(1);
+  expect(wideLayout.routeVerticalSpread).toBeLessThanOrEqual(1);
   await expect(page.locator('.agency-logo img').first()).toHaveCSS('mix-blend-mode', 'multiply');
   await expect(page.locator('.agency-simcoe_linx .agency-logo img')).toHaveCSS('mix-blend-mode', 'normal');
   const northlandLogo = page.locator('.agency-ontario_northland .agency-logo img');
