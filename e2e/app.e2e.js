@@ -147,7 +147,7 @@ test('departures board shows every departure in the one-hour window without scro
           platform_type: 'platform',
           scheduled_departure_time: nowSeconds + (index + 1) * 300,
           expected_departure_time: nowSeconds + (index + 1) * 300 + (index === 0 ? 120 : 0),
-          departure_source: index % 2 ? 'scheduled' : 'realtime',
+          departure_source: index === 2 ? 'estimated' : index % 2 ? 'scheduled' : 'realtime',
         })).reverse(),
         sources: {
           barrie_transit: { display_mode: 'mixed', realtime_status: 'live' },
@@ -167,6 +167,12 @@ test('departures board shows every departure in the one-hour window without scro
   await expect(page.locator('.departure').first().locator('.departure-status')).toHaveText('LIVE');
   await expect(page.locator('.departure').first().locator('[data-departure-time]')).toHaveAttribute('data-departure-time', String(nowSeconds + 420));
   await expect(page.locator('.departure').nth(1).locator('.departure-status')).toHaveText('SCHED');
+  await expect(page.locator('.departure').nth(2).locator('.departure-status')).toHaveText('EST');
+  await expect(page.locator('.departure').nth(2).locator('.departure-status'))
+    .toHaveAttribute('aria-label', 'Realtime estimate without a matching active vehicle');
+  await expect(page.locator('#service-health')).toContainText('GO Feed active');
+  await expect(page.locator('#service-health')).toContainText('ON Schedule only');
+  await expect(page.locator('#service-health')).toContainText('LINX Feed delayed');
   await expect(page.locator('.agency-ontario_northland .route')).toHaveText('201');
   await expect(page.locator('.departure').nth(10).locator('.route')).toHaveText('68');
   await expect(page.locator('.departure').nth(10).locator('.destination')).toHaveText('BARRIE / NEWMARKET');

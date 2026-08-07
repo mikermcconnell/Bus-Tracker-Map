@@ -2,8 +2,10 @@ import { describe, expect, test } from 'vitest';
 import departuresModule from '../server/departures.js';
 
 const {
+  applyVehicleEvidence,
   collectScheduledDepartures,
   freshness,
+  isFreshVehiclePosition,
   mergeTripUpdates,
   parseGoNextService,
   readGoTime,
@@ -50,18 +52,79 @@ describe('departure aggregation', () => {
       feed_timestamp: now / 1000 - 10,
       updates: [{ trip_id: 'outbound', stop_id: '9003', start_date: '20260804', departure_time: scheduled[0].scheduled_departure_time + 180 }],
     }, now, 120000, 900000);
-    expect(fresh.departures[0]).toMatchObject({ departure_source: 'realtime', delay_seconds: 180 });
+    expect(fresh.departures[0]).toMatchObject({
+      departure_source: 'estimated',
+      prediction_match_type: 'exact',
+      prediction_trip_id: 'outbound',
+      delay_seconds: 180,
+    });
     expect(fresh.source.realtime_status).toBe('live');
 
     const rotatedTripId = mergeTripUpdates(scheduled, {
       feed_timestamp: now / 1000 - 10,
       updates: [{ trip_id: 'publisher-old-id', route_id: '8A', stop_id: '9003', departure_time: scheduled[0].scheduled_departure_time + 60 }],
     }, now, 120000, 900000);
-    expect(rotatedTripId.departures[0]).toMatchObject({ departure_source: 'realtime', delay_seconds: 60 });
+    expect(rotatedTripId.departures[0]).toMatchObject({
+      departure_source: 'estimated',
+      prediction_match_type: 'fallback',
+      prediction_trip_id: 'publisher-old-id',
+      delay_seconds: 60,
+    });
 
     const stale = mergeTripUpdates(scheduled, { feed_timestamp: now / 1000 - 1000, updates: [] }, now, 120000, 900000);
     expect(stale.departures[0].departure_source).toBe('scheduled');
     expect(stale.source.realtime_status).toBe('offline');
+  });
+
+  test('shows LIVE only for an exact fresh trip prediction with a matching fresh vehicle position', () => {
+    const now = Date.parse('2026-08-04T16:00:00Z');
+    const scheduled = collectScheduledDepartures(metadata(), 'barrie_transit', now);
+    const exactPrediction = mergeTripUpdates(scheduled, {
+      feed_timestamp: now / 1000 - 10,
+      updates: [{
+        trip_id: 'outbound',
+        stop_id: '9003',
+        start_date: '20260804',
+        departure_time: scheduled[0].scheduled_departure_time + 180,
+      }],
+    }, now, 120000, 900000).departures;
+    const freshVehicle = {
+      id: 'bus-24', agency_id: 'barrie-transit', trip_id: 'outbound', start_date: '20260804',
+      lat: 44.37, lon: -79.69, last_reported: now / 1000 - 10,
+    };
+
+    expect(applyVehicleEvidence(exactPrediction, { vehicles: [freshVehicle] }, now, 120000)[0])
+      .toMatchObject({ departure_source: 'realtime', live_vehicle_id: 'bus-24' });
+    expect(applyVehicleEvidence(exactPrediction, { vehicles: [] }, now, 120000)[0].departure_source)
+      .toBe('estimated');
+    expect(applyVehicleEvidence(exactPrediction, {
+      vehicles: [{ ...freshVehicle, last_reported: now / 1000 - 121 }],
+    }, now, 120000)[0].departure_source).toBe('estimated');
+    expect(applyVehicleEvidence(exactPrediction, {
+      vehicles: [{ ...freshVehicle, trip_id: 'different-trip' }],
+    }, now, 120000)[0].departure_source).toBe('estimated');
+    expect(applyVehicleEvidence([{
+      ...exactPrediction[0], prediction_trip_id: 'different-trip',
+    }], { vehicles: [freshVehicle] }, now, 120000)[0].departure_source).toBe('estimated');
+    expect(isFreshVehiclePosition(freshVehicle, now, 120000)).toBe(true);
+    expect(isFreshVehiclePosition({ ...freshVehicle, lat: null }, now, 120000)).toBe(false);
+  });
+
+  test('never promotes a route-and-time fallback prediction to LIVE', () => {
+    const now = Date.parse('2026-08-04T16:00:00Z');
+    const scheduled = collectScheduledDepartures(metadata(), 'barrie_transit', now);
+    const fallbackPrediction = mergeTripUpdates(scheduled, {
+      feed_timestamp: now / 1000 - 10,
+      updates: [{
+        trip_id: 'publisher-old-id', route_id: '8A', stop_id: '9003',
+        departure_time: scheduled[0].scheduled_departure_time + 60,
+      }],
+    }, now, 120000, 900000).departures;
+    const result = applyVehicleEvidence(fallbackPrediction, { vehicles: [{
+      id: 'bus-24', agency_id: 'barrie-transit', trip_id: 'outbound',
+      lat: 44.37, lon: -79.69, last_reported: now / 1000 - 10,
+    }] }, now, 120000);
+    expect(result[0]).toMatchObject({ departure_source: 'estimated', live_vehicle_id: null });
   });
 
   test('reports delayed and missing realtime timestamps explicitly', () => {
@@ -107,6 +170,9 @@ describe('departure aggregation', () => {
     const rows = parseGoNextService({ NextService: { Lines: [{ LineCode: '68', Destination: 'Aurora GO', Platform: '7', TripNumber: '123', ScheduledDepartureTime: '/Date(1785859800000)/', ComputedDepartureTime: '/Date(1785860100000)/' }] } }, '08049', now);
     expect(readGoTime('/Date(1785860100000)/')).toBe(1785860100);
     expect(readGoTime('2026-08-04T11:40:34')).toBe(Date.parse('2026-08-04T15:40:34Z') / 1000);
-    expect(rows[0]).toMatchObject({ agency_id: 'go-transit', route_label: '68', destination: 'Barrie / Newmarket', platform: '7', departure_source: 'realtime' });
+    expect(rows[0]).toMatchObject({
+      agency_id: 'go-transit', route_label: '68', destination: 'Barrie / Newmarket', platform: '7',
+      departure_source: 'estimated', prediction_match_type: 'exact', prediction_trip_id: '123',
+    });
   });
 });
