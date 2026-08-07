@@ -242,10 +242,16 @@ function applyVehicleEvidence(departures, vehiclePayload, nowMs, maxAgeMs) {
       ))
       : null;
 
+    const barrieExactPrediction = (
+      String(departure.agency_id || '') === 'barrie-transit' &&
+      exactPrediction
+    );
+
     if (!matchingVehicle) {
       return {
         ...departure,
-        departure_source: 'estimated',
+        departure_source: barrieExactPrediction ? 'realtime' : 'estimated',
+        live_evidence: barrieExactPrediction ? 'trip_update' : null,
         live_vehicle_id: null,
         live_vehicle_last_reported: null,
       };
@@ -254,6 +260,7 @@ function applyVehicleEvidence(departures, vehiclePayload, nowMs, maxAgeMs) {
     return {
       ...departure,
       departure_source: 'realtime',
+      live_evidence: 'trip_update_and_vehicle',
       live_vehicle_id: String(matchingVehicle.id || ''),
       live_vehicle_last_reported: Number(matchingVehicle.last_reported),
     };
@@ -327,7 +334,14 @@ function selectScheduledDepartures(departures, nowMs, limit, horizonHours = HORI
   const end = nowMs / 1000 + horizonHours * 3600;
   const seenServices = new Set();
   return departures
-    .filter((row) => row.scheduled_departure_time >= start && row.scheduled_departure_time <= end)
+    .filter((row) => {
+      if (row.scheduled_departure_time < start || row.scheduled_departure_time > end) return false;
+      const hasPrediction = (
+        row.departure_source === 'estimated' ||
+        row.departure_source === 'realtime'
+      ) && Number.isFinite(Number(row.expected_departure_time));
+      return !hasPrediction || Number(row.expected_departure_time) >= start;
+    })
     .sort((a, b) => (
       a.scheduled_departure_time - b.scheduled_departure_time ||
       Number(a.platform) - Number(b.platform) ||
