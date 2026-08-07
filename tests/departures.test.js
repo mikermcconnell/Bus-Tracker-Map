@@ -78,7 +78,7 @@ describe('departure aggregation', () => {
     expect(stale.source.realtime_status).toBe('offline');
   });
 
-  test('shows LIVE only for an exact fresh trip prediction with a matching fresh vehicle position', () => {
+  test('keeps an exact fresh Barrie trip prediction LIVE when vehicle evidence briefly disappears', () => {
     const now = Date.parse('2026-08-04T16:00:00Z');
     const scheduled = collectScheduledDepartures(metadata(), 'barrie_transit', now);
     const exactPrediction = mergeTripUpdates(scheduled, {
@@ -96,20 +96,33 @@ describe('departure aggregation', () => {
     };
 
     expect(applyVehicleEvidence(exactPrediction, { vehicles: [freshVehicle] }, now, 120000)[0])
-      .toMatchObject({ departure_source: 'realtime', live_vehicle_id: 'bus-24' });
-    expect(applyVehicleEvidence(exactPrediction, { vehicles: [] }, now, 120000)[0].departure_source)
-      .toBe('estimated');
+      .toMatchObject({
+        departure_source: 'realtime', live_evidence: 'trip_update_and_vehicle', live_vehicle_id: 'bus-24',
+      });
+    expect(applyVehicleEvidence(exactPrediction, { vehicles: [] }, now, 120000)[0])
+      .toMatchObject({ departure_source: 'realtime', live_evidence: 'trip_update', live_vehicle_id: null });
     expect(applyVehicleEvidence(exactPrediction, {
       vehicles: [{ ...freshVehicle, last_reported: now / 1000 - 121 }],
-    }, now, 120000)[0].departure_source).toBe('estimated');
+    }, now, 120000)[0]).toMatchObject({ departure_source: 'realtime', live_evidence: 'trip_update' });
     expect(applyVehicleEvidence(exactPrediction, {
       vehicles: [{ ...freshVehicle, trip_id: 'different-trip' }],
-    }, now, 120000)[0].departure_source).toBe('estimated');
+    }, now, 120000)[0]).toMatchObject({ departure_source: 'realtime', live_evidence: 'trip_update' });
     expect(applyVehicleEvidence([{
       ...exactPrediction[0], prediction_trip_id: 'different-trip',
     }], { vehicles: [freshVehicle] }, now, 120000)[0].departure_source).toBe('estimated');
     expect(isFreshVehiclePosition(freshVehicle, now, 120000)).toBe(true);
     expect(isFreshVehiclePosition({ ...freshVehicle, lat: null }, now, 120000)).toBe(false);
+  });
+
+  test('still requires fresh vehicle evidence for other agencies', () => {
+    const now = Date.parse('2026-08-04T16:00:00Z');
+    const exactPrediction = {
+      agency_id: 'simcoe-linx', trip_id: 'linx-trip', service_date: '20260804',
+      expected_departure_time: now / 1000 + 600, departure_source: 'estimated',
+      prediction_match_type: 'exact', prediction_trip_id: 'linx-trip',
+    };
+    expect(applyVehicleEvidence([exactPrediction], { vehicles: [] }, now, 120000)[0])
+      .toMatchObject({ departure_source: 'estimated', live_evidence: null });
   });
 
   test('never promotes a route-and-time fallback prediction to LIVE', () => {
@@ -186,6 +199,7 @@ describe('departure aggregation', () => {
     const start = now / 1000;
     const rows = selectScheduledDepartures([
       { id: 'expired', agency_id: 'barrie-transit', route_label: '7A', destination: 'Grove', platform: '6', scheduled_departure_time: start - 1, expected_departure_time: start + 300 },
+      { id: 'prediction-expired', agency_id: 'barrie-transit', route_label: '7A', destination: 'Grove', platform: '6', scheduled_departure_time: start + 60, expected_departure_time: start - 1, departure_source: 'realtime' },
       { id: 'first', agency_id: 'barrie-transit', route_label: '12B', destination: 'Barrie South GO', platform: '14', scheduled_departure_time: start + 300, expected_departure_time: start + 900 },
       { id: 'duplicate', agency_id: 'barrie-transit', route_label: '12B', destination: 'Barrie South GO', platform: '14', scheduled_departure_time: start + 400, expected_departure_time: start + 400 },
       { id: 'second', agency_id: 'ontario-northland', route_label: '101', destination: 'North Bay', platform: '8', scheduled_departure_time: start + 600, expected_departure_time: start + 600 },
