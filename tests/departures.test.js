@@ -220,6 +220,7 @@ describe('departure aggregation', () => {
       id: 'simcoe-linx:6017', agency_id: 'simcoe-linx', route_id: 'LINX-2',
       source_route_id: '2', trip_id: 'inbound-trip', start_date: '20260807',
       trip_headsign: 'Barrie Allandale Bus Station', terminal_stop_id: 'SCSTOP210',
+      terminal_progress_status: 'approaching',
       terminal_departure_time: Date.parse('2026-08-07T17:31:24Z') / 1000,
       lat: 44.37, lon: -79.69, last_reported: now / 1000 - 10,
     };
@@ -236,6 +237,7 @@ describe('departure aggregation', () => {
       { trip_headsign: 'Wasaga Beach, 25 45th Street S' },
       { start_date: '20260806' },
       { terminal_stop_id: 'DIFFERENT_STOP' },
+      { terminal_progress_status: 'departed' },
       { terminal_departure_time: Date.parse('2026-08-07T18:10:00Z') / 1000 },
       { last_reported: now / 1000 - 121 },
     ];
@@ -244,6 +246,10 @@ describe('departure aggregation', () => {
         vehicles: [{ ...inboundVehicle, ...changes }],
       }, now, 120000)[0].departure_source).toBe('estimated');
     });
+
+    expect(applyVehicleEvidence([exactPrediction], {
+      vehicles: [inboundVehicle, { ...inboundVehicle, id: 'simcoe-linx:6018' }],
+    }, now, 120000)[0].departure_source).toBe('estimated');
   });
 
   test('never promotes a route-and-time fallback prediction to LIVE', () => {
