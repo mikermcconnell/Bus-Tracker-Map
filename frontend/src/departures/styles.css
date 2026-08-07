@@ -131,6 +131,10 @@ h1,
   text-overflow: ellipsis;
 }
 
+.agency-go_transit .route + .destination {
+  padding-left: clamp(20px, 1.6vw, 32px);
+}
+
 .departure-time {
   gap: clamp(5px, .55vw, 10px);
   font-variant-numeric: tabular-nums;
@@ -153,7 +157,9 @@ h1,
 }
 
 .platform {
-  justify-content: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: clamp(6px, .65vw, 13px);
   padding-left: 5px;
   padding-right: 5px;
@@ -165,11 +171,14 @@ h1,
 .departure:nth-child(even) .platform { background: #242525; }
 
 .platform span {
+  text-align: right;
   font-size: clamp(18px, 1.875vw, 36px);
   font-weight: 400;
 }
 
 .platform strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
   font-size: clamp(34px, 3.47vw, 67px);
   font-weight: 700;
   line-height: 1;

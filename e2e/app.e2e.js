@@ -143,8 +143,8 @@ test('departures board shows every departure in the one-hour window without scro
           route_id: index === 5 ? '201' : undefined,
           route_label: index === 0 ? 'TRAIN' : index === 10 ? '68' : index === 5 ? 'ONTC' : index === 4 ? '2' : '8A',
           destination: index === 0 ? 'Toronto / Union Station' : index === 10 ? 'Barrie / Newmarket' : index === 5 ? 'North Bay' : index === 4 ? 'Wasaga Beach 45th St' : 'Yonge Southbound',
-          platform: index === 0 ? '1' : index === 10 ? '7' : index === 5 ? '8' : index === 4 ? '2' : '3',
-          platform_type: 'platform',
+          platform: index === 0 ? '1' : index === 8 ? '14' : index === 10 ? '7' : index === 5 ? '8' : index === 4 ? '2' : '3',
+          platform_type: index === 8 ? 'stop' : 'platform',
           scheduled_departure_time: nowSeconds + (index + 1) * 300,
           expected_departure_time: nowSeconds + (index + 1) * 300 + (index === 0 ? 120 : 0),
           departure_source: index === 2 ? 'estimated' : index % 2 ? 'scheduled' : 'realtime',
@@ -188,6 +188,41 @@ test('departures board shows every departure in the one-hour window without scro
   });
   expect(logoAlignment.horizontal).toBeLessThanOrEqual(1);
   expect(logoAlignment.vertical).toBeLessThanOrEqual(1);
+  const trainLabelGap = await page.locator('.departure').first().evaluate((row) => {
+    const textBounds = (element) => {
+      const range = element.ownerDocument.createRange();
+      range.selectNodeContents(element);
+      return range.getBoundingClientRect();
+    };
+    const route = textBounds(row.querySelector('.route'));
+    const destination = textBounds(row.querySelector('.destination'));
+    return destination.left - route.right;
+  });
+  expect(trainLabelGap).toBeGreaterThanOrEqual(14);
+  const platformNumberRightEdges = await page.locator('.platform strong').evaluateAll((numbers) => (
+    numbers.map((number) => number.getBoundingClientRect().right)
+  ));
+  expect(Math.max(...platformNumberRightEdges) - Math.min(...platformNumberRightEdges))
+    .toBeLessThanOrEqual(1);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  const wideLayout = await page.locator('body').evaluate((body) => {
+    const pageDocument = body.ownerDocument;
+    const textBounds = (element) => {
+      const range = pageDocument.createRange();
+      range.selectNodeContents(element);
+      return range.getBoundingClientRect();
+    };
+    const train = pageDocument.querySelector('.agency-go_transit');
+    const rightEdges = Array.from(pageDocument.querySelectorAll('.platform strong'))
+      .map((number) => number.getBoundingClientRect().right);
+    return {
+      trainLabelGap: textBounds(train.querySelector('.destination')).left -
+        textBounds(train.querySelector('.route')).right,
+      platformNumberSpread: Math.max(...rightEdges) - Math.min(...rightEdges),
+    };
+  });
+  expect(wideLayout.trainLabelGap).toBeGreaterThanOrEqual(24);
+  expect(wideLayout.platformNumberSpread).toBeLessThanOrEqual(1);
   await expect(page.locator('.agency-logo img').first()).toHaveCSS('mix-blend-mode', 'multiply');
   await expect(page.locator('.agency-simcoe_linx .agency-logo img')).toHaveCSS('mix-blend-mode', 'normal');
   const northlandLogo = page.locator('.agency-ontario_northland .agency-logo img');
