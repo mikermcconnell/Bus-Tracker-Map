@@ -7,6 +7,9 @@ const warning = document.getElementById('warning');
 const updated = document.getElementById('last-updated');
 const clockTime = document.getElementById('clock-time');
 const FAILURE_RETENTION_MS = 15 * 60 * 1000;
+const REQUEST_TIMEOUT_MS = 12 * 1000;
+const WATCHDOG_STALE_MS = 5 * 60 * 1000;
+const WATCHDOG_INTERVAL_MS = 60 * 1000;
 const MAX_DEPARTURES = 11;
 const AGENCIES = {
   barrie_transit: { name: 'Barrie Transit', short: 'BT', logo: 'agency-barrie-transit.png' },
@@ -16,6 +19,7 @@ const AGENCIES = {
 };
 let pollMs = 10000;
 let lastGoodAt = 0;
+const startedAt = Date.now();
 
 function escapeHtml(value) {
   return String(value === null || value === undefined ? '' : value)
@@ -46,9 +50,10 @@ function renderTimes() {
 }
 
 function platform(row) {
+  const rawNumber = String(row.platform || '');
   return {
     label: row.platform_type === 'stop' ? 'Stop' : 'Platform',
-    number: String(row.platform || '').padStart(2, '0'),
+    number: rawNumber.length < 2 ? `0${rawNumber}` : rawNumber,
   };
 }
 
@@ -56,7 +61,7 @@ function publicRouteLabel(row, agencyKey) {
   const label = String(row.route_label || '');
   if (agencyKey !== 'ontario_northland' || label.toUpperCase() !== 'ONTC') return label;
   const candidates = [row.route_id, String(row.trip_id || '').split(':')[0]];
-  return String(candidates.find((value) => /^(?:101|102|201|202)$/.test(String(value))) || label);
+  return String(candidates.filter((value) => /^(?:101|102|201|202)$/.test(String(value)))[0] || label);
 }
 
 function scheduledDeparture(row) {
@@ -72,7 +77,9 @@ function displayedDeparture(row) {
     state: live ? 'live' : 'scheduled',
     label: live ? 'LIVE' : 'SCHED',
     description: live
-      ? 'Live prediction from this active vehicle and trip'
+      ? row.live_evidence === 'trip_update_and_terminal_handoff_vehicle'
+        ? 'Live prediction based on the active inbound Route 2 vehicle and its Allandale handoff'
+        : 'Live prediction from this active vehicle and trip'
       : 'Scheduled time',
   };
 }
@@ -127,7 +134,7 @@ function renderHealth(sources) {
 
 async function refresh() {
   try {
-    const payload = await client.fetchDepartures(MAX_DEPARTURES);
+    const payload = await client.fetchDepartures(MAX_DEPARTURES, { timeoutMs: REQUEST_TIMEOUT_MS });
     lastGoodAt = Date.now();
     renderDepartures(Array.isArray(payload.departures) ? payload.departures : []);
     renderHealth(payload.sources || {});
@@ -146,7 +153,7 @@ async function refresh() {
 
 async function start() {
   try {
-    const config = await client.fetchConfig();
+    const config = await client.fetchConfig({ timeoutMs: REQUEST_TIMEOUT_MS });
     if (Number.isFinite(Number(config.poll_ms))) pollMs = Math.max(5000, Number(config.poll_ms));
     if (config.base_path) client.setBasePath(config.base_path);
   } catch (error) {
@@ -157,4 +164,8 @@ async function start() {
 
 formatClock();
 window.setInterval(formatClock, 1000);
+window.setInterval(() => {
+  const lastHealthyAt = lastGoodAt || startedAt;
+  if (Date.now() - lastHealthyAt > WATCHDOG_STALE_MS) window.location.reload();
+}, WATCHDOG_INTERVAL_MS);
 start();
