@@ -207,6 +207,45 @@ describe('departure aggregation', () => {
       .toMatchObject({ departure_source: 'estimated', live_evidence: null });
   });
 
+  test('recognizes a fresh inbound LINX vehicle as the Allandale outbound handoff', () => {
+    const now = Date.parse('2026-08-07T17:28:00Z');
+    const exactPrediction = {
+      agency_id: 'simcoe-linx', route_id: '2', stop_id: 'SCSTOP210',
+      trip_id: 'outbound-trip', service_date: '20260807',
+      expected_departure_time: Date.parse('2026-08-07T17:31:46Z') / 1000,
+      departure_source: 'estimated', prediction_match_type: 'exact',
+      prediction_trip_id: 'outbound-trip',
+    };
+    const inboundVehicle = {
+      id: 'simcoe-linx:6017', agency_id: 'simcoe-linx', route_id: 'LINX-2',
+      source_route_id: '2', trip_id: 'inbound-trip', start_date: '20260807',
+      trip_headsign: 'Barrie Allandale Bus Station', terminal_stop_id: 'SCSTOP210',
+      terminal_departure_time: Date.parse('2026-08-07T17:31:24Z') / 1000,
+      lat: 44.37, lon: -79.69, last_reported: now / 1000 - 10,
+    };
+
+    expect(applyVehicleEvidence([exactPrediction], { vehicles: [inboundVehicle] }, now, 120000)[0])
+      .toMatchObject({
+        departure_source: 'realtime',
+        live_evidence: 'trip_update_and_terminal_handoff_vehicle',
+        live_vehicle_id: 'simcoe-linx:6017',
+      });
+
+    const rejectedVariants = [
+      { source_route_id: '6', route_id: 'LINX-6' },
+      { trip_headsign: 'Wasaga Beach, 25 45th Street S' },
+      { start_date: '20260806' },
+      { terminal_stop_id: 'DIFFERENT_STOP' },
+      { terminal_departure_time: Date.parse('2026-08-07T18:10:00Z') / 1000 },
+      { last_reported: now / 1000 - 121 },
+    ];
+    rejectedVariants.forEach((changes) => {
+      expect(applyVehicleEvidence([exactPrediction], {
+        vehicles: [{ ...inboundVehicle, ...changes }],
+      }, now, 120000)[0].departure_source).toBe('estimated');
+    });
+  });
+
   test('never promotes a route-and-time fallback prediction to LIVE', () => {
     const now = Date.parse('2026-08-04T16:00:00Z');
     const scheduled = collectScheduledDepartures(metadata(), 'barrie_transit', now);
@@ -280,7 +319,7 @@ describe('departure aggregation', () => {
     const now = Date.parse('2026-08-04T16:00:00Z');
     const start = now / 1000;
     const rows = selectScheduledDepartures([
-      { id: 'expired', agency_id: 'barrie-transit', route_label: '7A', destination: 'Grove', platform: '6', scheduled_departure_time: start - 1, expected_departure_time: start + 300 },
+      { id: 'expired', agency_id: 'barrie-transit', route_label: '7A', destination: 'Grove', platform: '6', scheduled_departure_time: start - 1, expected_departure_time: start + 300, departure_source: 'realtime' },
       { id: 'prediction-expired', agency_id: 'barrie-transit', route_label: '7A', destination: 'Grove', platform: '6', scheduled_departure_time: start + 60, expected_departure_time: start - 1, departure_source: 'realtime' },
       { id: 'first', agency_id: 'barrie-transit', route_label: '12B', destination: 'Barrie South GO', platform: '14', scheduled_departure_time: start + 300, expected_departure_time: start + 900 },
       { id: 'duplicate', agency_id: 'barrie-transit', route_label: '12B', destination: 'Barrie South GO', platform: '14', scheduled_departure_time: start + 400, expected_departure_time: start + 400 },
@@ -288,7 +327,7 @@ describe('departure aggregation', () => {
       { id: 'same-time-later-platform', agency_id: 'barrie-transit', route_label: '8B', destination: 'Crosstown', platform: '12', scheduled_departure_time: start + 600, expected_departure_time: start + 600 },
       { id: 'outside-window', agency_id: 'ontario-northland', route_label: '201', destination: 'Sudbury', platform: '8', scheduled_departure_time: start + 3601, expected_departure_time: start + 3601 },
     ], now, 10);
-    expect(rows.map((row) => row.id)).toEqual(['first', 'second', 'same-time-later-platform']);
+    expect(rows.map((row) => row.id)).toEqual(['expired', 'first', 'second', 'same-time-later-platform']);
   });
 
   test('uses public-facing Ontario Northland route numbers and target LINX wording', () => {

@@ -36,8 +36,7 @@ function formatClock() {
 function departureLabel(epochSeconds) {
   const seconds = Math.round(Number(epochSeconds) - Date.now() / 1000);
   if (seconds <= 45) return 'Due';
-  if (seconds < 3600) return `${Math.max(1, Math.round(seconds / 60))} min`;
-  return new Intl.DateTimeFormat('en-CA', { hour: 'numeric', minute: '2-digit' }).format(new Date(epochSeconds * 1000));
+  return `${Math.max(1, Math.round(seconds / 60))} min`;
 }
 
 function renderTimes() {
