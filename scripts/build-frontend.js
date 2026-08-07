@@ -64,6 +64,14 @@ const entryPoints = [
     cssPath: path.join(srcDir, 'departures', 'styles.css'),
     templatePath: path.join(srcDir, 'departures', 'index.html'),
     outputHtml: 'departures.html'
+  },
+  {
+    key: 'simcoe',
+    entryPath: path.join(srcDir, 'simcoe', 'main.js'),
+    cssPath: path.join(srcDir, 'simcoe', 'styles.css'),
+    includeLeafletCss: true,
+    templatePath: path.join(srcDir, 'simcoe', 'index.html'),
+    outputHtml: 'simcoe.html'
   }
 ];
 

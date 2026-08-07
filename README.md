@@ -62,6 +62,12 @@ Open [http://localhost:3000](http://localhost:3000) in a browser (or on the Smar
 
 The terminal-focused displays are available at `/platform.map` and `/batt.map`. Both consume the same merged, freshness-checked vehicle endpoint and show Ontario Northland and GO vehicles when they enter the calibrated Allandale platform area. The platform display reads `/api/terminal-layout`, overlays current GTFS-derived bay assignments, keeps live markers aligned at 16:9 and 4:3, and marks Platform 14 as having no scheduled service when it is absent from the current Barrie feed.
 
+## Simcoe regional map
+
+Open [http://localhost:3000/simcoe](http://localhost:3000/simcoe) locally or `/simcoe` on the production site. **Simcoe Region Live Transit** is an interactive regional view covering Barrie Transit, all six Simcoe County LINX routes, GO route 68 and Barrie line trains, and Barrie-serving Ontario Northland routes. Regional services appear at the county scale; detailed Barrie routes and stops appear as the user zooms in or chooses a service.
+
+The regional page uses separate `/api/simcoe/*` data so expanding the county view does not change the existing Allandale-focused map or TV displays.
+
 ## Allandale departure board
 
 Open [http://localhost:3000/departures](http://localhost:3000/departures) locally or `/departures` on the production site. The TV-safe board displays the next 10 outbound departures within 24 hours for Barrie Transit, Ontario Northland, GO buses and trains, and Simcoe LINX route 2.
@@ -92,6 +98,7 @@ For the terminal TV, disable its sleep/screensaver setting and bookmark the prod
 - `npm run build:simcoe` - refresh Barrie-serving Simcoe LINX routes and live-map trip metadata.
 - `npm run build:go` - refresh only GO route 68 and Barrie line data serving Allandale.
 - `npm run build:linx` - refresh only Simcoe LINX route 2 metadata at Allandale.
+- `npm run build:region` - refresh the separate Simcoe regional routes, stops, and live-feed metadata.
 - `npm run build:frontend` - produce hashed frontend assets in `frontend/dist/`.
 - `npm run watch:frontend` - development watcher that rebuilds the frontend bundle on changes.
 - `npm start` - run the Express server.

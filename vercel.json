@@ -49,6 +49,10 @@
       "destination": "/departures.html"
     },
     {
+      "source": "/simcoe",
+      "destination": "/simcoe.html"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/index.js"
     }

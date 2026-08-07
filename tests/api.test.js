@@ -70,6 +70,29 @@ describe('API smoke tests', () => {
         }
       ]
     });
+
+    writeJson(path.join(cacheDir, 'simcoe-region.json'), {
+      bounds: [-80.23, 44.05, -79.4, 44.79],
+      barrie_reveal_zoom: 11,
+      stops_reveal_zoom: 12,
+      agencies: [{ id: 'simcoe-linx', name: 'Simcoe County LINX' }],
+    });
+    writeJson(path.join(cacheDir, 'simcoe-region-routes.geojson'), {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: [[-80.1, 44.5], [-79.7, 44.4]] },
+        properties: { route_id: 'LINX-4', agency_id: 'simcoe-linx' },
+      }],
+    });
+    writeJson(path.join(cacheDir, 'simcoe-region-stops.geojson'), {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [-80.1, 44.5] },
+        properties: { stop_id: 'simcoe-linx:4', agency_id: 'simcoe-linx', stop_name: 'Regional stop' },
+      }],
+    });
   });
 
   afterEach(() => {
@@ -184,6 +207,22 @@ describe('API smoke tests', () => {
       opacity: 1,
     });
     expect(res.body.tiles).toBe(res.body.basemap.url);
+  });
+
+  test('serves the separate Simcoe regional map profile', async () => {
+    const app = await initApp();
+    const [config, routes, stops, vehicles] = await Promise.all([
+      request(app).get('/api/simcoe/config'),
+      request(app).get('/api/simcoe/routes.geojson'),
+      request(app).get('/api/simcoe/stops.geojson'),
+      request(app).get('/api/simcoe/vehicles.json'),
+    ]);
+    expect(config.status).toBe(200);
+    expect(config.body.bounds).toEqual([-80.23, 44.05, -79.4, 44.79]);
+    expect(routes.body.features[0].properties.route_id).toBe('LINX-4');
+    expect(stops.body.features[0].properties.stop_name).toBe('Regional stop');
+    expect(vehicles.status).toBe(200);
+    expect(vehicles.body.vehicles).toEqual([]);
   });
 
   test('returns a 512-pixel Mapbox TV basemap when all settings are configured', async () => {

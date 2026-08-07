@@ -287,6 +287,25 @@ function readFeatureCollection(filePath) {
   return null;
 }
 
+function readJsonFile(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (err) {
+    console.error('Failed to read JSON:', filePath, err.message || err);
+    return null;
+  }
+}
+
+function isInsideMapBounds(vehicle, bounds) {
+  if (!vehicle || !Array.isArray(bounds) || bounds.length !== 4) return false;
+  const lat = Number(vehicle.lat);
+  const lon = Number(vehicle.lon);
+  return Number.isFinite(lat) && Number.isFinite(lon) &&
+    lon >= Number(bounds[0]) && lon <= Number(bounds[2]) &&
+    lat >= Number(bounds[1]) && lat <= Number(bounds[3]);
+}
+
 function sendMergedRoutes(res) {
   const barriePath = path.join(CACHE_DIR, 'routes.geojson');
   const northlandPath = path.join(CACHE_DIR, 'ontario-northland-routes.geojson');
@@ -523,6 +542,95 @@ async function getCombinedVehiclePayload() {
   return { ...data, ...freshness };
 }
 
+async function getSimcoeRegionVehiclePayload() {
+  const regionConfig = readJsonFile(path.join(CACHE_DIR, 'simcoe-region.json'));
+  if (!regionConfig || !Array.isArray(regionConfig.bounds)) {
+    const error = new Error('Simcoe regional data is not built');
+    error.statusCode = 503;
+    throw error;
+  }
+  const bounds = regionConfig.bounds;
+  const barriePromise = RT_URL
+    ? fetchBarrieRealtime()
+    : Promise.resolve({ generated_at: Date.now(), feed_timestamp: null, vehicles: [] });
+  const northlandPromise = fetchOntarioNorthlandRealtime({
+    enabled: ONTARIO_NORTHLAND_ENABLED,
+    cacheDir: CACHE_DIR,
+    vehiclesUrl: ONTARIO_NORTHLAND_RT_URL,
+    tripUpdatesUrl: ONTARIO_NORTHLAND_TRIP_UPDATES_URL,
+    alertsUrl: ONTARIO_NORTHLAND_ALERTS_URL,
+    alertsEnabled: false,
+  });
+  const goPromise = fetchGoTransitRealtime({
+    enabled: GO_TRANSIT_ENABLED,
+    apiKey: METROLINX_API_KEY,
+    proxyUrl: GO_TRANSIT_PROXY_URL,
+    apiBase: METROLINX_API_BASE,
+    cacheDir: CACHE_DIR,
+    metadataFile: 'simcoe-region-go.json',
+    routesFile: 'simcoe-region-routes.geojson',
+    cacheKey: 'simcoe-region',
+  });
+  const linxPromise = fetchSimcoeLinxRealtime({
+    enabled: SIMCOE_LINX_ENABLED,
+    cacheDir: CACHE_DIR,
+    vehiclesUrl: SIMCOE_LINX_RT_URL,
+    tripUpdatesUrl: SIMCOE_LINX_TRIP_UPDATES_URL,
+    alertsUrl: SIMCOE_LINX_ALERTS_URL,
+    metadataFile: 'simcoe-region-linx.json',
+    cacheKey: 'simcoe-region',
+  });
+  const results = await Promise.allSettled([barriePromise, northlandPromise, goPromise, linxPromise]);
+  const sourceKeys = ['barrie_transit', 'ontario_northland', 'go_transit', 'simcoe_linx'];
+  const sourceNames = ['Barrie Transit', 'Ontario Northland', 'GO Transit', 'Simcoe County LINX'];
+  const configured = [Boolean(RT_URL), ONTARIO_NORTHLAND_ENABLED, GO_TRANSIT_ENABLED, SIMCOE_LINX_ENABLED];
+  const payloads = results.map((result) => result.status === 'fulfilled'
+    ? result.value
+    : { generated_at: Date.now(), feed_timestamp: null, vehicles: [], alerts: [], fetch_error: true });
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      console.error(`[simcoe-region:${sourceKeys[index]}] Feed unavailable:`, result.reason && result.reason.message || result.reason);
+    }
+  });
+  payloads[0] = {
+    ...payloads[0],
+    vehicles: (payloads[0].vehicles || []).filter((vehicle) => isInsideMapBounds(vehicle, bounds)),
+  };
+  payloads[1] = {
+    ...payloads[1],
+    vehicles: (payloads[1].vehicles || []).filter((vehicle) => isInsideMapBounds(vehicle, bounds)),
+  };
+  const sources = {};
+  payloads.forEach((payload, index) => {
+    const freshness = assessVehicleFeedFreshness(payload, {
+      configured: configured[index],
+      delayedAfterMs: FEED_DELAYED_AFTER_MS,
+      offlineAfterMs: FEED_OFFLINE_AFTER_MS,
+      preferFeedTimestamp: sourceKeys[index] === 'go_transit',
+    });
+    sources[sourceKeys[index]] = {
+      agency_name: sourceNames[index],
+      vehicle_count: (payload.vehicles || []).length,
+      ...freshness,
+    };
+  });
+  const data = {
+    generated_at: Date.now(),
+    feed_timestamp: maxTimestamp(payloads.map((payload) => payload.feed_timestamp)),
+    vehicles: payloads.flatMap((payload) => payload.vehicles || []),
+    alerts: payloads.flatMap((payload) => payload.alerts || []),
+    sources,
+  };
+  return {
+    ...data,
+    ...assessVehicleFeedFreshness(data, {
+      configured: configured.some(Boolean),
+      delayedAfterMs: FEED_DELAYED_AFTER_MS,
+      offlineAfterMs: FEED_OFFLINE_AFTER_MS,
+    }),
+  };
+}
+
 const router = express.Router();
 const apiRouter = express.Router();
 
@@ -576,6 +684,55 @@ apiRouter.get('/config', (req, res) => {
       simcoe_linx: SIMCOE_LINX_ENABLED,
     },
   });
+});
+
+apiRouter.get('/simcoe/config', (req, res) => {
+  const regional = readJsonFile(path.join(CACHE_DIR, 'simcoe-region.json'));
+  if (!regional) return res.status(503).json({ error: 'SIMCOE_REGION_NOT_BUILT' });
+  const basemap = buildBasemapConfig();
+  res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
+  res.json({
+    ...regional,
+    poll_ms: POLL_MS,
+    feed_delayed_after_ms: FEED_DELAYED_AFTER_MS,
+    feed_offline_after_ms: FEED_OFFLINE_AFTER_MS,
+    base_path: BASE_PATH,
+    basemap,
+    transit_sources: {
+      barrie_transit: Boolean(RT_URL),
+      ontario_northland: ONTARIO_NORTHLAND_ENABLED,
+      go_transit: GO_TRANSIT_ENABLED,
+      simcoe_linx: SIMCOE_LINX_ENABLED,
+    },
+  });
+});
+
+apiRouter.get('/simcoe/routes.geojson', (req, res) => {
+  const fp = path.join(CACHE_DIR, 'simcoe-region-routes.geojson');
+  if (!fs.existsSync(fp)) return res.status(503).json({ error: 'SIMCOE_REGION_NOT_BUILT' });
+  sendCachedJson(res, fp, 300);
+});
+
+apiRouter.get('/simcoe/stops.geojson', (req, res) => {
+  const fp = path.join(CACHE_DIR, 'simcoe-region-stops.geojson');
+  if (!fs.existsSync(fp)) return res.status(503).json({ error: 'SIMCOE_REGION_NOT_BUILT' });
+  sendCachedJson(res, fp, 60 * 60 * 24);
+});
+
+apiRouter.get('/simcoe/vehicles.json', async (req, res) => {
+  try {
+    const data = await getSimcoeRegionVehiclePayload();
+    res.setHeader('Cache-Control', 'public, max-age=5');
+    res.json(data);
+  } catch (error) {
+    res.status(Number(error.statusCode) || 502).json({
+      generated_at: Date.now(),
+      vehicles: [],
+      feed_status: 'offline',
+      status_reason: 'fetch_failed',
+      error: error.message,
+    });
+  }
 });
 
 apiRouter.get('/terminal-layout', (req, res) => {
@@ -716,6 +873,13 @@ router.get('/departures', (req, res, next) => {
   res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self';");
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(departuresPath);
+});
+
+router.get('/simcoe', (req, res, next) => {
+  const simcoePath = path.join(FRONTEND_DIR, 'simcoe.html');
+  if (!fs.existsSync(simcoePath)) return next();
+  res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
+  res.sendFile(simcoePath);
 });
 
 router.get('*', (req, res, next) => {
