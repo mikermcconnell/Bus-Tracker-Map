@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   calibrationInImagePercent,
   getRouteEightDirection,
+  getVehicleLabel,
   getVehicleStyle,
   groupPlatformAssignments,
   projectVehicleToImage,
@@ -39,6 +40,12 @@ describe('platform map model', () => {
       color: '#F49AC1',
       textColor: '#111827',
     });
+  });
+
+  test('labels Simcoe live vehicles with the LINX route number', () => {
+    expect(getVehicleLabel({
+      agency_id: 'simcoe-linx', source_route_id: '2', route_label: 'LINX 2'
+    })).toBe('LINX 2');
   });
 
   test('groups current assignments without inventing retired platforms', () => {

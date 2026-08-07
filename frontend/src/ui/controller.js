@@ -593,6 +593,12 @@ export function createUiController() {
         logoSrc: null,
         className: 'legend-agency--go',
         routes: []
+      },
+      'simcoe-linx': {
+        label: 'Simcoe County LINX',
+        logoSrc: './assets/agency-simcoe-linx.png',
+        className: 'legend-agency--simcoe-linx',
+        routes: []
       }
     };
 

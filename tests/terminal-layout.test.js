@@ -79,12 +79,24 @@ describe('terminal platform layout', () => {
           },
         },
       },
+      simcoeLinx: {
+        trips: {
+          linx: {
+            route_id: '2',
+            headsign: 'Wasaga Beach, 25 45th Street S',
+            terminal_stops: [{ stop_id: 'SCSTOP210' }],
+          },
+        },
+      },
     });
 
     expect(layout.assignments).toEqual(expect.arrayContaining([
       expect.objectContaining({ platform: '1', route_id: 'GO-TRAIN', destination: 'Toronto / Union Station' }),
       expect.objectContaining({ platform: '7', route_id: 'GO-BUS', route_label: '68' }),
       expect.objectContaining({ platform: '8', route_id: 'ONTC', route_label: 'ON' }),
+      expect.objectContaining({
+        platform: '2', route_id: 'LINX-2', route_label: '2', destination: 'Wasaga Beach'
+      }),
     ]));
   });
 
