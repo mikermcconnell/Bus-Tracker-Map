@@ -138,12 +138,12 @@ test('departures board shows every departure in the one-hour window without scro
         generated_at: Date.now(),
         departures: Array.from({ length: 30 }, (_, index) => ({
           id: `departure-${index}`,
-          agency_id: index === 0 || index === 10 ? 'go-transit' : index === 5 ? 'ontario-northland' : 'barrie-transit',
-          agency_name: index === 0 || index === 10 ? 'GO Transit' : index === 5 ? 'Ontario Northland' : 'Barrie Transit',
+          agency_id: index === 0 || index === 10 ? 'go-transit' : index === 5 ? 'ontario-northland' : index === 4 ? 'simcoe-linx' : 'barrie-transit',
+          agency_name: index === 0 || index === 10 ? 'GO Transit' : index === 5 ? 'Ontario Northland' : index === 4 ? 'Simcoe LINX' : 'Barrie Transit',
           route_id: index === 5 ? '201' : undefined,
-          route_label: index === 0 ? 'TRAIN' : index === 10 ? '68' : index === 5 ? 'ONTC' : '8A',
-          destination: index === 0 ? 'Toronto / Union Station' : index === 10 ? 'Barrie / Newmarket' : index === 5 ? 'North Bay' : 'Yonge Southbound',
-          platform: index === 0 ? '1' : index === 10 ? '7' : index === 5 ? '8' : '3',
+          route_label: index === 0 ? 'TRAIN' : index === 10 ? '68' : index === 5 ? 'ONTC' : index === 4 ? '2' : '8A',
+          destination: index === 0 ? 'Toronto / Union Station' : index === 10 ? 'Barrie / Newmarket' : index === 5 ? 'North Bay' : index === 4 ? 'Wasaga Beach 45th St' : 'Yonge Southbound',
+          platform: index === 0 ? '1' : index === 10 ? '7' : index === 5 ? '8' : index === 4 ? '2' : '3',
           platform_type: 'platform',
           scheduled_departure_time: nowSeconds + (index + 1) * 300,
           expected_departure_time: nowSeconds + (index + 1) * 300 + (index === 0 ? 120 : 0),
@@ -167,9 +167,9 @@ test('departures board shows every departure in the one-hour window without scro
   await expect(page.locator('.departure').first().locator('.departure-status')).toHaveText('LIVE');
   await expect(page.locator('.departure').first().locator('[data-departure-time]')).toHaveAttribute('data-departure-time', String(nowSeconds + 420));
   await expect(page.locator('.departure').nth(1).locator('.departure-status')).toHaveText('SCHED');
-  await expect(page.locator('.departure').nth(2).locator('.departure-status')).toHaveText('EST');
+  await expect(page.locator('.departure').nth(2).locator('.departure-status')).toHaveText('SCHED');
   await expect(page.locator('.departure').nth(2).locator('.departure-status'))
-    .toHaveAttribute('aria-label', 'Realtime estimate without a matching active vehicle');
+    .toHaveAttribute('aria-label', 'Scheduled time');
   await expect(page.locator('#service-health')).toContainText('GO Feed active');
   await expect(page.locator('#service-health')).toContainText('ON Schedule only');
   await expect(page.locator('#service-health')).toContainText('LINX Feed delayed');
@@ -189,6 +189,7 @@ test('departures board shows every departure in the one-hour window without scro
   expect(logoAlignment.horizontal).toBeLessThanOrEqual(1);
   expect(logoAlignment.vertical).toBeLessThanOrEqual(1);
   await expect(page.locator('.agency-logo img').first()).toHaveCSS('mix-blend-mode', 'multiply');
+  await expect(page.locator('.agency-simcoe_linx .agency-logo img')).toHaveCSS('mix-blend-mode', 'normal');
   const northlandLogo = page.locator('.agency-ontario_northland .agency-logo img');
   await expect(northlandLogo).toHaveCSS('width', '72px');
   await expect(northlandLogo).toHaveCSS('height', '40px');

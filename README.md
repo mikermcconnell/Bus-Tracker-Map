@@ -66,7 +66,7 @@ The terminal-focused displays are available at `/platform.map` and `/batt.map`. 
 
 Open [http://localhost:3000/departures](http://localhost:3000/departures) locally or `/departures` on the production site. The TV-safe board displays the next 10 outbound departures within 24 hours for Barrie Transit, Ontario Northland, GO buses and trains, and Simcoe LINX route 2.
 
-Rows are selected from the next hour of published service and show only the next trip for each agency, route, destination, and platform combination. A **LIVE** badge and live countdown require both a fresh stop prediction and a fresh vehicle position for the exact agency and trip. A fresh prediction without that active-vehicle match is labelled **EST**; rows without a usable prediction are labelled **SCHED**. The supporting `GET /api/departures?limit=12` endpoint accepts limits from 1 through 30.
+Rows are selected from the next hour of published service and show only the next trip for each agency, route, destination, and platform combination. A **LIVE** badge and live countdown require both a fresh stop prediction and a fresh vehicle position for the exact agency and trip. Every other row is labelled **SCHED** and uses its published scheduled time. The supporting `GET /api/departures?limit=12` endpoint accepts limits from 1 through 30.
 
 ### Metrolinx data notice
 

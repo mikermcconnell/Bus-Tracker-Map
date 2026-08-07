@@ -67,18 +67,14 @@ function scheduledDeparture(row) {
 function displayedDeparture(row) {
   const expected = Number(row.expected_departure_time);
   const live = row.departure_source === 'realtime' && Number.isFinite(expected);
-  const estimated = row.departure_source === 'estimated' && Number.isFinite(expected);
   return {
-    time: live || estimated ? expected : scheduledDeparture(row),
+    time: live ? expected : scheduledDeparture(row),
     live,
-    estimated,
-    state: live ? 'live' : estimated ? 'estimated' : 'scheduled',
-    label: live ? 'LIVE' : estimated ? 'EST' : 'SCHED',
+    state: live ? 'live' : 'scheduled',
+    label: live ? 'LIVE' : 'SCHED',
     description: live
       ? 'Live prediction from this active vehicle and trip'
-      : estimated
-        ? 'Realtime estimate without a matching active vehicle'
-        : 'Scheduled time',
+      : 'Scheduled time',
   };
 }
 
