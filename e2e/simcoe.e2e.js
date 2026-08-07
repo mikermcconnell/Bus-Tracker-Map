@@ -29,7 +29,7 @@ test('regional map loads, focuses a route, and reveals live service status', asy
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({ type: 'FeatureCollection', features: [
-      { type: 'Feature', properties: { agency_id: 'simcoe-linx', agency_name: 'Simcoe County LINX', route_id: 'LINX-4', route_short_name: 'LINX 4', route_long_name: 'Collingwood–Wasaga Beach', route_color: '#006747' }, geometry: { type: 'LineString', coordinates: [[-80.22, 44.49], [-80.0, 44.52]] } },
+      { type: 'Feature', properties: { agency_id: 'simcoe-linx', agency_name: 'Simcoe County LINX', route_id: 'LINX-1', route_short_name: 'LINX 1', route_long_name: 'Barrie–Midland', route_color: '#FF7733' }, geometry: { type: 'LineString', coordinates: [[-80.22, 44.49], [-80.0, 44.52]] } },
       { type: 'Feature', properties: { agency_id: 'go-transit', agency_name: 'GO Transit', route_id: 'GO-TRAIN', route_short_name: 'GO TRAIN', route_long_name: 'Barrie line', route_color: '#003767' }, geometry: { type: 'LineString', coordinates: [[-79.7, 44.1], [-79.69, 44.38]] } },
       { type: 'Feature', properties: { agency_id: 'ontario-northland', agency_name: 'Ontario Northland', route_id: 'ONTC', route_short_name: 'ON', route_long_name: 'Ontario Northland', route_color: '#00214D' }, geometry: { type: 'LineString', coordinates: [[-79.7, 44.3], [-79.5, 44.7]] } },
       { type: 'Feature', properties: { agency_id: 'barrie-transit', agency_name: 'Barrie Transit', route_id: '8A', route_short_name: '8A', route_long_name: 'RVH / Yonge', route_color: '#A6192E' }, geometry: { type: 'LineString', coordinates: [[-79.72, 44.35], [-79.67, 44.42]] } },
@@ -40,7 +40,7 @@ test('regional map loads, focuses a route, and reveals live service status', asy
     contentType: 'application/json',
     body: JSON.stringify({ type: 'FeatureCollection', features: [{
       type: 'Feature',
-      properties: { stop_id: 'simcoe-linx:SCSTOP4', source_stop_id: 'SCSTOP4', stop_name: 'Wasaga Beach stop', agency_id: 'simcoe-linx', agency_name: 'Simcoe County LINX', route_ids: ['LINX-4'] },
+      properties: { stop_id: 'simcoe-linx:SCSTOP4', source_stop_id: 'SCSTOP4', stop_name: 'Midland stop', agency_id: 'simcoe-linx', agency_name: 'Simcoe County LINX', route_ids: ['LINX-1'] },
       geometry: { type: 'Point', coordinates: [-80.18, 44.5] },
     }] }),
   }));
@@ -49,7 +49,7 @@ test('regional map loads, focuses a route, and reveals live service status', asy
     contentType: 'application/json',
     body: JSON.stringify({
       feed_status: 'live',
-      vehicles: [{ id: 'linx-4', route_id: 'LINX-4', route_label: 'LINX 4', agency_id: 'simcoe-linx', agency_name: 'Simcoe County LINX', lat: 44.51, lon: -80.1, bearing: 90, last_reported: now, route_color: '#006747', trip_headsign: 'Wasaga Beach' }],
+      vehicles: [{ id: 'linx-1', route_id: 'LINX-1', route_label: 'LINX 1', agency_id: 'simcoe-linx', agency_name: 'Simcoe County LINX', lat: 44.51, lon: -80.1, bearing: 90, last_reported: now, route_color: '#FF7733', trip_headsign: 'Midland' }],
       sources: {
         simcoe_linx: { feed_status: 'live', vehicle_count: 1 },
         go_transit: { feed_status: 'live', vehicle_count: 0 },
@@ -70,13 +70,14 @@ test('regional map loads, focuses a route, and reveals live service status', asy
     logos.every((logo) => /agency-/.test(logo.getAttribute('src') || ''))
   )).toBe(true);
   await expect(page.locator('.stop-marker')).toHaveCount(0);
-  await page.getByRole('button', { name: /LINX 4/ }).click();
+  await page.getByRole('button', { name: /LINX 1/ }).click();
   await expect(page.locator('#selection-card')).toBeVisible();
-  await expect(page.locator('#selection-title')).toHaveText('LINX 4');
+  await expect(page.locator('#selection-title')).toHaveText('LINX 1');
   await expect(page.locator('.vehicle-marker')).toHaveCount(1);
   await expect(page.locator('.vehicle-marker')).toHaveClass(/vehicle-marker--simcoe-linx/);
   await expect(page.locator('.vehicle-marker__agency')).toHaveText('LINX');
-  await expect(page.locator('.vehicle-marker')).toHaveCSS('background-color', 'rgb(0, 83, 155)');
+  await expect(page.locator('.vehicle-marker')).toHaveCSS('background-color', 'rgb(255, 119, 51)');
+  await expect(page.locator('.vehicle-marker')).toHaveCSS('color', 'rgb(8, 51, 87)');
   await expect(page.locator('.vehicle-marker__agency')).toHaveCSS('background-color', 'rgb(231, 166, 20)');
   await expect(page.locator('.vehicle-marker__arrow')).toHaveCount(1);
   await expect(page.locator('.stop-marker')).toHaveCount(1);

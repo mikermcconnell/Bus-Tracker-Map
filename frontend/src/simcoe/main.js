@@ -332,9 +332,13 @@ function renderVehicles() {
     const arrow = hasBearing
       ? `<svg class="vehicle-marker__arrow" style="--bearing:${((bearing % 360) + 360) % 360}deg" viewBox="0 0 24 16" aria-hidden="true"><path d="M12 0L24 16H0Z"/></svg>`
       : '';
+    const linxRouteColor = agencyId === 'simcoe-linx' ? normalizeColor(vehicle.route_color, '') : '';
+    const markerStyle = linxRouteColor
+      ? ` style="--agency-core:${linxRouteColor};--agency-ink:${readableMarkerInk(linxRouteColor)}"`
+      : '';
     const icon = L.divIcon({
       className: 'regional-vehicle-icon',
-      html: `<span class="vehicle-marker vehicle-marker--${escapeHtml(agencyId)}${isTrain ? ' vehicle-marker--train' : ''}">${arrow}` +
+      html: `<span class="vehicle-marker vehicle-marker--${escapeHtml(agencyId)}${isTrain ? ' vehicle-marker--train' : ''}"${markerStyle}>${arrow}` +
         `<span class="vehicle-marker__label">${escapeHtml(label)}</span>` +
         `<span class="vehicle-marker__agency">${escapeHtml(AGENCY_MARKER_CODES[agencyId] || 'BUS')}</span></span>`,
       iconSize: [44, 44],
@@ -353,6 +357,17 @@ function renderVehicles() {
 function normalizeColor(value, fallback) {
   const color = String(value || '').trim();
   return /^#[0-9a-f]{6}$/i.test(color) ? color : fallback;
+}
+
+function readableMarkerInk(background) {
+  const channels = background.slice(1).match(/.{2}/g).map((value) => parseInt(value, 16) / 255);
+  const luminance = channels
+    .map((value) => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4)
+    .reduce((total, value, index) => total + value * [.2126, .7152, .0722][index], 0);
+  const navyLuminance = .029;
+  const whiteContrast = 1.05 / (luminance + .05);
+  const navyContrast = (luminance + .05) / (navyLuminance + .05);
+  return navyContrast > whiteContrast ? '#083357' : '#ffffff';
 }
 
 function setOverallStatus(message, status) {

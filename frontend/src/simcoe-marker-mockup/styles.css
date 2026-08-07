@@ -63,6 +63,7 @@ main { padding: 24px clamp(16px, 4vw, 60px) 50px; }
 .direction { position: absolute; left: 50%; top: -12px; color: var(--agency); font-size: 17px; line-height: 1; transform: translateX(-50%); }
 .logo-flag { display: none; }
 .view-a .marker-core { color: white; background: var(--agency-core); box-shadow: 0 0 0 3px var(--agency); }
+.view-a .vehicle--linx .marker-core { background: var(--route); }
 .view-a .vehicle--northland .marker-core { color: var(--navy); }
 .view-b .agency-code { display: none; }
 .view-b .direction { color: var(--navy); }
