@@ -188,7 +188,7 @@ export function getVehicleLabel(vehicle) {
 export function isTerminalDisplayVehicle(vehicle) {
   if (!vehicle || !projectVehicleToImage(vehicle.lat, vehicle.lon)) return false;
   const status = String(vehicle.terminal_progress_status || '').toLowerCase();
-  return status !== 'not_serving';
+  return status !== 'not_serving' && status !== 'departed';
 }
 
 export function groupPlatformAssignments(assignments) {

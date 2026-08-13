@@ -62,7 +62,7 @@ body {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(560px, 37%, 740px);
+  grid-template-columns: minmax(0, 1fr) clamp(620px, 43%, 860px);
   overflow: hidden;
   background: #dce6e9;
 }
@@ -72,6 +72,7 @@ body {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  container-type: inline-size;
   background: #dce6e9;
 }
 
@@ -88,12 +89,67 @@ body {
 .map-image {
   position: absolute;
   inset: 0;
-  display: block;
+  display: none;
   width: 100%;
   height: 100%;
   border: 0;
   object-fit: fill;
   pointer-events: none;
+}
+
+.platform-basemap {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  overflow: hidden;
+  background: transparent;
+  pointer-events: none;
+}
+
+.platform-basemap .leaflet-control-attribution {
+  margin: 0;
+  padding: 2px 5px;
+  color: #213845;
+  background: rgba(255, 255, 255, 0.86);
+  font-size: 9px;
+  line-height: 1.15;
+}
+
+.platform-basemap .leaflet-control-attribution a {
+  color: #075f7b;
+}
+
+.platform-basemap .mapboxgl-map,
+.platform-basemap .mapboxgl-canvas-container,
+.platform-basemap .mapboxgl-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.platform-basemap .mapboxgl-ctrl-bottom-left,
+.platform-basemap .mapboxgl-ctrl-bottom-right {
+  z-index: 2;
+}
+
+.platform-basemap .mapboxgl-ctrl-attrib {
+  color: #213845;
+  background: rgba(255, 255, 255, 0.86);
+  font-size: 9px;
+  line-height: 1.15;
+}
+
+.platform-basemap .mapboxgl-ctrl-attrib a {
+  color: #075f7b;
+}
+
+.map-plane--live-basemap .map-image {
+  opacity: 0;
+}
+
+.map-plane--live-basemap .map-platform-scrub,
+.map-plane--live-basemap .map-landmark-scrub,
+.map-plane--live-basemap .map-edge-mask {
+  display: none;
 }
 
 .platform-header {
@@ -321,16 +377,303 @@ body {
 .map-platform-card {
   --agency-accent: #004e80;
   --agency-header: #004e80;
-  position: absolute;
+  position: relative;
   z-index: 2;
-  width: 116px;
-  overflow: visible;
+  width: auto;
+  min-width: 0;
+  height: 76px;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: 31px minmax(0, 1fr);
   border: 1px solid #628192;
   border-left: 4px solid var(--agency-accent);
   border-radius: 7px;
   color: #092337;
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 5px 12px rgba(19, 48, 62, 0.3);
+  box-shadow: 0 3px 7px rgba(19, 48, 62, 0.24);
+}
+
+.map-terminal-building {
+  position: absolute;
+  z-index: 1;
+  width: clamp(150px, 19cqw, 205px);
+  height: clamp(105px, 13.5cqw, 146px);
+  transform: translate(-50%, -50%);
+}
+
+.map-terminal-building__footprint {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 1px 1px rgba(255, 255, 255, 0.72));
+}
+
+.map-terminal-building__footprint--map {
+  z-index: 2;
+  inset: auto;
+  width: clamp(150px, 19cqw, 205px);
+  height: clamp(105px, 13.5cqw, 146px);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.map-terminal-building__footprint polygon {
+  fill: rgba(255, 255, 255, 0.08);
+  stroke: #111827;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-terminal-building__callout {
+  position: absolute;
+  bottom: calc(100% + 13px);
+  left: 50%;
+  width: clamp(156px, 18cqw, 194px);
+  padding: 5px 8px;
+  border: 1px solid rgba(17, 24, 39, 0.48);
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(3, 7, 18, 0.68);
+  box-shadow: none;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.map-terminal-building__callout::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  height: 15px;
+  border-left: 1px solid rgba(17, 24, 39, 0.62);
+  transform: translateX(-50%);
+}
+
+.map-terminal-building__name {
+  font-size: clamp(11px, 1.15cqw, 14px);
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.map-terminal-building__here {
+  position: absolute;
+  top: 62%;
+  left: 53%;
+  padding: 5px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 5px;
+  color: #092337;
+  background: #ffd447;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  font-size: clamp(10px, 1cqw, 12px);
+  line-height: 1;
+  text-transform: uppercase;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.map-terminal-building__pin {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 auto;
+  border: 2px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  background: #e51d43;
+  box-shadow: 0 0 0 1px #8f1028;
+  transform: rotate(-45deg);
+}
+
+.map-label-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.map-label-rail {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: clamp(5px, 0.7cqw, 10px);
+}
+
+.map-label-rail--top {
+  top: clamp(10px, 2cqw, 22px);
+  left: 12px;
+  width: min(calc(100% - 24px), 780px);
+}
+
+.map-label-rail--top > [data-platform="13"] {
+  margin-right: clamp(4px, 0.5cqw, 8px);
+}
+
+.map-label-rail--bottom {
+  bottom: clamp(12px, 2cqw, 24px);
+  left: 12px;
+  width: min(calc(100% - 24px), 820px);
+}
+
+.map-label-rail--right {
+  top: 42%;
+  right: 12px;
+  width: clamp(98px, 15cqw, 132px);
+  flex-direction: column;
+  gap: clamp(10px, 1.2cqw, 14px);
+}
+
+.map-label-rail--top > *,
+.map-label-rail--bottom > * {
+  flex: 1 1 0;
+}
+
+.map-platform-anchor {
+  --pointer-color: #075f86;
+  position: absolute;
+  z-index: 3;
+  width: 11px;
+  height: 11px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--pointer-color);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.map-platform-anchor[data-agency-id="go-transit"],
+.map-platform-anchor__label[data-agency-id="go-transit"] {
+  --pointer-color: #007a33;
+}
+
+.map-platform-anchor[data-agency-id="ontario-northland"],
+.map-platform-anchor__label[data-agency-id="ontario-northland"] {
+  --pointer-color: #002a5c;
+}
+
+.map-platform-anchor[data-agency-id="simcoe-linx"],
+.map-platform-anchor__label[data-agency-id="simcoe-linx"] {
+  --pointer-color: #00549f;
+}
+
+.map-platform-anchor[data-agency-id="passenger"],
+.map-platform-anchor__label[data-agency-id="passenger"] {
+  --pointer-color: #087db7;
+}
+
+.map-platform-anchor__label {
+  --pointer-color: #075f86;
+  position: absolute;
+  z-index: 4;
+  min-width: 38px;
+  min-height: 32px;
+  padding: 7px 8px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 7px;
+  color: #fff;
+  background: var(--pointer-color);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.48);
+  font-size: 15px;
+  font-weight: 950;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.map-platform-anchor__state {
+  display: none;
+}
+
+.map-platform-anchor__label[data-live-state="approaching"],
+.map-platform-anchor__label[data-live-state="occupied"] {
+  box-shadow:
+    0 3px 8px rgba(0, 0, 0, 0.48),
+    0 0 0 4px rgba(74, 222, 128, 0.78),
+    0 0 14px rgba(74, 222, 128, 0.82);
+}
+
+.map-platform-anchor[data-live-state="approaching"],
+.map-platform-anchor[data-live-state="occupied"] {
+  box-shadow:
+    0 1px 5px rgba(0, 0, 0, 0.55),
+    0 0 0 4px rgba(74, 222, 128, 0.6),
+    0 0 10px rgba(74, 222, 128, 0.7);
+}
+
+.map-platform-anchor__label[data-label-placement="below"] {
+  transform: translate(-50%, 12px);
+}
+
+.map-platform-anchor__label[data-label-placement="above"] {
+  transform: translate(-50%, calc(-100% - 12px));
+}
+
+.map-platform-anchor__label[data-label-placement="left"] {
+  transform: translate(calc(-100% - 12px), -50%);
+}
+
+.map-platform-anchor__label[data-pointer-label="P/D"] {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  border-radius: 5px;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.map-platform-anchor__label[data-pointer-label="P/D"] .map-platform-anchor__label-text {
+  transform: rotate(-45deg);
+}
+
+.map-platform-anchor--pickup-dropoff {
+  display: none;
+}
+
+.map-platform-card[data-manual-pointer="true"]::before,
+.map-connection-card[data-manual-pointer="true"]::before {
+  display: none;
+}
+
+.map-label-rail .map-platform-card[data-has-schedule="false"][data-live-state=""] {
+  flex: 0 0 clamp(52px, 6.3cqw, 64px);
+  height: 46px;
+  grid-template-rows: 1fr;
+  border-color: #91a5af;
+  border-left-width: 1px;
+  background: rgba(244, 247, 248, 0.96);
+  box-shadow: 0 2px 5px rgba(19, 48, 62, 0.18);
+}
+
+.map-label-rail .map-platform-card[data-has-schedule="false"][data-live-state=""] .map-platform-card__header {
+  min-height: 44px;
+  padding: 8px 7px;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  color: #173f53;
+  background: #e7eef1;
+}
+
+.map-label-rail .map-platform-card[data-has-schedule="false"][data-live-state=""] .map-platform-card__title {
+  font-size: 18px;
+  text-overflow: clip;
+}
+
+.map-label-rail .map-platform-card[data-has-schedule="false"][data-live-state=""] .map-platform-card__brand,
+.map-label-rail .map-platform-card[data-has-schedule="false"][data-live-state=""] .map-platform-card__body {
+  display: none;
 }
 
 .map-platform-card[data-agency-id="go-transit"] {
@@ -395,24 +738,27 @@ body {
 
 .map-platform-card__brand {
   position: relative;
-  min-width: 29px;
-  height: 21px;
-  padding: 3px 5px;
+  width: 48px;
+  min-width: 48px;
+  height: 23px;
+  padding: 2px 4px;
   flex: 0 0 auto;
   display: grid;
   place-items: center;
   overflow: visible;
   border-radius: 3px;
-  color: var(--agency-header);
   background: #fff;
-  font-size: 11px;
-  font-weight: 950;
-  letter-spacing: 0.03em;
-  line-height: 1;
 }
 
 .map-platform-card[data-platform="14"] .map-platform-card__brand {
-  min-width: 29px;
+  min-width: 48px;
+}
+
+.map-platform-card__brand-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .map-platform-card[data-platform="14"] .map-platform-card__title {
@@ -420,11 +766,19 @@ body {
 }
 
 .map-platform-card__routes {
-  min-height: 28px;
-  padding: 5px 7px;
+  min-height: 0;
+  padding: 4px 7px 2px;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+}
+
+.map-platform-card__body {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .map-platform-card__route {
@@ -443,15 +797,21 @@ body {
 }
 
 .map-platform-card__route--active {
-  outline: 2px solid #fff;
+  outline: 3px solid #ffd447;
   outline-offset: 1px;
+  box-shadow: 0 0 0 2px rgba(9, 35, 55, 0.88), 0 0 8px rgba(255, 212, 71, 0.8);
+}
+
+.map-platform-card--approaching .map-platform-card__route:not(.map-platform-card__route--active) {
+  opacity: 0.38;
+  filter: saturate(0.45);
 }
 
 .map-platform-card__status {
-  padding: 1px 7px 6px;
+  padding: 1px 7px 4px;
   overflow: hidden;
   color: #496777;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.02em;
   line-height: 1.05;
@@ -461,7 +821,7 @@ body {
 }
 
 .map-platform-card--wide {
-  width: 136px;
+  width: auto;
 }
 
 .map-platform-card--occupied {
@@ -493,16 +853,20 @@ body {
 .map-connection-card {
   --agency-accent: #004e80;
   --agency-header: #004e80;
-  position: absolute;
+  position: relative;
   z-index: 3;
-  width: 142px;
+  width: auto;
+  min-width: 0;
+  height: 76px;
   overflow: hidden;
+  display: grid;
+  grid-template-rows: 31px minmax(0, 1fr);
   border: 1px solid #628192;
   border-left: 4px solid var(--agency-accent);
   border-radius: 6px;
   color: #092337;
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 4px 10px rgba(19, 48, 62, 0.24);
+  box-shadow: 0 3px 7px rgba(19, 48, 62, 0.22);
 }
 
 .map-connection-card[data-agency-id="simcoe-linx"] {
@@ -511,7 +875,7 @@ body {
 }
 
 .map-connection-card__header {
-  min-height: 25px;
+  min-height: 31px;
   padding: 4px 7px;
   display: flex;
   align-items: center;
@@ -529,7 +893,7 @@ body {
 }
 
 .map-connection-card__logo {
-  width: 67px;
+  width: min(60px, 58%);
   height: 18px;
   margin-left: auto;
   padding: 2px 4px;
@@ -540,7 +904,7 @@ body {
 }
 
 .map-connection-card__service {
-  min-height: 31px;
+  min-height: 0;
   padding: 5px 7px;
   display: flex;
   align-items: center;
@@ -596,12 +960,11 @@ body {
 }
 
 .map-dropoff-card {
-  position: absolute;
+  position: relative;
   z-index: 3;
-  top: 49.8%;
-  right: 6.1%;
-  width: 128px;
-  min-height: 48px;
+  width: auto;
+  min-width: 0;
+  min-height: 62px;
   padding: 7px 9px;
   display: flex;
   align-items: center;
@@ -610,7 +973,15 @@ body {
   border-radius: 6px;
   color: #0b2b3d;
   background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 4px 10px rgba(19, 48, 62, 0.22);
+  box-shadow: 0 3px 7px rgba(19, 48, 62, 0.2);
+}
+
+.map-dropoff-card[data-geographic-card="true"] {
+  position: absolute;
+  z-index: 5;
+  width: clamp(138px, 16cqw, 170px);
+  min-height: 58px;
+  transform: translate(-100%, -50%);
 }
 
 .map-dropoff-card__icon {
@@ -655,14 +1026,23 @@ body {
 }
 
 .platform-directory__header {
+  min-height: clamp(64px, 6.4vh, 78px);
+  padding: clamp(9px, 0.6vw, 13px) clamp(18px, 1.25vw, 26px);
   flex: 0 0 auto;
-  padding: clamp(8px, 0.5vw, 10px) clamp(16px, 1.2vw, 24px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
   border-bottom: 1px solid #243d4a;
+}
+
+.platform-directory__heading {
+  min-width: 0;
 }
 
 .platform-directory__header h2 {
   margin: 0;
-  font-size: clamp(27px, 1.75vw, 36px);
+  font-size: clamp(34px, 2.15vw, 44px);
   font-weight: 800;
   letter-spacing: -0.015em;
   line-height: 1;
@@ -677,12 +1057,61 @@ body {
   line-height: 1.25;
 }
 
+.platform-directory__header p {
+  margin-top: 0.28em;
+  color: #89d9e8;
+  font-size: clamp(14px, 0.9vw, 18px);
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.departure-page-indicator {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: clamp(7px, 0.5vw, 10px);
+  color: #cfe4ed;
+  font-size: clamp(15px, 0.9vw, 19px);
+  font-variant-numeric: tabular-nums;
+}
+
+.departure-page-indicator__dot {
+  width: clamp(10px, 0.68vw, 14px);
+  height: clamp(10px, 0.68vw, 14px);
+  border: 2px solid #78909c;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.departure-page-indicator__dot--active {
+  border-color: #89d9e8;
+  background: #00a8c8;
+  box-shadow: 0 0 0.6em rgba(0, 168, 200, 0.65);
+}
+
+.departure-page-indicator__timing {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15em;
+  line-height: 1;
+}
+
+#departure-page-countdown {
+  color: #89d9e8;
+  font-size: clamp(10px, 0.65vw, 13px);
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .assignment-layer {
   min-height: 0;
   flex: 1 1 auto;
-  display: grid;
-  grid-auto-rows: minmax(min-content, auto);
-  align-content: stretch;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
@@ -698,12 +1127,13 @@ body {
 .platform-card {
   position: relative;
   min-width: 0;
-  min-height: clamp(48px, 4.9vh, 54px);
-  padding: 2px clamp(14px, 0.95vw, 19px);
+  min-height: 0;
+  padding: clamp(5px, 0.55vh, 8px) clamp(16px, 1.15vw, 24px);
+  flex: 1 1 0;
   display: grid;
-  grid-template-columns: clamp(100px, 5.8vw, 112px) minmax(0, 1fr);
+  grid-template-columns: clamp(106px, 6.3vw, 126px) clamp(78px, 5vw, 94px) minmax(0, 1fr);
   align-items: center;
-  gap: clamp(7px, 0.7vw, 12px);
+  gap: clamp(10px, 0.75vw, 14px);
   overflow: hidden;
   color: #f8fafc;
   background: #0a1c27;
@@ -718,20 +1148,46 @@ body {
   gap: 0.25em;
 }
 
+.platform-card__agency {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+}
+
+.platform-card__agency-logo {
+  display: block;
+  width: clamp(72px, 4.7vw, 88px);
+  height: clamp(38px, 4.2vh, 48px);
+  padding: 4px 5px;
+  border-radius: 5px;
+  background: #fff;
+  object-fit: contain;
+}
+
 .platform-card__title {
   margin: 0;
   min-width: 0;
-  font-size: clamp(27px, 1.58vw, 33px);
+  font-size: clamp(34px, 2.15vw, 44px);
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
 }
 
+.platform-card[data-platform="14"] {
+  grid-template-columns: clamp(132px, 7.5vw, 150px) clamp(78px, 5vw, 94px) minmax(0, 1fr);
+}
+
+.platform-card[data-platform="14"] .platform-card__title {
+  font-size: clamp(32px, 1.9vw, 39px);
+}
+
 .platform-card__state {
   color: #90a4ad;
-  font-size: clamp(16px, 0.88vw, 18px);
+  font-size: clamp(15px, 0.9vw, 18px);
   font-weight: 800;
-  letter-spacing: 0.055em;
+  letter-spacing: 0.04em;
   line-height: 1;
   text-transform: uppercase;
   white-space: nowrap;
@@ -740,28 +1196,32 @@ body {
 .platform-card__services {
   min-width: 0;
   display: grid;
-  gap: clamp(2px, 0.2vw, 4px);
+  gap: clamp(3px, 0.25vw, 6px);
 }
 
 .platform-card--multi-service .platform-card__service {
-  font-size: clamp(18px, 1.1vw, 22px);
+  font-size: clamp(22px, 1.35vw, 28px);
+}
+
+.platform-card--multi-service {
+  flex-grow: 1.35;
 }
 
 .platform-card--multi-service .platform-card__service-countdown {
-  font-size: clamp(18px, 1.08vw, 22px);
+  font-size: clamp(25px, 1.52vw, 31px);
 }
 
 .platform-card--multi-service .platform-card__service-scheduled {
-  font-size: clamp(9px, 0.62vw, 13px);
+  font-size: clamp(15px, 0.88vw, 18px);
 }
 
 .platform-card__service {
   min-width: 0;
   display: grid;
-  grid-template-columns: clamp(64px, 4vw, 82px) minmax(0, 1fr) clamp(104px, 6vw, 116px);
+  grid-template-columns: clamp(78px, 4.8vw, 96px) minmax(0, 1fr) clamp(165px, 9.4vw, 190px);
   align-items: center;
-  gap: clamp(6px, 0.55vw, 9px);
-  font-size: clamp(20px, 1.16vw, 24px);
+  gap: clamp(8px, 0.62vw, 12px);
+  font-size: clamp(25px, 1.58vw, 33px);
   line-height: 1.12;
 }
 
@@ -786,11 +1246,14 @@ body {
 
 .platform-card__destination {
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
   color: #eef5f7;
-  font-weight: 760;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: clamp(21px, 1.35vw, 28px);
+  font-weight: 790;
+  line-height: 1.02;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .platform-card__departure {
@@ -800,15 +1263,49 @@ body {
   align-items: flex-end;
   justify-content: center;
   gap: 0.12em;
+  overflow: hidden;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
+.platform-card__departure-meta {
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: clamp(5px, 0.36vw, 8px);
+  white-space: nowrap;
+}
+
+.platform-card__service-source {
+  padding: 2px 5px;
+  border: 1px solid #607985;
+  border-radius: 999px;
+  color: #c2d3db;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: clamp(10px, 0.62vw, 13px);
+  font-weight: 900;
+  letter-spacing: 0.055em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.platform-card__service-source[data-source="live"] {
+  border-color: #007a33;
+  border-radius: 0.24em;
+  color: #fff;
+  background: #007a33;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
 .platform-card__service-countdown {
+  max-width: 100%;
+  overflow: hidden;
   color: #f8fafc;
-  font-size: clamp(20px, 1.18vw, 25px);
+  font-size: clamp(29px, 1.85vw, 38px);
   font-weight: 850;
   line-height: 1;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -819,15 +1316,22 @@ body {
 .platform-card__service-countdown[data-departure-state="unavailable"],
 .platform-card__service-countdown[data-departure-state="past"] {
   color: #a8bbc4;
-  font-size: clamp(12px, 0.78vw, 16px);
+  font-size: clamp(18px, 1.08vw, 22px);
 }
 
 .platform-card__service-scheduled {
+  max-width: 100%;
+  overflow: hidden;
   color: #a8bbc4;
-  font-size: clamp(10px, 0.68vw, 14px);
+  font-size: clamp(16px, 0.96vw, 20px);
   font-weight: 750;
   line-height: 1;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.platform-card[data-platform="2"] .platform-card__service-countdown {
+  font-size: clamp(22px, 1.35vw, 28px);
 }
 
 .platform-card--occupied .platform-card__service--active .platform-card__service-countdown {
@@ -854,10 +1358,11 @@ body {
 }
 
 .platform-connections {
-  min-height: 54px;
+  min-height: clamp(62px, 7vh, 76px);
   margin-top: auto;
+  flex: 0 0 auto;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   color: #f8fafc;
   background: #0b2636;
   border-top: 2px solid #2b5367;
@@ -865,11 +1370,11 @@ body {
 
 .platform-connection {
   min-width: 0;
-  padding: 5px clamp(8px, 0.65vw, 13px);
+  padding: 6px clamp(10px, 0.72vw, 15px);
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: auto clamp(52px, 3.7vw, 64px) auto minmax(0, 1fr);
   align-items: center;
-  gap: clamp(5px, 0.45vw, 9px);
+  gap: clamp(7px, 0.5vw, 10px);
 }
 
 .platform-connection + .platform-connection {
@@ -877,8 +1382,17 @@ body {
 }
 
 .platform-connection__platform {
-  font-size: clamp(20px, 1.25vw, 26px);
+  font-size: clamp(28px, 1.7vw, 35px);
   line-height: 1;
+}
+
+.platform-connection__agency-logo {
+  width: clamp(48px, 3.2vw, 58px);
+  height: clamp(30px, 3.4vh, 38px);
+  padding: 3px 4px;
+  border-radius: 4px;
+  background: #fff;
+  object-fit: contain;
 }
 
 .platform-connection__route {
@@ -887,7 +1401,7 @@ body {
   border-radius: 0.32em;
   color: #fff;
   background: #00658c;
-  font-size: clamp(15px, 0.92vw, 19px);
+  font-size: clamp(21px, 1.22vw, 25px);
   line-height: 1;
   text-align: center;
 }
@@ -896,23 +1410,18 @@ body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  line-height: 1.05;
+  line-height: 1;
 }
 
 .platform-connection__stop {
   overflow: hidden;
-  font-size: clamp(14px, 0.84vw, 17px);
+  font-size: clamp(19px, 1.12vw, 23px);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .platform-connection__agency {
-  overflow: hidden;
-  color: #a8bbc4;
-  font-size: clamp(10px, 0.62vw, 13px);
-  font-weight: 750;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: none;
 }
 
 .platform-card--inactive {
@@ -922,6 +1431,7 @@ body {
 
 .platform-card__inactive-text {
   min-width: 0;
+  grid-column: 3;
   color: #8fa2aa;
   font-size: clamp(8px, 0.65vw, 12px);
   font-weight: 700;
@@ -1081,24 +1591,6 @@ body {
   background: #004e80;
 }
 
-.vehicle-marker__detail {
-  position: absolute;
-  z-index: 4;
-  top: calc(100% + 0.45em);
-  left: 50%;
-  padding: 0.25em 0.45em;
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  border-radius: 999px;
-  color: #fff;
-  background: rgba(5, 18, 29, 0.94);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
-  font-size: clamp(10px, 0.78vw, 16px);
-  font-weight: 850;
-  letter-spacing: 0.035em;
-  transform: translateX(-50%);
-  white-space: nowrap;
-}
-
 .vehicle-marker__count {
   position: absolute;
   z-index: 5;
@@ -1114,39 +1606,6 @@ body {
   font-weight: 900;
   line-height: 1;
   white-space: nowrap;
-}
-
-.vehicle-marker[data-label-placement="above"] .vehicle-marker__detail {
-  top: auto;
-  bottom: calc(100% + 0.45em);
-}
-
-.vehicle-marker[data-label-placement="right"] .vehicle-marker__detail {
-  top: 50%;
-  left: calc(100% + 0.45em);
-  transform: translateY(-50%);
-}
-
-.vehicle-marker[data-label-placement="left"] .vehicle-marker__detail {
-  top: 50%;
-  right: calc(100% + 0.45em);
-  left: auto;
-  transform: translateY(-50%);
-}
-
-.vehicle-marker__detail[data-state="approaching"] {
-  border-color: #f5ca54;
-  background: rgba(91, 67, 5, 0.96);
-}
-
-.vehicle-marker__detail[data-state="at_terminal"] {
-  border-color: #72e2a3;
-  background: rgba(7, 91, 50, 0.97);
-}
-
-.vehicle-marker__detail[data-state="departed"] {
-  border-color: #72d6ec;
-  background: rgba(5, 95, 134, 0.97);
 }
 
 .platform-status,
@@ -1240,7 +1699,7 @@ body {
 
 @media (max-aspect-ratio: 4/3) {
   .platform-workspace {
-    grid-template-columns: minmax(0, 1fr) 440px;
+    grid-template-columns: minmax(0, 1fr) clamp(520px, 46vw, 620px);
   }
 
   .map-stage {
@@ -1263,15 +1722,7 @@ body {
   }
 }
 
-@media (max-width: 1300px) {
-  .map-platform-card {
-    width: 86px;
-  }
-
-  .map-platform-card--wide {
-    width: 102px;
-  }
-
+@container (max-width: 760px) {
   .map-platform-card__title {
     font-size: 13px;
   }
@@ -1287,10 +1738,6 @@ body {
     letter-spacing: 0;
   }
 
-  .map-connection-card {
-    width: 116px;
-  }
-
   .map-connection-card__header {
     min-height: 21px;
     padding: 3px 5px;
@@ -1303,14 +1750,14 @@ body {
   }
 
   .map-platform-card__brand {
-    min-width: 26px;
-    height: 16px;
-    padding: 2px 4px;
-    font-size: 9px;
+    width: 40px;
+    min-width: 40px;
+    height: 18px;
+    padding: 2px 3px;
   }
 
   .map-platform-card[data-platform="14"] .map-platform-card__brand {
-    min-width: 26px;
+    min-width: 40px;
   }
 
   .map-platform-card[data-platform="14"] .map-platform-card__title {
@@ -1318,7 +1765,7 @@ body {
   }
 
   .map-connection-card__logo {
-    width: 53px;
+    width: min(48px, 52%);
     height: 15px;
   }
 
@@ -1343,9 +1790,7 @@ body {
   }
 
   .map-dropoff-card {
-    top: 63.5%;
-    width: 105px;
-    min-height: 40px;
+    min-height: 56px;
     padding: 5px 6px;
     gap: 6px;
   }
@@ -1368,42 +1813,52 @@ body {
   }
 
   .platform-directory__header h2 {
-    font-size: 28px;
+    font-size: 31px;
   }
 
   .platform-card {
-    min-height: 40px;
-    padding-block: 1px;
+    min-height: 0;
+    padding-block: 3px;
+    grid-template-columns: 92px 66px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .platform-card__agency-logo {
+    width: 62px;
+    height: 32px;
+    padding: 2px 3px;
   }
 
   .platform-card__title {
-    font-size: 26px;
+    font-size: 30px;
   }
 
   .platform-card__state {
-    font-size: 12px;
+    font-size: 15px;
   }
 
   .platform-card__service {
-    font-size: 18px;
+    grid-template-columns: 68px minmax(0, 1fr) 145px;
+    gap: 6px;
+    font-size: 21px;
   }
 
   .platform-card__service-countdown,
   .platform-card--multi-service .platform-card__service-countdown {
-    font-size: 18px;
+    font-size: 24px;
   }
 
   .platform-card--multi-service .platform-card__service {
-    font-size: 16px;
+    font-size: 20px;
   }
 
   .platform-card__service-scheduled,
   .platform-card--multi-service .platform-card__service-scheduled {
-    font-size: 9px;
+    display: none;
   }
 
   .platform-connections {
-    min-height: 42px;
+    min-height: 50px;
   }
 
   .platform-connection {
@@ -1411,19 +1866,15 @@ body {
   }
 
   .platform-connection__platform {
-    font-size: 18px;
+    font-size: 22px;
   }
 
   .platform-connection__route {
-    font-size: 14px;
+    font-size: 18px;
   }
 
   .platform-connection__stop {
-    font-size: 12px;
-  }
-
-  .platform-connection__agency {
-    font-size: 9px;
+    font-size: 17px;
   }
 }
 
