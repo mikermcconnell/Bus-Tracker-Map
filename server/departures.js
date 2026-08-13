@@ -10,8 +10,8 @@ const GRACE_SECONDS = 60;
 const GO_BUS_DESTINATION = 'Barrie / Newmarket';
 const BARRIE_ALLANDALE_STOP_IDS = new Set(['9003', '9004', '9005', '9006', '9012', '9013']);
 const LINX_ALLANDALE_STOP_ID = 'SCSTOP210';
-const LINX_HANDOFF_MAX_GAP_SECONDS = 20 * 60;
-const LINX_HANDOFF_EARLY_TOLERANCE_SECONDS = 2 * 60;
+const LINX_HANDOFF_MAX_GAP_SECONDS = 10 * 60;
+const LINX_HANDOFF_EARLY_TOLERANCE_SECONDS = 60;
 
 const AGENCIES = Object.freeze({
   barrie_transit: { id: 'barrie-transit', name: 'Barrie Transit', mode: 'bus' },
@@ -242,6 +242,7 @@ function linxTerminalHandoffGap(vehicle, departure) {
     String(vehicle && vehicle.agency_id || '') !== 'simcoe-linx' ||
     String(vehicle && (vehicle.source_route_id || vehicle.route_id) || '').replace(/^LINX-/, '') !== '2' ||
     String(vehicle && vehicle.terminal_stop_id || '') !== LINX_ALLANDALE_STOP_ID ||
+    !['approaching', 'at_terminal'].includes(String(vehicle && vehicle.terminal_progress_status || '')) ||
     !/Barrie Allandale/i.test(String(vehicle && vehicle.trip_headsign || ''))
   ) return null;
   if (
@@ -258,14 +259,17 @@ function linxTerminalHandoffGap(vehicle, departure) {
 }
 
 function findLinxTerminalHandoffVehicle(vehicles, departure, nowMs, maxAgeMs) {
-  return vehicles
+  const candidates = vehicles
     .filter((vehicle) => (
       isFreshVehiclePosition(vehicle, nowMs, maxAgeMs) &&
       linxTerminalHandoffGap(vehicle, departure) !== null
     ))
     .sort((left, right) => (
       linxTerminalHandoffGap(left, departure) - linxTerminalHandoffGap(right, departure)
-    ))[0] || null;
+    ));
+  // The static LINX feed publishes no block_id. Fail closed when more than one
+  // inbound vehicle could plausibly continue as this outbound departure.
+  return candidates.length === 1 ? candidates[0] : null;
 }
 
 function applyVehicleEvidence(departures, vehiclePayload, nowMs, maxAgeMs) {

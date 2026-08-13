@@ -263,6 +263,25 @@ test('departures board shows every departure in the one-hour window without scro
     viewport: element.clientHeight,
   }));
   expect(dimensions.height).toBeLessThanOrEqual(dimensions.viewport);
+
+  await page.setViewportSize({ width: 3840, height: 2160 });
+  const ultraHdLayout = await page.locator('html').evaluate((element) => {
+    const destination = element.ownerDocument.querySelector('.destination');
+    const platform = element.ownerDocument.querySelector('.platform strong');
+    const logo = element.ownerDocument.querySelector('.agency-logo img');
+    const view = element.ownerDocument.defaultView;
+    return {
+      height: element.scrollHeight,
+      viewport: element.clientHeight,
+      destinationFont: Number.parseFloat(view.getComputedStyle(destination).fontSize),
+      platformFont: Number.parseFloat(view.getComputedStyle(platform).fontSize),
+      logoWidth: logo.getBoundingClientRect().width,
+    };
+  });
+  expect(ultraHdLayout.height).toBeLessThanOrEqual(ultraHdLayout.viewport);
+  expect(ultraHdLayout.destinationFont).toBeGreaterThanOrEqual(100);
+  expect(ultraHdLayout.platformFont).toBeGreaterThanOrEqual(130);
+  expect(ultraHdLayout.logoWidth).toBeGreaterThanOrEqual(100);
   expect(errors).toEqual([]);
 });
 
