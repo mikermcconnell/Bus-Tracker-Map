@@ -652,6 +652,10 @@ router.use(express.static(FRONTEND_DIR, {
   }
 }));
 
+// The shared departures HTML uses relative asset URLs. Preserve those URLs
+// when the same page is mounted one level deeper at /departures/downtown.
+router.use('/departures/assets', express.static(path.join(FRONTEND_DIR, 'assets')));
+
 apiRouter.get('/routes.geojson', (req, res) => {
   sendMergedRoutes(res);
 });
@@ -752,8 +756,10 @@ apiRouter.get('/departures', async (req, res) => {
   }
   const limit = rawLimit === undefined ? 12 : Number(rawLimit);
   if (limit < 1 || limit > 30) return res.status(400).json({ error: 'INVALID_LIMIT' });
+  const board = String(req.query && req.query.board || 'allandale').toLowerCase();
+  if (!['allandale', 'downtown'].includes(board)) return res.status(400).json({ error: 'INVALID_BOARD' });
   try {
-    const data = await getDepartures({ limit });
+    const data = await getDepartures({ limit, board });
     res.setHeader('Cache-Control', 'public, max-age=5, stale-while-revalidate=5');
     res.json(data);
   } catch (err) {
@@ -868,6 +874,14 @@ router.get('/notices', (req, res, next) => {
 });
 
 router.get('/departures', (req, res, next) => {
+  const departuresPath = path.join(FRONTEND_DIR, 'departures.html');
+  if (!fs.existsSync(departuresPath)) return next();
+  res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self';");
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(departuresPath);
+});
+
+router.get('/departures/downtown', (req, res, next) => {
   const departuresPath = path.join(FRONTEND_DIR, 'departures.html');
   if (!fs.existsSync(departuresPath)) return next();
   res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self';");

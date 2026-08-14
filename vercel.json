@@ -33,6 +33,10 @@
   ],
   "rewrites": [
     {
+      "source": "/departures/assets/(.*)",
+      "destination": "/assets/$1"
+    },
+    {
       "source": "/batt.map",
       "destination": "/batt.map.html"
     },
@@ -46,6 +50,10 @@
     },
     {
       "source": "/departures",
+      "destination": "/departures.html"
+    },
+    {
+      "source": "/departures/downtown",
       "destination": "/departures.html"
     },
     {

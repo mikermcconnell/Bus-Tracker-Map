@@ -130,8 +130,10 @@ export function createDataClient(options = {}) {
 
     fetchDepartures(limit = 12, options = {}) {
       const cacheBust = Date.now().toString(36);
-      return fetchJson(resolveUrl(`/api/departures?limit=${encodeURIComponent(limit)}&cb=${cacheBust}`), {
-        ...options,
+      const { board, ...fetchOptions } = options;
+      const boardQuery = board ? `&board=${encodeURIComponent(board)}` : '';
+      return fetchJson(resolveUrl(`/api/departures?limit=${encodeURIComponent(limit)}${boardQuery}&cb=${cacheBust}`), {
+        ...fetchOptions,
         cache: 'no-store',
       });
     },

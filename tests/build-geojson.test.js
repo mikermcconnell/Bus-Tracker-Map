@@ -41,6 +41,8 @@ function createGtfsZipBuffer() {
     '1001,1001,Terminal,44.3900,-79.6900,0,,',
     '1002,1002,Approach,44.3800,-79.6900,0,,',
     '1003,1003,Branch,44.3810,-79.6910,0,,',
+    '1,1,Downtown Hub,44.3878,-79.6903,0,,',
+    '2,2,Downtown Hub,44.3877,-79.6902,0,,',
     '14,14,Essa at Gowan,44.373522,-79.691152,0,,',
     'BATT,BATT,Barrie Allandale Transit Terminal,44.3740,-79.6902,1,,',
     '9006,9006,Barrie Allandale Transit Terminal Platform 6,44.3742,-79.6897,0,BATT,6',
@@ -50,10 +52,12 @@ function createGtfsZipBuffer() {
   zip.addFile('stop_times.txt', Buffer.from([
     'trip_id,arrival_time,departure_time,stop_id,stop_sequence',
     'trip-1,12:00:00,12:00:00,1001,1',
-    'trip-1,12:05:00,12:05:00,1002,2',
-    'trip-1,12:15:00,12:20:00,9006,3',
+    'trip-1,12:02:00,12:02:00,1,2',
+    'trip-1,12:05:00,12:05:00,1002,3',
+    'trip-1,12:15:00,12:20:00,9006,4',
     'trip-1-branch,12:00:00,12:00:00,1001,1',
-    'trip-1-branch,12:05:00,12:05:00,1003,2',
+    'trip-1-branch,12:02:00,12:02:00,2,2',
+    'trip-1-branch,12:05:00,12:05:00,1003,3',
     'trip-12b,15:34:00,15:34:00,14,1',
     ''
   ].join('\n'), 'utf8'));
@@ -138,7 +142,7 @@ test('build-geojson emits routes and stops artefacts', async () => {
     expect(metadata.trips['trip-1'].terminal_stops).toEqual([
       {
         stop_id: '9006',
-        stop_sequence: 3,
+        stop_sequence: 4,
         arrival_time: '12:15:00',
         departure_time: '12:20:00',
         is_departure: false,
@@ -147,6 +151,20 @@ test('build-geojson emits routes and stops artefacts', async () => {
     expect(metadata.trips['trip-1'].service_id).toBe('weekday');
     expect(metadata.trips['trip-1'].direction_id).toBe('0');
     expect(metadata.trips['trip-1'].shape_id).toBe('shape-1');
+    expect(metadata.departure_boards.downtown).toMatchObject({
+      name: 'Downtown Hub',
+      stop_ids: ['1', '2'],
+    });
+    expect(metadata.departure_boards.downtown.stops).toEqual([
+      expect.objectContaining({ id: '1', platform_code: '1' }),
+      expect.objectContaining({ id: '2', platform_code: '2' }),
+    ]);
+    expect(metadata.departure_boards.downtown.trips['trip-1'].terminal_stops).toEqual([
+      expect.objectContaining({ stop_id: '1', departure_time: '12:02:00', is_departure: true }),
+    ]);
+    expect(metadata.departure_boards.downtown.trips['trip-1-branch'].terminal_stops).toEqual([
+      expect.objectContaining({ stop_id: '2', departure_time: '12:02:00', is_departure: true }),
+    ]);
     expect(metadata.terminal_approach_fallbacks['1|0|1002']).toEqual({
       route_id: '1',
       direction_id: '0',

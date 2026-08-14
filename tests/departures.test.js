@@ -4,10 +4,12 @@ import departuresModule from '../server/departures.js';
 const {
   applyVehicleEvidence,
   collectScheduledDepartures,
+  createDeparturesService,
   freshness,
   isBoardableTerminalDeparture,
   isFreshVehiclePosition,
   mergeTripUpdates,
+  metadataForBoard,
   parsePrefixedGoTripId,
   parseGoNextService,
   readGoTime,
@@ -41,6 +43,79 @@ function metadata() {
 }
 
 describe('departure aggregation', () => {
+  test('selects and merges Downtown Hub stop 1 and stop 2 metadata', () => {
+    const source = {
+      ...metadata(),
+      departure_boards: {
+        downtown: {
+          stop_ids: ['1', '2'],
+          stops: [
+            { id: '1', platform_code: '1' },
+            { id: '2', platform_code: '2' },
+          ],
+          trips: {
+            stop1: {
+              route_id: '2A', service_id: 'weekday', headsign: 'Park Place',
+              terminal_stops: [{ stop_id: '1', departure_time: '12:10:00', is_departure: true }],
+            },
+            stop2: {
+              route_id: '8A', service_id: 'weekday', headsign: 'Georgian College',
+              terminal_stops: [{ stop_id: '2', departure_time: '12:15:00', is_departure: true }],
+            },
+          },
+        },
+      },
+    };
+
+    const selected = metadataForBoard(source, 'barrie_transit', 'downtown');
+    const rows = collectScheduledDepartures(
+      selected,
+      'barrie_transit',
+      Date.parse('2026-08-04T16:00:00Z')
+    );
+
+    expect(rows).toEqual([
+      expect.objectContaining({ stop_id: '1', platform: '1', platform_type: 'stop', route_label: '2A' }),
+      expect.objectContaining({ stop_id: '2', platform: '2', platform_type: 'stop', route_label: '8A' }),
+    ]);
+  });
+
+  test('builds the Downtown board without starting unrelated agency requests', async () => {
+    const source = {
+      ...metadata(),
+      departure_boards: {
+        downtown: {
+          stop_ids: ['1', '2'],
+          stops: [{ id: '1', platform_code: '1' }, { id: '2', platform_code: '2' }],
+          trips: {
+            stop1: {
+              route_id: '2A', service_id: 'weekday', headsign: 'Park Place',
+              terminal_stops: [{ stop_id: '1', departure_time: '12:10:00', is_departure: true }],
+            },
+            stop2: {
+              route_id: '8A', service_id: 'weekday', headsign: 'Georgian College',
+              terminal_stops: [{ stop_id: '2', departure_time: '12:15:00', is_departure: true }],
+            },
+          },
+        },
+      },
+    };
+    const getDepartures = createDeparturesService({
+      metadata: { barrie_transit: source },
+      fetchVehiclePayload: () => ({ vehicles: [] }),
+    });
+
+    const result = await getDepartures({
+      board: 'downtown',
+      limit: 10,
+      now: Date.parse('2026-08-04T16:00:00Z'),
+    });
+
+    expect(result.board).toBe('downtown');
+    expect(result.departures.map((row) => row.stop_id)).toEqual(['1', '2']);
+    expect(Object.keys(result.sources)).toEqual(['barrie_transit']);
+  });
+
   test('collects outbound service in the one-hour window and excludes terminating trips', () => {
     const now = Date.parse('2026-08-04T16:00:00Z'); // 12:00 in Toronto
     const rows = collectScheduledDepartures(metadata(), 'barrie_transit', now);

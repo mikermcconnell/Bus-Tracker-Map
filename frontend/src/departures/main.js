@@ -11,6 +11,7 @@ const REQUEST_TIMEOUT_MS = 12 * 1000;
 const WATCHDOG_STALE_MS = 5 * 60 * 1000;
 const WATCHDOG_INTERVAL_MS = 60 * 1000;
 const MAX_DEPARTURES = 11;
+const boardId = /\/departures\/downtown\/?$/i.test(window.location.pathname) ? 'downtown' : 'allandale';
 const AGENCIES = {
   barrie_transit: { name: 'Barrie Transit', short: 'BT', logo: 'agency-barrie-transit.png' },
   ontario_northland: { name: 'Ontario Northland', short: 'ON', logo: 'agency-ontario-northland.png' },
@@ -20,6 +21,11 @@ const AGENCIES = {
 let pollMs = 10000;
 let lastGoodAt = 0;
 const startedAt = Date.now();
+
+if (boardId === 'downtown') {
+  document.title = 'Downtown Hub Departures';
+  document.getElementById('page-title').textContent = 'Downtown Hub Departures';
+}
 
 function escapeHtml(value) {
   return String(value === null || value === undefined ? '' : value)
@@ -119,7 +125,7 @@ function renderDepartures(rows) {
 }
 
 function renderHealth(sources) {
-  health.textContent = Object.keys(AGENCIES).map((key) => {
+  health.textContent = Object.keys(sources || {}).map((key) => {
     const source = sources && sources[key] || {};
     const agency = AGENCIES[key];
     const feedActive = source.realtime_status === 'live';
@@ -134,7 +140,7 @@ function renderHealth(sources) {
 
 async function refresh() {
   try {
-    const payload = await client.fetchDepartures(MAX_DEPARTURES, { timeoutMs: REQUEST_TIMEOUT_MS });
+    const payload = await client.fetchDepartures(MAX_DEPARTURES, { timeoutMs: REQUEST_TIMEOUT_MS, board: boardId });
     lastGoodAt = Date.now();
     renderDepartures(Array.isArray(payload.departures) ? payload.departures : []);
     renderHealth(payload.sources || {});

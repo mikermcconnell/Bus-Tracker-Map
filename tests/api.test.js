@@ -269,6 +269,13 @@ describe('API smoke tests', () => {
     expect(invalidText.body.error).toBe('INVALID_LIMIT');
   });
 
+  test('rejects unknown departure boards before accessing feeds', async () => {
+    const app = await initApp();
+    const res = await request(app).get('/api/departures?board=unknown');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('INVALID_BOARD');
+  });
+
   test('returns a controlled unavailable response when no schedule metadata exists', async () => {
     const app = await initApp();
     const res = await request(app).get('/api/departures');

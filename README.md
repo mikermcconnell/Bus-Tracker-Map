@@ -74,6 +74,10 @@ Open [http://localhost:3000/departures](http://localhost:3000/departures) locall
 
 Rows are selected from the next hour of published service and show only the next trip for each agency, route, destination, and platform combination. A **LIVE** badge and live countdown require both a fresh stop prediction and a fresh vehicle position for the exact agency and trip. Every other row is labelled **SCHED** and uses its published scheduled time. The supporting `GET /api/departures?limit=12` endpoint accepts limits from 1 through 30.
 
+## Downtown Hub departure board
+
+Open [http://localhost:3000/departures/downtown](http://localhost:3000/departures/downtown) locally or `/departures/downtown` on the production site. This board merges Barrie Transit departures from Downtown Hub stops 1 and 2 while retaining each departure's stop number. Its supporting endpoint is `GET /api/departures?board=downtown&limit=12`.
+
 ### Metrolinx data notice
 
 Data used in this product or service is provided with the permission of Metrolinx. Metrolinx makes no representations or warranties of any kind, express or implied, with respect to the Data and assumes no responsibility for the accuracy or currency of the data used in this product or service.

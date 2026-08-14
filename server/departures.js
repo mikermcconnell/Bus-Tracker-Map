@@ -20,6 +20,23 @@ const AGENCIES = Object.freeze({
   simcoe_linx: { id: 'simcoe-linx', name: 'Simcoe LINX', mode: 'bus' },
 });
 
+const BOARD_CONFIGS = Object.freeze({
+  allandale: Object.freeze({ agencies: Object.freeze(Object.keys(AGENCIES)) }),
+  downtown: Object.freeze({ agencies: Object.freeze(['barrie_transit']) }),
+});
+
+function metadataForBoard(metadata, agencyKey, boardId) {
+  if (boardId === 'allandale' || agencyKey !== 'barrie_transit') return metadata;
+  const board = metadata && metadata.departure_boards && metadata.departure_boards[boardId];
+  if (!board) return null;
+  return {
+    ...metadata,
+    terminal_stop_ids: Array.isArray(board.stop_ids) ? board.stop_ids.map(String) : [],
+    terminal_stops: Array.isArray(board.stops) ? board.stops : [],
+    trips: board.trips || {},
+  };
+}
+
 function localDateKeys(nowMs) {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' })
     .formatToParts(new Date(nowMs));
@@ -65,7 +82,8 @@ function routeDetails(agencyKey, metadata, trip, stopId, tripId) {
 function platformDetails(agencyKey, metadata, stopId) {
   if (agencyKey === 'barrie_transit') {
     const value = stopPlatform(metadata, stopId, stopId === '14' ? '14' : '');
-    return { platform: value, platform_type: stopId === '14' ? 'stop' : 'platform' };
+    const isOnStreetStop = stopId === '14' || !BARRIE_ALLANDALE_STOP_IDS.has(stopId);
+    return { platform: value, platform_type: isOnStreetStop ? 'stop' : 'platform' };
   }
   if (agencyKey === 'ontario_northland') return { platform: '8', platform_type: 'platform' };
   if (agencyKey === 'simcoe_linx') return { platform: '2', platform_type: 'platform' };
@@ -424,23 +442,45 @@ function createDeparturesService(options = {}) {
   const metadata = options.metadata || {};
   const delayedAfterMs = options.delayedAfterMs || 120000;
   const offlineAfterMs = options.offlineAfterMs || 900000;
-  return async function getDepartures({ limit = 12, now = Date.now() } = {}) {
+  return async function getDepartures({ limit = 12, now = Date.now(), board = 'allandale' } = {}) {
     const nowMs = Number(now);
+    const boardId = String(board || 'allandale').toLowerCase();
+    const boardConfig = BOARD_CONFIGS[boardId];
+    if (!boardConfig) {
+      const error = new Error('Unknown departure board'); error.statusCode = 400; error.code = 'INVALID_BOARD'; throw error;
+    }
+    const boardMetadata = {};
+    boardConfig.agencies.forEach((key) => {
+      boardMetadata[key] = metadataForBoard(metadata[key], key, boardId);
+    });
     const schedule = {};
-    for (const key of Object.keys(AGENCIES)) schedule[key] = collectScheduledDepartures(metadata[key], key, nowMs);
-    if (!Object.values(metadata).some((value) => value && value.trips && Object.keys(value.trips).length)) {
+    for (const key of boardConfig.agencies) schedule[key] = collectScheduledDepartures(boardMetadata[key], key, nowMs);
+    if (!Object.values(boardMetadata).some((value) => value && value.trips && Object.keys(value.trips).length)) {
       const error = new Error('Departure schedule metadata is unavailable'); error.statusCode = 503; throw error;
     }
-    const realtimePromises = {
-      barrie_transit: options.urls && options.urls.barrie ? fetchTripUpdates(options.urls.barrie, metadata.barrie_transit && metadata.barrie_transit.terminal_stop_ids, { now: nowMs }) : Promise.reject(new Error('not_configured')),
-      ontario_northland: options.urls && options.urls.ontarioNorthland ? fetchTripUpdates(options.urls.ontarioNorthland, metadata.ontario_northland && metadata.ontario_northland.barrie_stop_ids, { now: nowMs }) : Promise.reject(new Error('not_configured')),
-      simcoe_linx: options.urls && options.urls.linx ? fetchTripUpdates(options.urls.linx, metadata.simcoe_linx && metadata.simcoe_linx.terminal_stop_ids, { now: nowMs }) : Promise.reject(new Error('not_configured')),
-      go_transit: fetchGoNextServices({ apiBase: options.goApiBase, apiKey: options.goApiKey, nowMs }),
-    };
+    const realtimePromises = {};
+    if (boardConfig.agencies.includes('barrie_transit')) {
+      realtimePromises.barrie_transit = options.urls && options.urls.barrie
+        ? fetchTripUpdates(options.urls.barrie, boardMetadata.barrie_transit && boardMetadata.barrie_transit.terminal_stop_ids, { now: nowMs })
+        : Promise.reject(new Error('not_configured'));
+    }
+    if (boardConfig.agencies.includes('ontario_northland')) {
+      realtimePromises.ontario_northland = options.urls && options.urls.ontarioNorthland
+        ? fetchTripUpdates(options.urls.ontarioNorthland, metadata.ontario_northland && metadata.ontario_northland.barrie_stop_ids, { now: nowMs })
+        : Promise.reject(new Error('not_configured'));
+    }
+    if (boardConfig.agencies.includes('simcoe_linx')) {
+      realtimePromises.simcoe_linx = options.urls && options.urls.linx
+        ? fetchTripUpdates(options.urls.linx, metadata.simcoe_linx && metadata.simcoe_linx.terminal_stop_ids, { now: nowMs })
+        : Promise.reject(new Error('not_configured'));
+    }
+    if (boardConfig.agencies.includes('go_transit')) {
+      realtimePromises.go_transit = fetchGoNextServices({ apiBase: options.goApiBase, apiKey: options.goApiKey, nowMs });
+    }
     const vehiclePayloadPromise = typeof options.fetchVehiclePayload === 'function'
       ? Promise.resolve().then(() => options.fetchVehiclePayload())
       : Promise.resolve({ vehicles: [] });
-    const keys = Object.keys(realtimePromises);
+    const keys = boardConfig.agencies;
     const settled = await Promise.allSettled(keys.map((key) => realtimePromises[key]));
     const sources = {};
     let combined = [];
@@ -477,12 +517,13 @@ function createDeparturesService(options = {}) {
       options.vehicleLiveMaxAgeMs || delayedAfterMs
     );
     const departures = selectScheduledDepartures(classified, nowMs, limit);
-    for (const [key, agency] of Object.entries(AGENCIES)) {
+    for (const key of boardConfig.agencies) {
+      const agency = AGENCIES[key];
       const agencyRows = departures.filter((row) => row.agency_id === agency.id);
       sources[key].live_departure_count = agencyRows.filter((row) => row.departure_source === 'realtime').length;
       sources[key].estimated_departure_count = agencyRows.filter((row) => row.departure_source === 'estimated').length;
     }
-    return { generated_at: nowMs, time_zone: TIME_ZONE, horizon_hours: HORIZON_HOURS, departures, sources };
+    return { generated_at: nowMs, time_zone: TIME_ZONE, horizon_hours: HORIZON_HOURS, board: boardId, departures, sources };
   };
 }
 
@@ -494,6 +535,7 @@ module.exports = {
   isBoardableTerminalDeparture,
   isFreshVehiclePosition,
   mergeTripUpdates,
+  metadataForBoard,
   parsePrefixedGoTripId,
   parseGoNextService,
   readGoTime,

@@ -285,6 +285,38 @@ test('departures board shows every departure in the one-hour window without scro
   expect(errors).toEqual([]);
 });
 
+test('Downtown Hub board requests and labels the merged stop 1 and 2 board', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  let requestedBoard = null;
+  await page.route('**/api/config', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ poll_ms: 10000, base_path: '/' }) });
+  });
+  await page.route('**/api/departures?*', async (route) => {
+    requestedBoard = new URL(route.request().url()).searchParams.get('board');
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        generated_at: Date.now(),
+        board: 'downtown',
+        departures: [
+          { id: 'stop-1', agency_id: 'barrie-transit', agency_name: 'Barrie Transit', route_label: '2A', destination: 'Park Place', platform: '1', platform_type: 'stop', scheduled_departure_time: nowSeconds + 300, expected_departure_time: nowSeconds + 300, departure_source: 'scheduled' },
+          { id: 'stop-2', agency_id: 'barrie-transit', agency_name: 'Barrie Transit', route_label: '8A', destination: 'Georgian College', platform: '2', platform_type: 'stop', scheduled_departure_time: nowSeconds + 600, expected_departure_time: nowSeconds + 600, departure_source: 'scheduled' },
+        ],
+        sources: { barrie_transit: { display_mode: 'scheduled', realtime_status: 'live' } },
+      }),
+    });
+  });
+
+  await page.goto('/departures/downtown');
+
+  await expect(page).toHaveTitle(/Downtown Hub Departures/);
+  await expect(page.locator('#page-title')).toHaveText('Downtown Hub Departures');
+  await expect(page.locator('.departure')).toHaveCount(2);
+  await expect(page.locator('.platform strong')).toHaveText(['01', '02']);
+  expect(requestedBoard).toBe('downtown');
+});
+
 test('departures board keeps longer waits as minute countdowns', async ({ page }) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   await page.route('**/api/config', async (route) => {

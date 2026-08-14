@@ -17,6 +17,13 @@ const ADDITIONAL_TERMINAL_STOP_PLATFORMS = Object.freeze({
   '14': '14',
 });
 
+const DEPARTURE_BOARD_CONFIGS = Object.freeze({
+  downtown: Object.freeze({
+    name: 'Downtown Hub',
+    stopIds: Object.freeze(['1', '2']),
+  }),
+});
+
 const OUT_DIR = path.resolve(process.env.CACHE_DIR || path.join(__dirname, '..', 'cache'));
 const ROUTES_PATH = path.join(OUT_DIR, 'routes.geojson');
 const STOPS_PATH = path.join(OUT_DIR, 'stops.geojson');
@@ -350,6 +357,65 @@ function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
       });
     });
 
+    const departureBoards = {};
+    Object.entries(DEPARTURE_BOARD_CONFIGS).forEach(([boardId, boardConfig]) => {
+      const boardStopIds = new Set(boardConfig.stopIds.map(String));
+      const boardStops = boardConfig.stopIds.map((stopId) => (
+        stopsRows.find((stop) => String(stop.stop_id || '') === String(stopId))
+      )).filter(Boolean);
+      const missingStopIds = boardConfig.stopIds.filter((stopId) => (
+        !boardStops.some((stop) => String(stop.stop_id || '') === String(stopId))
+      ));
+      if (missingStopIds.length) {
+        throw new Error(`${boardConfig.name} departure-board stops missing: ${missingStopIds.join(', ')}`);
+      }
+
+      const boardStopsByTrip = {};
+      stopTimeRows.forEach((stopTime) => {
+        const stopId = String(stopTime.stop_id || '');
+        const stopSequence = Number(stopTime.stop_sequence);
+        if (!boardStopIds.has(stopId) || !Number.isFinite(stopSequence)) return;
+        const tripId = String(stopTime.trip_id || '');
+        if (!tripId) return;
+        if (!boardStopsByTrip[tripId]) boardStopsByTrip[tripId] = [];
+        boardStopsByTrip[tripId].push({
+          stop_id: stopId,
+          stop_sequence: stopSequence,
+          arrival_time: stopTime.arrival_time || null,
+          departure_time: stopTime.departure_time || stopTime.arrival_time || null,
+          is_departure: stopSequence < Number(lastStopSequenceByTrip[tripId] || stopSequence),
+        });
+      });
+
+      const boardTrips = {};
+      tripsRows.forEach((trip) => {
+        const tripId = String(trip.trip_id || '');
+        const stops = boardStopsByTrip[tripId];
+        if (!tripId || !stops || !stops.length) return;
+        boardTrips[tripId] = {
+          route_id: String(trip.route_id || ''),
+          direction_id: trip.direction_id !== undefined && trip.direction_id !== null
+            ? String(trip.direction_id)
+            : null,
+          service_id: String(trip.service_id || ''),
+          shape_id: String(trip.shape_id || '') || null,
+          headsign: trip.trip_headsign || null,
+          terminal_stops: stops.sort((a, b) => a.stop_sequence - b.stop_sequence),
+        };
+      });
+
+      departureBoards[boardId] = {
+        name: boardConfig.name,
+        stop_ids: boardConfig.stopIds.map(String),
+        stops: boardStops.map((stop) => ({
+          id: String(stop.stop_id),
+          name: stop.stop_name || boardConfig.name,
+          platform_code: String(stop.stop_code || stop.stop_id),
+        })),
+        trips: boardTrips,
+      };
+    });
+
     const tripMetadata = {};
     tripsRows.forEach((trip) => {
       const tripId = String(trip.trip_id || '');
@@ -385,6 +451,7 @@ function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
           null,
       })),
       ...serviceCalendarMetadata,
+      departure_boards: departureBoards,
       terminal_approach_fallbacks: terminalApproachFallbacks,
       trips: tripMetadata,
     }));

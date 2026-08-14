@@ -41,4 +41,19 @@ describe('frontend data client route loading', () => {
     vi.useRealTimers();
   });
 
+  test('requests the merged Downtown Hub departure board explicitly', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ departures: [] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createDataClient().fetchDepartures(11, { board: 'downtown' });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/api\/departures\?limit=11&board=downtown&cb=/),
+      expect.objectContaining({ cache: 'no-store' })
+    );
+  });
+
 });
