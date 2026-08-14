@@ -25,12 +25,25 @@ const BOARD_CONFIGS = Object.freeze({
   downtown: Object.freeze({ agencies: Object.freeze(['barrie_transit']) }),
 });
 
+const DOWNTOWN_ROUTE_NAMES = Object.freeze({
+  '100': 'Red',
+  '101': 'Blue',
+});
+
+function barrieDowntownDestination(routeId, headsign) {
+  const brandedName = DOWNTOWN_ROUTE_NAMES[String(routeId || '')];
+  if (brandedName) return brandedName;
+  const cleaned = cleanHeadsign(headsign, 'barrie-transit');
+  return cleaned.replace(/\s+TO\s+.+$/i, '').trim() || cleaned;
+}
+
 function metadataForBoard(metadata, agencyKey, boardId) {
   if (boardId === 'allandale' || agencyKey !== 'barrie_transit') return metadata;
   const board = metadata && metadata.departure_boards && metadata.departure_boards[boardId];
   if (!board) return null;
   return {
     ...metadata,
+    departure_board_id: boardId,
     terminal_stop_ids: Array.isArray(board.stop_ids) ? board.stop_ids.map(String) : [],
     terminal_stops: Array.isArray(board.stops) ? board.stops : [],
     trips: board.trips || {},
@@ -62,7 +75,10 @@ function routeDetails(agencyKey, metadata, trip, stopId, tripId) {
   const sourceRoute = String(trip.route_id || '');
   if (agencyKey === 'barrie_transit') {
     const platform = stopPlatform(metadata, stopId, stopId === '14' ? '14' : '');
-    return { route_id: sourceRoute, route_label: sourceRoute, mode: 'bus', destination: BARRIE_PLATFORM_LABELS[`${platform}|${sourceRoute}`] || cleanHeadsign(trip.headsign, 'barrie-transit') };
+    const publishedDestination = metadata.departure_board_id === 'downtown'
+      ? barrieDowntownDestination(sourceRoute, trip.headsign)
+      : cleanHeadsign(trip.headsign, 'barrie-transit');
+    return { route_id: sourceRoute, route_label: sourceRoute, mode: 'bus', destination: BARRIE_PLATFORM_LABELS[`${platform}|${sourceRoute}`] || publishedDestination };
   }
   if (agencyKey === 'ontario_northland') {
     const route = metadata.routes && metadata.routes[sourceRoute] || {};
@@ -529,6 +545,7 @@ function createDeparturesService(options = {}) {
 
 module.exports = {
   applyVehicleEvidence,
+  barrieDowntownDestination,
   collectScheduledDepartures,
   createDeparturesService,
   freshness,

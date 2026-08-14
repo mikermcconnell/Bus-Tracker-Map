@@ -3,6 +3,7 @@ import departuresModule from '../server/departures.js';
 
 const {
   applyVehicleEvidence,
+  barrieDowntownDestination,
   collectScheduledDepartures,
   createDeparturesService,
   freshness,
@@ -43,6 +44,14 @@ function metadata() {
 }
 
 describe('departure aggregation', () => {
+  test('uses concise Downtown Hub route names', () => {
+    expect(barrieDowntownDestination('100', 'RED EXPRESS TO DOWNTOWN BARRIE TERMINAL')).toBe('Red');
+    expect(barrieDowntownDestination('101', 'BLUE EXPRESS TO DOWNTOWN BARRIE TERMINAL')).toBe('Blue');
+    expect(barrieDowntownDestination('7B', 'BEAR CREEK TO PARK PLACE')).toBe('BEAR CREEK');
+    expect(barrieDowntownDestination('8A', 'RVH/YONGE TO GEORGIAN COLLEGE')).toBe('RVH/YONGE');
+    expect(barrieDowntownDestination('12A', 'GEORGIAN MALL')).toBe('GEORGIAN MALL');
+  });
+
   test('selects and merges Downtown Hub stop 1 and stop 2 metadata', () => {
     const source = {
       ...metadata(),
@@ -75,8 +84,8 @@ describe('departure aggregation', () => {
     );
 
     expect(rows).toEqual([
-      expect.objectContaining({ stop_id: '1', platform: '1', platform_type: 'stop', route_label: '2A' }),
-      expect.objectContaining({ stop_id: '2', platform: '2', platform_type: 'stop', route_label: '8A' }),
+      expect.objectContaining({ stop_id: '1', platform: '1', platform_type: 'stop', route_label: '2A', destination: 'Park Place' }),
+      expect.objectContaining({ stop_id: '2', platform: '2', platform_type: 'stop', route_label: '8A', destination: 'Georgian College' }),
     ]);
   });
 
