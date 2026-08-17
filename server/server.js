@@ -37,6 +37,14 @@ const {
   buildPlatformDeparturePayload,
   parsePlatformStopCode,
 } = require('./platform-departures');
+const { fetchTripUpdates: fetchGtfsTripUpdates } = require('./gtfs-trip-updates');
+const {
+  buildShelterDepartures,
+  loadShelterDepartureMetadata,
+  parseShelterGroupQuery,
+  parseShelterStopQuery,
+  resolveShelterLocation,
+} = require('./shelter-departures');
 
 function normalizeBasePath(input) {
   if (!input) return '/';
@@ -199,6 +207,7 @@ const northlandTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'ontario-north
 const goTransitTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'go-transit.json');
 const simcoeLinxTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'simcoe-linx.json');
 const linxTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'linx.json');
+const barrieShelterMetadata = loadShelterDepartureMetadata(CACHE_DIR);
 const getDepartures = createDeparturesService({
   metadata: {
     barrie_transit: barrieTerminalMetadata,
@@ -813,6 +822,73 @@ apiRouter.get('/departures', async (req, res) => {
   }
 });
 
+apiRouter.get('/shelter-departures', async (req, res) => {
+  const stopCode = req.query && req.query.stop;
+  const groupId = req.query && req.query.group;
+  if (!parseShelterStopQuery(stopCode) && !parseShelterGroupQuery(groupId)) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(400).json({
+      error: 'STOP_REQUIRED',
+      message: 'Add a Barrie Transit stop using ?stop= or a named location using ?group=.',
+    });
+  }
+
+  const location = resolveShelterLocation(barrieShelterMetadata, {
+    stopQuery: stopCode,
+    groupQuery: groupId,
+  });
+  if (!location) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(404).json({
+      error: groupId ? 'GROUP_NOT_FOUND' : 'STOP_NOT_FOUND',
+      message: groupId
+        ? `Barrie Transit departure group ${String(groupId)} was not found.`
+        : `Barrie Transit stop ${String(stopCode)} was not found.`,
+    });
+  }
+
+  let tripUpdates = {};
+  let feedTimestamp = null;
+  let realtimeStatus = 'scheduled';
+  if (RT_TRIP_UPDATES_URL) {
+    try {
+      const realtime = await fetchGtfsTripUpdates(RT_TRIP_UPDATES_URL, location.ids);
+      feedTimestamp = realtime.feed_timestamp || null;
+      realtimeStatus = 'live';
+      for (const update of realtime.updates || []) {
+        if (!tripUpdates[update.trip_id]) {
+          tripUpdates[update.trip_id] = {
+            start_date: update.start_date,
+            schedule_relationship: update.canceled ? 3 : null,
+            stop_time_updates: [],
+          };
+        }
+        tripUpdates[update.trip_id].stop_time_updates.push({
+          stop_id: update.stop_id,
+          stop_sequence: update.stop_sequence,
+          departure_time: update.departure_time,
+          departure_delay: update.delay_seconds,
+          schedule_relationship: update.skipped ? 1 : null,
+        });
+      }
+    } catch (err) {
+      console.error('[shelter-departures] Realtime data unavailable:', err && err.message || err);
+      realtimeStatus = 'unavailable';
+    }
+  }
+
+  const payload = buildShelterDepartures({
+    metadata: barrieShelterMetadata,
+    stopQuery: stopCode,
+    groupQuery: groupId,
+    tripUpdates,
+    feedTimestamp,
+    realtimeStatus,
+  });
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json(payload);
+});
+
 apiRouter.get('/service-status', (req, res) => {
   const status = buildServiceStatus({
     cacheDir: CACHE_DIR,
@@ -928,6 +1004,14 @@ router.get('/departures/platform.aspx', (req, res, next) => {
 
 router.get('/departures', (req, res, next) => {
   const departuresPath = path.join(FRONTEND_DIR, 'departures.html');
+  if (!fs.existsSync(departuresPath)) return next();
+  res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self';");
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(departuresPath);
+});
+
+router.get('/shelter-departures', (req, res, next) => {
+  const departuresPath = path.join(FRONTEND_DIR, 'shelter-departures.html');
   if (!fs.existsSync(departuresPath)) return next();
   res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self';");
   res.setHeader('Cache-Control', 'no-cache');

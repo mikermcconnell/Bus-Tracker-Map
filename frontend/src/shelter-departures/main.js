@@ -1,6 +1,6 @@
 const REFRESH_INTERVAL_MS = 10_000;
 const PAGE_SIZE = 3;
-const API_PATH = '/api/departures';
+const API_PATH = '/api/shelter-departures';
 const TIME_ZONE = 'America/Toronto';
 
 const screenState = {

@@ -9,6 +9,19 @@
   },
   "headers": [
     {
+      "source": "/shelter-departures",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self' data:; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self';"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
       "source": "/departures/platform.aspx",
       "headers": [
         {
@@ -45,6 +58,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/shelter-departures",
+      "destination": "/shelter-departures.html"
+    },
     {
       "source": "/departures/assets/(.*)",
       "destination": "/assets/$1"

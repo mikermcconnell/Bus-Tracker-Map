@@ -2522,12 +2522,11 @@ export function createMapController({ dataClient, ui }) {
     return destination;
   }
 
-  function buildNearbyVehicleSummaries(list) {
-    var eligible = getDisplayEligibleVehicles(list);
-
-    return selectNearestVehicles(eligible, {
+  function buildNearbyVehicleSummaries(list, sources) {
+    return selectNearestVehicles(list, {
       terminal: { lat: TERMINAL_COORDS.lat, lon: TERMINAL_COORDS.lng },
-      limit: 5
+      limit: 5,
+      sources: sources
     }).map(function (entry) {
       var vehicle = entry.vehicle;
       var resolved = vehicle.route_id ? resolveRouteEntry(vehicle.route_id) : null;
@@ -3865,8 +3864,7 @@ export function createMapController({ dataClient, ui }) {
         maxAgeMs: feedOfflineAfterMs
       });
       var eligibleVehicles = getDisplayEligibleVehicles(visibleVehicles);
-      var onMapVehicles = eligibleVehicles.filter(isVehicleOnMainMap);
-      var nearbyVehicles = buildNearbyVehicleSummaries(onMapVehicles);
+      var nearbyVehicles = buildNearbyVehicleSummaries(visibleVehicles, payload && payload.sources);
       updateVehicles(visibleVehicles);
       updateRouteEmphasis(nearbyVehicles);
       if (typeof ui.renderNearbyVehicles === 'function') {

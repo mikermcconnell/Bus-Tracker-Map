@@ -7,6 +7,20 @@ export const BATT_COORDS = Object.freeze({
 
 export const TERMINAL_DISPLAY_RADIUS_METERS = 150;
 export const TERMINAL_ARRIVING_NOW_RADIUS_METERS = 250;
+const SOURCE_KEY_BY_AGENCY = Object.freeze({
+  'barrie-transit': 'barrie_transit',
+  'ontario-northland': 'ontario_northland',
+  'go-transit': 'go_transit',
+  'simcoe-linx': 'simcoe_linx'
+});
+
+export function isVehicleSourceLive(vehicle, sources) {
+  if (!vehicle || !sources || typeof sources !== 'object') return true;
+  const agencyId = String(vehicle.agency_id || 'barrie-transit').trim().toLowerCase();
+  const sourceKey = SOURCE_KEY_BY_AGENCY[agencyId];
+  if (!sourceKey || !sources[sourceKey]) return true;
+  return String(sources[sourceKey].feed_status || '').trim().toLowerCase() === 'live';
+}
 
 export function getTerminalDisplayStatus(
   terminalProgressStatus,
@@ -134,6 +148,7 @@ export function selectNearestVehicles(list, options = {}) {
   return (Array.isArray(list) ? list : [])
     .filter((vehicle) => (
       vehicle &&
+      isVehicleSourceLive(vehicle, options.sources) &&
       Number.isFinite(Number(vehicle.lat)) &&
       Number.isFinite(Number(vehicle.lon))
     ))

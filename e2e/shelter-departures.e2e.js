@@ -3,7 +3,7 @@ const { test, expect } = require('@playwright/test');
 test('stop 2 shelter board fits 320 by 80 and rotates three-row pages', async ({ page }) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   await page.setViewportSize({ width: 320, height: 80 });
-  await page.route('**/api/departures?*', (route) => route.fulfill({
+  await page.route('**/api/shelter-departures?*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
@@ -31,7 +31,7 @@ test('stop 2 shelter board fits 320 by 80 and rotates three-row pages', async ({
     }),
   }));
 
-  await page.goto('/departures?stop=2');
+  await page.goto('/shelter-departures?stop=2');
   await expect(page).toHaveTitle('Stop 2 Departures');
   await expect(page.locator('#shelter-stop')).toHaveText('STOP 2 — Downtown Hub');
   await expect(page.locator('#shelter-page')).toHaveText('Page 1 of 2');
@@ -53,22 +53,22 @@ test('stop 2 shelter board fits 320 by 80 and rotates three-row pages', async ({
 
 test('missing and unknown shelter stops show compact errors', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 80 });
-  await page.goto('/departures');
+  await page.goto('/shelter-departures');
   await expect(page.locator('#shelter-stop')).toHaveText('STOP REQUIRED');
 
-  await page.route('**/api/departures?*', (route) => route.fulfill({
+  await page.route('**/api/shelter-departures?*', (route) => route.fulfill({
     status: 404,
     contentType: 'application/json',
     body: JSON.stringify({ error: 'STOP_NOT_FOUND', message: 'Stop not found.' }),
   }));
-  await page.goto('/departures?stop=9999');
+  await page.goto('/shelter-departures?stop=9999');
   await expect(page.locator('.shelter-row--message')).toHaveText('Location not found');
 });
 
 test('named Downtown group combines stops and shows boarding-stop badges', async ({ page }) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   await page.setViewportSize({ width: 320, height: 80 });
-  await page.route('**/api/departures?group=downtown-barrie', (route) => route.fulfill({
+  await page.route('**/api/shelter-departures?group=downtown-barrie', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
@@ -91,7 +91,7 @@ test('named Downtown group combines stops and shows boarding-stop badges', async
     }),
   }));
 
-  await page.goto('/departures?group=downtown-barrie');
+  await page.goto('/shelter-departures?group=downtown-barrie');
   await expect(page).toHaveTitle('Downtown Barrie Departures');
   await expect(page.locator('#shelter-stop')).toHaveText('Downtown Barrie');
   await expect(page.locator('.shelter-row__stop')).toHaveText(['STOP 1', 'STOP 2']);
@@ -107,7 +107,7 @@ test('named Downtown group combines stops and shows boarding-stop badges', async
 test('route content and arrival time share the same vertical row center', async ({ page }) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   await page.setViewportSize({ width: 1568, height: 588 });
-  await page.route('**/api/departures?stop=2', (route) => route.fulfill({
+  await page.route('**/api/shelter-departures?stop=2', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
@@ -128,7 +128,7 @@ test('route content and arrival time share the same vertical row center', async 
     }),
   }));
 
-  await page.goto('/departures?stop=2');
+  await page.goto('/shelter-departures?stop=2');
   const centers = await page.locator('.shelter-row').first().evaluate((row) => {
     const contentCenter = (element) => {
       const range = globalThis.document.createRange();

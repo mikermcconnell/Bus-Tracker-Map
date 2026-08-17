@@ -428,28 +428,46 @@ body {
 }
 
 .map-terminal-building__callout {
+  --building-pointer-length: clamp(72px, 8cqw, 94px);
   position: absolute;
-  bottom: calc(100% + 13px);
-  left: 50%;
+  top: 44%;
+  right: calc(100% + 36px);
   width: clamp(156px, 18cqw, 194px);
-  padding: 5px 8px;
-  border: 1px solid rgba(17, 24, 39, 0.48);
-  border-radius: 5px;
-  color: rgba(255, 255, 255, 0.82);
-  background: rgba(3, 7, 18, 0.68);
-  box-shadow: none;
-  transform: translateX(-50%);
+  padding: 8px 10px;
+  border: 2px solid #fff;
+  border-radius: 7px;
+  color: #fff;
+  background: #075f86;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.48);
+  transform: translateY(-50%);
   text-align: center;
 }
 
+.map-terminal-building__callout::before,
 .map-terminal-building__callout::after {
   content: "";
   position: absolute;
-  top: 100%;
-  left: 50%;
-  height: 15px;
-  border-left: 1px solid rgba(17, 24, 39, 0.62);
-  transform: translateX(-50%);
+  top: 50%;
+  pointer-events: none;
+}
+
+.map-terminal-building__callout::before {
+  left: 100%;
+  width: var(--building-pointer-length);
+  border-top: 3px solid #075f86;
+  filter: drop-shadow(0 1px 0 #fff);
+  transform: translateY(-50%) rotate(5deg);
+  transform-origin: left center;
+}
+
+.map-terminal-building__callout::after {
+  left: calc(100% + var(--building-pointer-length) - 4px);
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-left: 13px solid #075f86;
+  filter: drop-shadow(0 1px 0 #fff);
+  transform: translateY(-31%) rotate(5deg);
+  transform-origin: left center;
 }
 
 .map-terminal-building__name {

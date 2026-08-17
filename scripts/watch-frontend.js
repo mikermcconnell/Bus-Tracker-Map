@@ -64,6 +64,13 @@ const entryPoints = [
     cssPath: path.join(srcDir, 'platform-departures', 'styles.css'),
     templatePath: path.join(srcDir, 'platform-departures', 'index.html'),
     outputHtml: 'platform-departures.html'
+  },
+  {
+    key: 'shelterDepartures',
+    entryPath: path.join(srcDir, 'shelter-departures', 'main.js'),
+    cssPath: path.join(srcDir, 'shelter-departures', 'styles.css'),
+    templatePath: path.join(srcDir, 'shelter-departures', 'index.html'),
+    outputHtml: 'shelter-departures.html'
   }
 ];
 
