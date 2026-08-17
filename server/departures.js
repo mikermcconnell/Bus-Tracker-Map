@@ -63,7 +63,10 @@ function localDateKeys(nowMs) {
 
 function stopPlatform(metadata, stopId, fallback) {
   const stop = (metadata.terminal_stops || []).find((candidate) => String(candidate.id || candidate.stop_id) === stopId);
-  return String(stop && stop.platform_code || fallback || '');
+  const barrieTerminalPlatform = BARRIE_ALLANDALE_STOP_IDS.has(String(stopId || ''))
+    ? String(Number(String(stopId).slice(2)))
+    : '';
+  return String(stop && stop.platform_code || barrieTerminalPlatform || fallback || '');
 }
 
 function northlandRouteNumber(sourceRoute, tripId) {

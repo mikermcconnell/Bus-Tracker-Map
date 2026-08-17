@@ -132,6 +132,41 @@ describe('departure aggregation', () => {
     expect(rows[0]).toMatchObject({ route_label: '8A', platform: '3', destination: 'Yonge Southbound', departure_source: 'scheduled' });
   });
 
+  test('derives Allandale platforms from stop IDs when platform_code is missing', () => {
+    const stopIds = ['9003', '9004', '9005', '9006', '9012', '9013'];
+    const source = {
+      ...metadata(),
+      terminal_stop_ids: stopIds,
+      terminal_stops: stopIds.map((id) => ({ id, platform_code: null })),
+      trips: Object.fromEntries(stopIds.map((stopId, index) => [`trip-${stopId}`, {
+        route_id: index < 4 ? '8A' : '12A',
+        service_id: 'weekday',
+        headsign: 'Georgian Mall',
+        terminal_stops: [{
+          stop_id: stopId,
+          stop_sequence: 1,
+          departure_time: `12:${String(10 + index).padStart(2, '0')}:00`,
+          is_departure: true,
+        }],
+      }])),
+    };
+
+    const rows = collectScheduledDepartures(
+      source,
+      'barrie_transit',
+      Date.parse('2026-08-04T16:00:00Z')
+    );
+
+    expect(Object.fromEntries(rows.map((row) => [row.stop_id, row.platform]))).toEqual({
+      '9003': '3',
+      '9004': '4',
+      '9005': '5',
+      '9006': '6',
+      '9012': '12',
+      '9013': '13',
+    });
+  });
+
   test('shows only the outgoing 8A/8B route during Allandale changeovers', () => {
     const serviceCalendars = {
       weekday: {
