@@ -14,6 +14,8 @@ const PLATFORM_BY_EXTERNAL_STOP = Object.freeze({
   }),
 });
 
+const { barriePlatformForStop } = require('./allandale-platforms');
+
 const BARRIE_PLATFORM_LABELS = Object.freeze({
   '3|8A': 'Yonge Southbound',
   '4|8B': 'Essa Southbound',
@@ -39,7 +41,7 @@ function readStopPlatformMap(metadata) {
   (Array.isArray(metadata && metadata.terminal_stops) ? metadata.terminal_stops : [])
     .forEach((stop) => {
       const id = String(stop && (stop.id || stop.stop_id) || '');
-      const platform = String(stop && stop.platform_code || '');
+      const platform = String(stop && stop.platform_code || barriePlatformForStop(id));
       if (id && platform) result[id] = platform;
     });
   return result;

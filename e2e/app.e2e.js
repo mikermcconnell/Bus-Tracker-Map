@@ -451,6 +451,34 @@ test('platform map renders current assignments and updates markers in place', as
       ],
     }),
   }));
+  await page.route('**/api/departures?*', (route) => {
+    const requestUrl = new URL(route.request().url());
+    expect(requestUrl.searchParams.get('limit')).toBe('30');
+    expect(requestUrl.searchParams.get('board')).toBe('allandale');
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        departures: [{
+          platform: '3',
+          agency_id: 'barrie-transit',
+          route_id: '8A',
+          route_label: '8A',
+          scheduled_departure_time: nowSeconds + 600,
+          expected_departure_time: nowSeconds + 540,
+          departure_source: 'realtime',
+        }, {
+          platform: '3',
+          agency_id: 'barrie-transit',
+          route_id: '8B',
+          route_label: '8B',
+          scheduled_departure_time: nowSeconds + 1200,
+          expected_departure_time: nowSeconds + 1500,
+          departure_source: 'estimated',
+        }],
+      }),
+    });
+  });
   await page.route('**/api/service-status', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -520,18 +548,21 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(page.locator('.platform-card[data-platform="3"] .platform-card__state')).toHaveText('Arriving');
   const arrivingRow = page.locator('.platform-card[data-platform="3"] .platform-card__service[data-route-id="8A"]');
   await expect(arrivingRow).toHaveClass(/platform-card__service--active/);
-  await expect(arrivingRow.locator('.platform-card__service-countdown')).toHaveText('4 min');
+  await expect(arrivingRow.locator('.platform-card__service-countdown')).toHaveText('9 min');
   const inactiveRow = page.locator('.platform-card[data-platform="3"] .platform-card__service[data-route-id="8B"]');
-  const inactiveScheduledTime = new Intl.DateTimeFormat('en-US', {
+  const inactiveExpectedTime = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Toronto',
     hour: 'numeric',
     minute: '2-digit',
-  }).format(new Date((nowSeconds + 1200) * 1000));
+  }).format(new Date((nowSeconds + 1500) * 1000));
   await expect(inactiveRow).not.toHaveClass(/platform-card__service--active/);
   await expect(inactiveRow.locator('.platform-card__service-countdown'))
-    .toHaveText('20 min');
+    .toHaveText('25 min');
   await expect(inactiveRow.locator('.platform-card__service-scheduled'))
-    .toHaveText(inactiveScheduledTime);
+    .toHaveText(inactiveExpectedTime);
+  await expect(inactiveRow.locator('.platform-card__service-source')).toHaveText('Estimated');
+  await expect(inactiveRow.locator('.platform-card__service-source'))
+    .toHaveAttribute('data-source', 'estimated');
   const pastDepartureRow = page.locator('.platform-card[data-platform="5"] .platform-card__service');
   await expect(pastDepartureRow.locator('.platform-card__service-countdown')).toHaveText('No time');
   await expect(pastDepartureRow).not.toContainText('9:32 AM');
@@ -560,6 +591,13 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(page.locator('.map-connection-card[data-platform="9"] .map-connection-card__logo'))
     .toHaveAttribute('src', './assets/agency-barrie-transit.png');
   await expect(page.locator('.map-connection-card[data-platform="9"]')).toContainText('Stop 900');
+  const p9Connection = page.locator('.platform-connections .platform-connection[data-platform="9"]');
+  await expect(p9Connection).toBeHidden();
+  await page.evaluate(() => globalThis.window.__platformMapApp.showDeparturePage(1));
+  await expect(p9Connection).toBeVisible();
+  await expect(p9Connection).toContainText('On Demand');
+  await expect(p9Connection).toContainText('Stop 900');
+  await expect(page.locator('#departure-page-label')).toHaveText('P7–P9 · P12–P13 · Stop 14');
   await expect(page.locator('.platform-card[data-platform="2"]')).toContainText('Wasaga Beach');
   await expect(page.locator('#source-statuses .source-chip')).toHaveCount(1);
   await expect(page.locator('#source-statuses .source-chip')).toContainText('LINX');
@@ -595,8 +633,11 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(page.locator('.vehicle-marker__count')).toHaveText('2 vehicles');
   await expect(page.locator('.vehicle-marker__detail')).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 720 });
+  await page.evaluate(() => globalThis.window.__platformMapApp.showDeparturePage(1));
   const compactDirectoryFits = await page.locator('.platform-directory').evaluate((directory) => {
-    const visibleCards = Array.from(directory.querySelectorAll('.platform-card:not([hidden])'));
+    const visibleCards = Array.from(directory.querySelectorAll(
+      '.platform-card:not([hidden]), .platform-connections:not([hidden])'
+    ));
     const lastItem = visibleCards[visibleCards.length - 1];
     if (!lastItem) return false;
     return lastItem.getBoundingClientRect().bottom <= directory.getBoundingClientRect().bottom;

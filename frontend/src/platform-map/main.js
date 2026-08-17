@@ -5,11 +5,13 @@ import { BATT_COORDS, getTerminalListStatus } from '../map/nearby-vehicles.js';
 import { clusterVehicles, distanceBetweenMeters } from '../map/vehicle-groups.js';
 import feedFreshness from '../../../shared/feed-freshness.js';
 import {
+  departureSourceDisplay,
   getRouteEightDirection,
   getVehicleLabel,
   getVehicleStyle,
   groupPlatformAssignments,
   isTerminalDisplayVehicle,
+  normalizeDepartureBoard,
   normalizeBearing,
   projectVehicleToImage,
 } from './model.js';
@@ -66,7 +68,7 @@ const PLATFORM_DISPLAY_ORDER = Object.freeze([
 ]);
 const DEPARTURE_PAGES = Object.freeze([
   Object.freeze({ label: 'P1–P6', platforms: Object.freeze(['1', '2', '3', '4', '5', '6']) }),
-  Object.freeze({ label: 'P7–P13 + Stop 14', platforms: Object.freeze(['7', '8', '9', '10', '11', '12', '13', '14']) }),
+  Object.freeze({ label: 'P7–P9 · P12–P13 · Stop 14', platforms: Object.freeze(['7', '8', '9', '10', '11', '12', '13', '14']) }),
 ]);
 const PLATFORM_MAP_POSITIONS = Object.freeze({
   '1': Object.freeze({ left: 73.8, top: 54, scrubLeft: 75.6, scrubWidth: 13.4, scrubHeight: 5.5, wide: true }),
@@ -444,12 +446,18 @@ function departureDisplay(timestampSeconds, nowMs = Date.now()) {
   }
 
   const tomorrowKey = localDateKey(new Date(nowMs + 24 * 60 * 60 * 1000));
-  const dayLabel = departureKey === tomorrowKey
-    ? 'Tomorrow'
-    : new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Toronto',
-      weekday: 'short',
-    }).format(departure);
+  if (departureKey === tomorrowKey) {
+    return {
+      primary: 'No more today',
+      secondary: `Next ${scheduledTime}`,
+      state: 'future-day',
+    };
+  }
+
+  const dayLabel = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Toronto',
+    weekday: 'short',
+  }).format(departure);
   return {
     primary: dayLabel,
     secondary: scheduledTime,
@@ -996,17 +1004,19 @@ function setupPlatformApp() {
       card.querySelectorAll('.platform-card__service').forEach((row) => {
         const active = Boolean(activeVehicle && serviceRowMatchesVehicle(row, activeVehicle));
         const terminalDeparture = terminalDepartureForRow(row, terminalDepartures);
-        const hasRealtimeDeparture = terminalDeparture
-          ? String(terminalDeparture.departure_source || '').toLowerCase() === 'realtime'
-          : Boolean(active && state);
+        const departureSource = departureSourceDisplay(
+          terminalDeparture,
+          Boolean(active && state)
+        );
+        const hasRealtimeDeparture = departureSource.key === 'live';
         row.classList.toggle('platform-card__service--active', active);
         row.setAttribute('aria-current', active ? 'true' : 'false');
         const countdown = row.querySelector('.platform-card__service-countdown');
         const scheduled = row.querySelector('.platform-card__service-scheduled');
         const source = row.querySelector('.platform-card__service-source');
         if (source) {
-          source.textContent = hasRealtimeDeparture ? 'Live' : 'Scheduled';
-          source.dataset.source = hasRealtimeDeparture ? 'live' : 'scheduled';
+          source.textContent = departureSource.label;
+          source.dataset.source = departureSource.key;
         }
         if (countdown) {
           const displayTimestamp = terminalDeparture && terminalDeparture.departure_time
@@ -1363,6 +1373,35 @@ function setupPlatformApp() {
       assignmentLayerEl.appendChild(card);
     });
 
+    const connections = createElement('section', 'platform-connections');
+    connections.dataset.departurePage = String(departurePageForPlatform('9'));
+    connections.setAttribute('aria-label', 'Other terminal connections');
+    MAP_CONNECTIONS.forEach((connection) => {
+      const row = createElement('article', 'platform-connection');
+      row.dataset.platform = connection.platform;
+      row.appendChild(createElement(
+        'strong',
+        'platform-connection__platform',
+        platformDisplayName(connection.platform)
+      ));
+      row.appendChild(createAgencyLogo(connection.brand, 'platform-connection__agency-logo'));
+      row.appendChild(createElement(
+        'strong',
+        'platform-connection__route',
+        connection.routes.map((route) => route.label).join(' / ')
+      ));
+      const copy = createElement('span', 'platform-connection__copy');
+      copy.appendChild(createElement(
+        'strong',
+        'platform-connection__stop',
+        connection.serviceLabel || connection.agency
+      ));
+      copy.appendChild(createElement('span', 'platform-connection__agency', connection.stop));
+      row.appendChild(copy);
+      connections.appendChild(row);
+    });
+    assignmentLayerEl.appendChild(connections);
+
     if (!grouped['14'] || !grouped['14'].length) {
       const retired = createElement('section', 'platform-card platform-card--inactive');
       retired.dataset.platform = '14';
@@ -1441,21 +1480,6 @@ function setupPlatformApp() {
     setStatus('');
   }
 
-  function normalizeDepartureBoard(payload) {
-    return (payload && Array.isArray(payload.departures) ? payload.departures : [])
-      .map((departure) => {
-        const source = String(departure && departure.departure_source || '').toLowerCase();
-        const scheduled = Number(departure && departure.scheduled_departure_time);
-        const expected = Number(departure && departure.expected_departure_time);
-        return {
-          ...departure,
-          departure_time: source === 'realtime' && Number.isFinite(expected)
-            ? expected
-            : (Number.isFinite(scheduled) ? scheduled : expected),
-        };
-      });
-  }
-
   function renderPayload(payload, departuresPayload) {
     const freshness = assessVehicleFeedFreshness(payload, { delayedAfterMs, offlineAfterMs });
     applyFeedState(payload, freshness);
@@ -1472,7 +1496,7 @@ function setupPlatformApp() {
   function pollVehicles() {
     Promise.all([
       dataClient.fetchVehicles(),
-      dataClient.fetchDepartures(50).catch((err) => {
+      dataClient.fetchDepartures(30, { board: 'allandale' }).catch((err) => {
         console.warn('Platform departures poll failed; using scheduled layout times:', err);
         return null;
       }),

@@ -56,4 +56,19 @@ describe('frontend data client route loading', () => {
     );
   });
 
+  test('requests the supported Allandale departure maximum explicitly', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ departures: [] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createDataClient().fetchDepartures(30, { board: 'allandale' });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/api\/departures\?limit=30&board=allandale&cb=/),
+      expect.objectContaining({ cache: 'no-store' })
+    );
+  });
+
 });

@@ -2,13 +2,16 @@ const fetch = require('node-fetch');
 const { isServiceActiveOnDate } = require('../shared/gtfs-service-calendar');
 const { scheduledTimeToEpochSeconds } = require('./terminal-progress');
 const { BARRIE_PLATFORM_LABELS, cleanHeadsign } = require('./terminal-layout');
+const {
+  barriePlatformForStop,
+  isBarrieAllandalePlatformStop,
+} = require('./allandale-platforms');
 const { fetchTripUpdates } = require('./gtfs-trip-updates');
 
 const TIME_ZONE = 'America/Toronto';
 const HORIZON_HOURS = 1;
 const GRACE_SECONDS = 60;
 const GO_BUS_DESTINATION = 'Barrie / Newmarket';
-const BARRIE_ALLANDALE_STOP_IDS = new Set(['9003', '9004', '9005', '9006', '9012', '9013']);
 const LINX_ALLANDALE_STOP_ID = 'SCSTOP210';
 const LINX_HANDOFF_MAX_GAP_SECONDS = 10 * 60;
 const LINX_HANDOFF_EARLY_TOLERANCE_SECONDS = 60;
@@ -63,9 +66,7 @@ function localDateKeys(nowMs) {
 
 function stopPlatform(metadata, stopId, fallback) {
   const stop = (metadata.terminal_stops || []).find((candidate) => String(candidate.id || candidate.stop_id) === stopId);
-  const barrieTerminalPlatform = BARRIE_ALLANDALE_STOP_IDS.has(String(stopId || ''))
-    ? String(Number(String(stopId).slice(2)))
-    : '';
+  const barrieTerminalPlatform = barriePlatformForStop(stopId);
   return String(stop && stop.platform_code || barrieTerminalPlatform || fallback || '');
 }
 
@@ -101,7 +102,7 @@ function routeDetails(agencyKey, metadata, trip, stopId, tripId) {
 function platformDetails(agencyKey, metadata, stopId) {
   if (agencyKey === 'barrie_transit') {
     const value = stopPlatform(metadata, stopId, stopId === '14' ? '14' : '');
-    const isOnStreetStop = stopId === '14' || !BARRIE_ALLANDALE_STOP_IDS.has(stopId);
+    const isOnStreetStop = stopId === '14' || !isBarrieAllandalePlatformStop(stopId);
     return { platform: value, platform_type: isOnStreetStop ? 'stop' : 'platform' };
   }
   if (agencyKey === 'ontario_northland') return { platform: '8', platform_type: 'platform' };
@@ -111,7 +112,7 @@ function platformDetails(agencyKey, metadata, stopId) {
 
 function isBoardableTerminalDeparture(agencyKey, stop) {
   const stopId = String(stop && stop.stop_id || '');
-  if (agencyKey === 'barrie_transit' && BARRIE_ALLANDALE_STOP_IDS.has(stopId)) {
+  if (agencyKey === 'barrie_transit' && isBarrieAllandalePlatformStop(stopId)) {
     // Allandale is a departure board: a trip ending here must not be shown.
     // Interlined 8A/8B vehicles are represented by a new outgoing GTFS trip,
     // whose route is the one passengers can board after the changeover.

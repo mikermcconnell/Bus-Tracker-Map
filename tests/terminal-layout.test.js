@@ -54,6 +54,32 @@ describe('terminal platform layout', () => {
     ]);
   });
 
+  test('falls back to stable Allandale stop IDs when platform codes are missing', () => {
+    const layout = buildTerminalLayout({
+      barrie: {
+        terminal_stops: [
+          { id: '9003', platform_code: null },
+          { id: '9005', platform_code: null },
+        ],
+        trips: {
+          southbound: {
+            route_id: '8A',
+            terminal_stops: [{ stop_id: '9003' }],
+          },
+          northbound: {
+            route_id: '8A',
+            terminal_stops: [{ stop_id: '9005' }],
+          },
+        },
+      },
+    });
+
+    expect(layout.assignments).toEqual(expect.arrayContaining([
+      expect.objectContaining({ platform: '3', stop_id: '9003', destination: 'Yonge Southbound' }),
+      expect.objectContaining({ platform: '5', stop_id: '9005', destination: 'RVH Northbound' }),
+    ]));
+  });
+
   test('maps regional stop identifiers to physical platforms', () => {
     const layout = buildTerminalLayout({
       ontarioNorthland: {

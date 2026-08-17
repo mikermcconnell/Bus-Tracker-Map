@@ -421,8 +421,8 @@ body {
 
 .map-terminal-building__footprint polygon {
   fill: rgba(255, 255, 255, 0.08);
-  stroke: #111827;
-  stroke-width: 3;
+  stroke: #075f86;
+  stroke-width: 4;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
@@ -447,7 +447,7 @@ body {
 .map-terminal-building__callout::after {
   content: "";
   position: absolute;
-  top: 50%;
+  top: 25%;
   pointer-events: none;
 }
 
@@ -1090,7 +1090,7 @@ body {
   align-items: center;
   gap: clamp(7px, 0.5vw, 10px);
   color: #cfe4ed;
-  font-size: clamp(15px, 0.9vw, 19px);
+  font-size: clamp(16px, 1vw, 21px);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1118,7 +1118,7 @@ body {
 
 #departure-page-countdown {
   color: #89d9e8;
-  font-size: clamp(10px, 0.65vw, 13px);
+  font-size: clamp(13px, 0.78vw, 16px);
   font-weight: 800;
   letter-spacing: 0.035em;
   text-transform: uppercase;
@@ -1301,7 +1301,7 @@ body {
   border-radius: 999px;
   color: #c2d3db;
   background: rgba(255, 255, 255, 0.06);
-  font-size: clamp(10px, 0.62vw, 13px);
+  font-size: clamp(11px, 0.68vw, 14px);
   font-weight: 900;
   letter-spacing: 0.055em;
   line-height: 1;
@@ -1314,6 +1314,12 @@ body {
   color: #fff;
   background: #007a33;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+.platform-card__service-source[data-source="estimated"] {
+  border-color: #b98712;
+  color: #ffe08a;
+  background: rgba(185, 135, 18, 0.14);
 }
 
 .platform-card__service-countdown {
@@ -1331,6 +1337,15 @@ body {
   color: #ffe08a;
 }
 
+.platform-card__service-countdown[data-departure-state="future-day"] {
+  font-size: clamp(19px, 1.2vw, 24px);
+}
+
+.platform-card__service-countdown[data-departure-state="future-day"]
+  + .platform-card__departure-meta .platform-card__service-source {
+  display: none;
+}
+
 .platform-card__service-countdown[data-departure-state="unavailable"],
 .platform-card__service-countdown[data-departure-state="past"] {
   color: #a8bbc4;
@@ -1341,15 +1356,11 @@ body {
   max-width: 100%;
   overflow: hidden;
   color: #a8bbc4;
-  font-size: clamp(16px, 0.96vw, 20px);
+  font-size: clamp(17px, 1vw, 20px);
   font-weight: 750;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.platform-card[data-platform="2"] .platform-card__service-countdown {
-  font-size: clamp(22px, 1.35vw, 28px);
 }
 
 .platform-card--occupied .platform-card__service--active .platform-card__service-countdown {
@@ -1439,7 +1450,11 @@ body {
 }
 
 .platform-connection__agency {
-  display: none;
+  margin-top: 0.2em;
+  display: block;
+  color: #a8bbc4;
+  font-size: clamp(13px, 0.78vw, 16px);
+  font-weight: 750;
 }
 
 .platform-card--inactive {

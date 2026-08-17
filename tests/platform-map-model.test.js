@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import {
   calibrationInImagePercent,
+  departureSourceDisplay,
   getRouteEightDirection,
   getVehicleLabel,
   getVehicleStyle,
   groupPlatformAssignments,
   isTerminalDisplayVehicle,
+  normalizeDepartureBoard,
   projectVehicleToImage,
 } from '../frontend/src/platform-map/model.js';
 
@@ -63,5 +65,27 @@ describe('platform map model', () => {
     ]);
     expect(Object.keys(grouped)).toEqual(['3', '13']);
     expect(grouped['14']).toBeUndefined();
+  });
+
+  test('uses adjusted departure times and labels their evidence accurately', () => {
+    const normalized = normalizeDepartureBoard({
+      departures: [{
+        departure_source: 'estimated',
+        scheduled_departure_time: 100,
+        expected_departure_time: 160,
+      }],
+    });
+    expect(normalized[0]).toMatchObject({
+      departure_source: 'estimated',
+      departure_time: 160,
+    });
+    expect(departureSourceDisplay(normalized[0])).toEqual({
+      key: 'estimated',
+      label: 'Estimated',
+    });
+    expect(departureSourceDisplay(normalized[0], true)).toEqual({
+      key: 'live',
+      label: 'Live',
+    });
   });
 });

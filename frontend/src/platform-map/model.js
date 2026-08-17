@@ -201,3 +201,27 @@ export function groupPlatformAssignments(assignments) {
   });
   return groups;
 }
+
+export function normalizeDepartureBoard(payload) {
+  return (payload && Array.isArray(payload.departures) ? payload.departures : [])
+    .map((departure) => {
+      const source = String(departure && departure.departure_source || '').toLowerCase();
+      const scheduled = Number(departure && departure.scheduled_departure_time);
+      const expected = Number(departure && departure.expected_departure_time);
+      const hasPrediction = ['estimated', 'realtime'].includes(source) && Number.isFinite(expected);
+      return {
+        ...departure,
+        departure_source: source || 'scheduled',
+        departure_time: hasPrediction
+          ? expected
+          : (Number.isFinite(scheduled) ? scheduled : expected),
+      };
+    });
+}
+
+export function departureSourceDisplay(departure, hasActiveVehicle = false) {
+  const source = String(departure && departure.departure_source || '').toLowerCase();
+  if (hasActiveVehicle || source === 'realtime') return { key: 'live', label: 'Live' };
+  if (source === 'estimated') return { key: 'estimated', label: 'Estimated' };
+  return { key: 'scheduled', label: 'Scheduled' };
+}
