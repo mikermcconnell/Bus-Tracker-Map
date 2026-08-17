@@ -1,281 +1,177 @@
-const REFRESH_INTERVAL_MS = 10_000;
-const API_PATH = '/api/departures';
-const ASSET_PATH = '../../assets/';
+import { createDataClient } from '../data/client.js';
 
-const AGENCY_BRANDING = Object.freeze({
-  'barrie-transit': Object.freeze({
-    label: 'Barrie Transit',
-    logo: `${ASSET_PATH}agency-barrie-transit.png`,
-  }),
-  'go-transit': Object.freeze({
-    label: 'GO Transit',
-    logo: `${ASSET_PATH}agency-go-transit.svg`,
-  }),
-  'ontario-northland': Object.freeze({
-    label: 'Ontario Northland',
-    logo: `${ASSET_PATH}agency-ontario-northland.png`,
-  }),
-  'simcoe-linx': Object.freeze({
-    label: 'LINX',
-    logo: `${ASSET_PATH}agency-simcoe-linx.png`,
-  }),
-});
+const client = createDataClient();
+const list = document.getElementById('departures-list');
+const health = document.getElementById('service-health');
+const warning = document.getElementById('warning');
+const updated = document.getElementById('last-updated');
+const clockTime = document.getElementById('clock-time');
+const FAILURE_RETENTION_MS = 15 * 60 * 1000;
+const REQUEST_TIMEOUT_MS = 12 * 1000;
+const WATCHDOG_STALE_MS = 5 * 60 * 1000;
+const WATCHDOG_INTERVAL_MS = 60 * 1000;
+const MAX_DEPARTURES = 11;
+const boardId = /\/departures\/downtown\/?$/i.test(window.location.pathname) ? 'downtown' : 'allandale';
+const AGENCIES = {
+  barrie_transit: { name: 'Barrie Transit', short: 'BT', logo: 'agency-barrie-transit.png' },
+  ontario_northland: { name: 'Ontario Northland', short: 'ON', logo: 'agency-ontario-northland.png' },
+  go_transit: { name: 'GO Transit', short: 'GO', logo: 'agency-go-transit.svg' },
+  simcoe_linx: { name: 'Simcoe LINX', short: 'LINX', logo: 'agency-simcoe-linx.png' },
+};
+let pollMs = 10000;
+let lastGoodAt = 0;
+const startedAt = Date.now();
 
-function readQueryParameter(search, name) {
-  const query = String(search || '').replace(/^\?/, '');
-  if (!query) return '';
-  const pairs = query.split('&');
-  for (let index = 0; index < pairs.length; index += 1) {
-    const parts = pairs[index].split('=');
-    let key;
-    try {
-      key = decodeURIComponent(String(parts.shift() || '').replace(/\+/g, ' '));
-    } catch (err) {
-      continue;
-    }
-    if (key !== name) continue;
-    try {
-      return decodeURIComponent(parts.join('=').replace(/\+/g, ' '));
-    } catch (err) {
-      return '';
-    }
-  }
-  return '';
+if (boardId === 'downtown') {
+  document.title = 'Downtown Hub Departures';
+  document.getElementById('page-title').textContent = 'Downtown Hub Departures';
 }
 
-function parseStopCode(value) {
-  const stopCode = String(value || '').trim();
-  const match = stopCode.match(/^90(\d{2})$/);
-  if (!match) return null;
-  const platform = Number(match[1]);
-  if (!Number.isInteger(platform) || platform < 1 || platform > 14) return null;
+function escapeHtml(value) {
+  return String(value === null || value === undefined ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+function asset(name) {
+  return new URL(`../assets/${name}`, window.location.href).pathname;
+}
+
+function formatClock() {
+  const now = new Date();
+  clockTime.textContent = new Intl.DateTimeFormat('en-CA', { hour: 'numeric', minute: '2-digit' }).format(now);
+  renderTimes();
+}
+
+function departureLabel(epochSeconds) {
+  const seconds = Math.round(Number(epochSeconds) - Date.now() / 1000);
+  if (seconds <= 45) return 'Due';
+  return `${Math.max(1, Math.round(seconds / 60))} min`;
+}
+
+function renderTimes() {
+  document.querySelectorAll('[data-departure-time]').forEach((element) => {
+    element.textContent = departureLabel(element.dataset.departureTime);
+  });
+}
+
+function platform(row) {
+  const rawNumber = String(row.platform || '');
   return {
-    stopCode,
-    platform: String(platform),
-    display: String(platform).padStart(2, '0'),
+    label: row.platform_type === 'stop' ? 'Stop' : 'Platform',
+    number: rawNumber.length < 2 ? `0${rawNumber}` : rawNumber,
   };
 }
 
-function formatTorontoTime(date) {
-  try {
-    return new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Toronto',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(date);
-  } catch (err) {
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  }
+function publicRouteLabel(row, agencyKey) {
+  const label = String(row.route_label || '');
+  if (agencyKey !== 'ontario_northland' || label.toUpperCase() !== 'ONTC') return label;
+  const candidates = [row.route_id, String(row.trip_id || '').split(':')[0]];
+  return String(candidates.filter((value) => /^(?:101|102|201|202)$/.test(String(value)))[0] || label);
 }
 
-function localDateKey(date) {
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Toronto',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(date);
-  } catch (err) {
-    return [date.getFullYear(), date.getMonth() + 1, date.getDate()].join('-');
-  }
+function scheduledDeparture(row) {
+  return Number(row.scheduled_departure_time || row.expected_departure_time);
 }
 
-function formatDepartureText(timestampSeconds, nowMs = Date.now()) {
-  const timestamp = Number(timestampSeconds);
-  const departure = new Date(timestamp * 1000);
-  if (!Number.isFinite(timestamp) || timestamp <= 0 || !Number.isFinite(departure.getTime())) {
-    return 'Departure time unavailable';
-  }
-  const differenceMs = departure.getTime() - nowMs;
-  if (differenceMs < -60_000) return 'Departure time unavailable';
-  if (localDateKey(departure) === localDateKey(new Date(nowMs))) {
-    const minutes = Math.max(0, Math.ceil(differenceMs / 60_000));
-    return minutes === 0 ? 'Departing now' : `Departing in ${minutes} min`;
-  }
-  const tomorrow = new Date(nowMs + 24 * 60 * 60 * 1000);
-  if (localDateKey(departure) === localDateKey(tomorrow)) {
-    return `Departs tomorrow at ${formatTorontoTime(departure)}`;
-  }
-  try {
-    const weekday = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Toronto',
-      weekday: 'short',
-    }).format(departure);
-    return `Departs ${weekday} at ${formatTorontoTime(departure)}`;
-  } catch (err) {
-    const weekday = departure.toLocaleDateString([], { weekday: 'short' });
-    return `Departs ${weekday} at ${formatTorontoTime(departure)}`;
-  }
+function displayedDeparture(row) {
+  const expected = Number(row.expected_departure_time);
+  const live = row.departure_source === 'realtime' && Number.isFinite(expected);
+  return {
+    time: live ? expected : scheduledDeparture(row),
+    live,
+    state: live ? 'live' : 'scheduled',
+    label: live ? 'LIVE' : 'SCHED',
+    description: live
+      ? row.live_evidence === 'trip_update_and_terminal_handoff_vehicle'
+        ? 'Live prediction based on the active inbound Route 2 vehicle and its Allandale handoff'
+        : 'Live prediction from this active vehicle and trip'
+      : 'Scheduled time',
+  };
 }
 
-function createCell(tag, className, text) {
-  const cell = document.createElement(tag);
-  cell.className = className;
-  if (text !== undefined) cell.textContent = text;
-  return cell;
+function compareDepartures(left, right) {
+  return displayedDeparture(left).time - displayedDeparture(right).time ||
+    Number(left.platform) - Number(right.platform) ||
+    String(left.route_label || '').localeCompare(String(right.route_label || ''));
 }
 
-function createPlatformCell(platformDisplay, rowSpan) {
-  const cell = createCell('th', 'platform-cell');
-  cell.scope = 'rowgroup';
-  cell.rowSpan = rowSpan;
-  const label = document.createElement('span');
-  label.textContent = 'Platform';
-  const value = document.createElement('strong');
-  value.id = 'platform-number';
-  value.textContent = platformDisplay;
-  cell.appendChild(label);
-  cell.appendChild(value);
-  return cell;
-}
-
-function createAgencyCell(departure) {
-  const cell = createCell('td', 'agency-cell');
-  cell.rowSpan = 2;
-  const brand = AGENCY_BRANDING[String(departure && departure.agency_id || '')];
-  if (brand) {
-    const logo = document.createElement('img');
-    logo.className = 'agency-logo';
-    logo.src = brand.logo;
-    logo.alt = brand.label;
-    logo.loading = 'eager';
-    cell.appendChild(logo);
-  } else {
-    const label = document.createElement('span');
-    label.className = 'agency-name';
-    label.textContent = String(departure && departure.agency_name || 'Transit');
-    cell.appendChild(label);
-  }
-  return cell;
-}
-
-function routeDescription(departure) {
-  const route = String(departure && departure.route_label || '').trim();
-  const destination = String(departure && departure.destination || '').trim();
-  if (route && destination) return `${route} - ${destination}`;
-  return route || destination || 'Scheduled service';
-}
-
-function renderEmpty(platformDisplay, message, detail) {
-  const rows = document.getElementById('departure-rows');
-  rows.replaceChildren();
-  const routeRow = document.createElement('tr');
-  routeRow.appendChild(createPlatformCell(platformDisplay, 2));
-  routeRow.appendChild(createCell('td', 'agency-cell'));
-  routeRow.lastChild.rowSpan = 2;
-  routeRow.appendChild(createCell('td', 'route-cell', message));
-  const detailRow = document.createElement('tr');
-  detailRow.className = 'departure-detail-row';
-  detailRow.appendChild(createCell('td', 'departure-cell', detail));
-  rows.appendChild(routeRow);
-  rows.appendChild(detailRow);
-}
-
-function renderDepartures(payload) {
-  const rows = document.getElementById('departure-rows');
-  const departures = Array.isArray(payload && payload.departures) ? payload.departures : [];
-  const compactSign = window.innerWidth <= 360 && window.innerHeight <= 100;
-  const visibleDepartures = compactSign ? departures.slice(0, 1) : departures;
-  const platformDisplay = String(payload && payload.platform_display || '--');
-  if (!visibleDepartures.length) {
-    renderEmpty(platformDisplay, 'No departures scheduled', 'Please check again shortly');
+function renderDepartures(rows) {
+  const orderedRows = rows.slice().sort(compareDepartures).slice(0, MAX_DEPARTURES);
+  if (!orderedRows.length) {
+    list.style.setProperty('--departure-count', '1');
+    list.innerHTML = '<li class="empty-state">No departures are scheduled in the next hour.</li>';
     return;
   }
-  rows.replaceChildren();
-  visibleDepartures.forEach((departure, index) => {
-    const routeRow = document.createElement('tr');
-    if (index === 0) {
-      routeRow.appendChild(createPlatformCell(platformDisplay, visibleDepartures.length * 2));
+  list.style.setProperty('--departure-count', String(orderedRows.length));
+  list.innerHTML = orderedRows.map((row) => {
+    const agencyKey = String(row.agency_id || '').replace(/-/g, '_');
+    const agency = AGENCIES[agencyKey] || { name: row.agency_name, short: row.agency_name, logo: '' };
+    const bay = platform(row);
+    const departure = displayedDeparture(row);
+    const routeLabel = publicRouteLabel(row, agencyKey);
+    const logo = agency.logo ? `<img src="${asset(agency.logo)}" alt="">` : '';
+    return `<li class="departure agency-${escapeHtml(agencyKey)}">
+      <div class="agency-logo">${logo}<span class="visually-hidden">${escapeHtml(agency.name)}</span></div>
+      <div class="route">${escapeHtml(routeLabel)}</div>
+      <div class="destination">${escapeHtml(String(row.destination || 'Destination unavailable').toUpperCase())}</div>
+      <div class="departure-time departure-time--${departure.state}">
+        <span class="departure-status" aria-label="${departure.description}">${departure.label}</span>
+        <span data-departure-time="${departure.time}">${departureLabel(departure.time)}</span>
+      </div>
+      <div class="platform"><span>${escapeHtml(bay.label)}</span><strong>${escapeHtml(bay.number)}</strong></div>
+    </li>`;
+  }).join('');
+}
+
+function renderHealth(sources) {
+  health.textContent = Object.keys(sources || {}).map((key) => {
+    const source = sources && sources[key] || {};
+    const agency = AGENCIES[key];
+    const feedActive = source.realtime_status === 'live';
+    const status = source.realtime_status === 'delayed'
+      ? 'Feed delayed'
+      : feedActive
+        ? 'Feed active'
+        : 'Schedule only';
+    return `${agency.short} ${status}`;
+  }).join('. ');
+}
+
+async function refresh() {
+  try {
+    const payload = await client.fetchDepartures(MAX_DEPARTURES, { timeoutMs: REQUEST_TIMEOUT_MS, board: boardId });
+    lastGoodAt = Date.now();
+    renderDepartures(Array.isArray(payload.departures) ? payload.departures : []);
+    renderHealth(payload.sources || {});
+    warning.hidden = true;
+    updated.textContent = `Updated ${new Intl.DateTimeFormat('en-CA', { hour: 'numeric', minute: '2-digit', second: '2-digit' }).format(new Date(payload.generated_at || Date.now()))}`;
+  } catch (error) {
+    warning.hidden = false;
+    updated.textContent = 'Update connection interrupted';
+    if (!lastGoodAt || Date.now() - lastGoodAt > FAILURE_RETENTION_MS) {
+      list.innerHTML = '<li class="empty-state error-state">Departure information is temporarily unavailable.</li>';
     }
-    routeRow.appendChild(createAgencyCell(departure));
-    routeRow.appendChild(createCell('td', 'route-cell', routeDescription(departure)));
-
-    const detailRow = document.createElement('tr');
-    detailRow.className = 'departure-detail-row';
-    const departureCell = createCell(
-      'td',
-      'departure-cell',
-      formatDepartureText(departure.departure_time)
-    );
-    departureCell.dataset.departureTime = departure.departure_time || '';
-    departureCell.dataset.source = departure.departure_source || '';
-    detailRow.appendChild(departureCell);
-    rows.appendChild(routeRow);
-    rows.appendChild(detailRow);
-  });
-}
-
-function refreshCountdowns() {
-  document.querySelectorAll('[data-departure-time]').forEach((cell) => {
-    cell.textContent = formatDepartureText(cell.dataset.departureTime);
-  });
-}
-
-function updateClock() {
-  const clock = document.getElementById('departure-clock');
-  if (clock) {
-    const now = new Date();
-    clock.dateTime = now.toISOString();
-    clock.textContent = formatTorontoTime(now);
+  } finally {
+    window.setTimeout(refresh, pollMs);
   }
-  refreshCountdowns();
 }
 
-function setStatus(message) {
-  const status = document.getElementById('departure-status');
-  if (!status) return;
-  status.textContent = message || '';
-  status.hidden = !message;
-}
-
-async function loadDepartures(stopCode) {
-  const response = await fetch(`${API_PATH}?view=platform&stop=${encodeURIComponent(stopCode)}`, {
-    cache: 'no-store',
-    headers: { Accept: 'application/json' },
-  });
-  if (!response.ok) throw new Error(`Departure request failed (${response.status})`);
-  const payload = await response.json();
-  renderDepartures(payload);
-  setStatus('');
-  return true;
-}
-
-function startDepartureScreen() {
-  const requestedStop = readQueryParameter(window.location.search, 'stop');
-  const parsedStop = parseStopCode(requestedStop);
-  updateClock();
-  window.setInterval(updateClock, 1000);
-  if (!parsedStop) {
-    document.title = 'Platform Departures';
-    renderEmpty('--', 'Stop code required', 'Use a terminal code from 9001 to 9014');
-    setStatus('The URL does not contain a valid terminal stop code.');
-    return;
-  }
-
-  document.title = `Platform ${parsedStop.display} Departures`;
-  let hasRenderedData = false;
-  async function refresh() {
-    try {
-      hasRenderedData = await loadDepartures(parsedStop.stopCode);
-    } catch (err) {
-      if (!hasRenderedData) {
-        renderEmpty(parsedStop.display, 'Departures unavailable', 'Retrying automatically');
-      }
-      setStatus('Departure data is temporarily unavailable. Retrying automatically.');
-    }
+async function start() {
+  try {
+    const config = await client.fetchConfig({ timeoutMs: REQUEST_TIMEOUT_MS });
+    if (Number.isFinite(Number(config.poll_ms))) pollMs = Math.max(5000, Number(config.poll_ms));
+    if (config.base_path) client.setBasePath(config.base_path);
+  } catch (error) {
+    // The departures request still works at the current origin.
   }
   refresh();
-  window.setInterval(refresh, REFRESH_INTERVAL_MS);
 }
 
-if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-  startDepartureScreen();
-}
-
-export {
-  formatDepartureText,
-  parseStopCode,
-  readQueryParameter,
-  routeDescription,
-};
+formatClock();
+window.setInterval(formatClock, 1000);
+window.setInterval(() => {
+  const lastHealthyAt = lastGoodAt || startedAt;
+  if (Date.now() - lastHealthyAt > WATCHDOG_STALE_MS) window.location.reload();
+}, WATCHDOG_INTERVAL_MS);
+start();

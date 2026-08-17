@@ -2,38 +2,34 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Platform Departures</title>
-  <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,viewport-fit=cover">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#071b32">
+  <title>Allandale Departures</title>
   <link rel="stylesheet" href="%APP_CSS%">
-  <meta name="app-build-id" content="%BUILD_ID%">
 </head>
 <body>
-  <main class="departure-screen">
-    <table class="departure-board" aria-label="Platform departures">
-      <thead>
-        <tr>
-          <th colspan="2" scope="colgroup">DEPARTURES</th>
-          <th class="departure-board__clock" scope="col">
-            <time id="departure-clock">--:--</time>
-          </th>
-        </tr>
-      </thead>
-      <tbody id="departure-rows" aria-live="polite">
-        <tr>
-          <th class="platform-cell" rowspan="2" scope="rowgroup">
-            <span>Platform</span>
-            <strong id="platform-number">--</strong>
-          </th>
-          <td class="agency-cell" rowspan="2"></td>
-          <td class="route-cell">Loading departures</td>
-        </tr>
-        <tr class="departure-detail-row">
-          <td class="departure-cell">Please wait&hellip;</td>
-        </tr>
-      </tbody>
-    </table>
-    <p id="departure-status" class="departure-status" role="status" aria-live="polite" hidden></p>
+  <svg class="logo-filters" aria-hidden="true">
+    <filter id="northland-solid-yellow" color-interpolation-filters="sRGB">
+      <feFlood flood-color="#febd11" result="solid-color"></feFlood>
+      <feComposite in="solid-color" in2="SourceAlpha" operator="in"></feComposite>
+    </filter>
+  </svg>
+  <main class="board" aria-labelledby="page-title">
+    <header class="masthead">
+      <h1 id="page-title">Departures</h1>
+      <time id="clock-time" aria-live="off">--:--</time>
+    </header>
+
+    <div id="warning" class="warning" role="status" hidden>Updates are temporarily unavailable. Showing the most recently received departures.</div>
+
+    <section class="departures-panel" aria-label="Upcoming departures">
+      <ol id="departures-list" class="departures-list">
+        <li class="empty-state">Loading departures…</li>
+      </ol>
+    </section>
+    <p id="service-health" class="visually-hidden" aria-live="polite"></p>
+    <p id="last-updated" class="visually-hidden">Connecting…</p>
   </main>
-  <script src="%APP_JS%"></script>
+  <script src="%APP_JS%" defer></script>
 </body>
 </html>

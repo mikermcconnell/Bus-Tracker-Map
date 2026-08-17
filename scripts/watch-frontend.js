@@ -17,7 +17,6 @@ const srcDir = path.join(projectRoot, 'frontend', 'src');
 const dataDir = path.join(projectRoot, 'frontend', 'data');
 const distDir = path.join(projectRoot, 'frontend', 'dist');
 const assetsDir = path.join(distDir, 'assets');
-let atomicWriteSequence = 0;
 
 // Match the production bundle default so dev builds surface compatibility issues early.
 const DEFAULT_ESBUILD_TARGET = (process.env.ESBUILD_TARGET || 'es2017')
@@ -60,19 +59,11 @@ const entryPoints = [
     outputHtml: 'notices.html'
   },
   {
-    key: 'departures',
-    entryPath: path.join(srcDir, 'departures', 'main.js'),
-    cssPath: path.join(srcDir, 'departures', 'styles.css'),
-    templatePath: path.join(srcDir, 'departures', 'index.html'),
-    outputHtml: 'departures.html',
-    assetPrefix: '../../assets/'
-  },
-  {
-    key: 'shelterDepartures',
-    entryPath: path.join(srcDir, 'shelter-departures', 'main.js'),
-    cssPath: path.join(srcDir, 'shelter-departures', 'styles.css'),
-    templatePath: path.join(srcDir, 'shelter-departures', 'index.html'),
-    outputHtml: 'shelter-departures.html'
+    key: 'platformDepartures',
+    entryPath: path.join(srcDir, 'platform-departures', 'main.js'),
+    cssPath: path.join(srcDir, 'platform-departures', 'styles.css'),
+    templatePath: path.join(srcDir, 'platform-departures', 'index.html'),
+    outputHtml: 'platform-departures.html'
   }
 ];
 
@@ -80,18 +71,8 @@ function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-function writeFileAtomic(filePath, contents) {
-  ensureDir(path.dirname(filePath));
-  const tempPath = path.join(
-    path.dirname(filePath),
-    `.${path.basename(filePath)}.${process.pid}.${atomicWriteSequence += 1}.tmp`
-  );
-  try {
-    fs.writeFileSync(tempPath, contents);
-    fs.renameSync(tempPath, filePath);
-  } finally {
-    fs.rmSync(tempPath, { force: true });
-  }
+function cleanDir(dir) {
+  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 function copyDataDirectory() {
@@ -186,7 +167,7 @@ async function buildJs(entry) {
     ? rawCode
     : await downlevelJavaScript(rawCode, { filename: path.basename(entry.entryPath) });
   const outPath = path.join(assetsDir, `${entry.key}.js`);
-  writeFileAtomic(outPath, transformed);
+  fs.writeFileSync(outPath, transformed);
 
   return `${entry.key}.js`;
 }
@@ -209,30 +190,32 @@ function buildCss(entry) {
   }
   buffers.push(appCss);
   const buffer = Buffer.concat(buffers);
-  writeFileAtomic(outPath, buffer);
+  fs.writeFileSync(outPath, buffer);
   return `${entry.key}.css`;
 }
 
 function writeHtml(entry, assetMap) {
   const template = fs.readFileSync(entry.templatePath, 'utf8');
-  const assetPrefix = entry.assetPrefix || './assets/';
   const html = template
-    .replace(/%APP_JS%/g, `${assetPrefix}${assetMap.js}?v=${Date.now()}`)
-    .replace(/%APP_CSS%/g, `${assetPrefix}${assetMap.css}?v=${Date.now()}`)
+    .replace(/%APP_JS%/g, `./assets/${assetMap.js}?v=${Date.now()}`)
+    .replace(/%APP_CSS%/g, `./assets/${assetMap.css}?v=${Date.now()}`)
     .replace(/%BUILD_ID%/g, new Date().toISOString());
-  writeFileAtomic(path.join(distDir, entry.outputHtml), html);
+  fs.writeFileSync(path.join(distDir, entry.outputHtml), html);
 }
 
 function writeManifest(entryAssets) {
   const manifestPath = path.join(distDir, 'manifest.json');
-  writeFileAtomic(manifestPath, JSON.stringify({
+  fs.writeFileSync(manifestPath, JSON.stringify({
     generatedAt: new Date().toISOString(),
     mode: 'watch',
     entries: entryAssets
   }, null, 2));
 }
 
-async function buildFrontend() {
+async function buildFrontend({ clean } = { clean: false }) {
+  if (clean) {
+    cleanDir(distDir);
+  }
   ensureDir(distDir);
   ensureDir(assetsDir);
 
@@ -261,14 +244,9 @@ async function buildFrontend() {
 }
 
 async function main() {
-  if (process.env.SKIP_INITIAL_BUILD === '1') {
-    console.log('[watch] Using the frontend build prepared by the development launcher.');
-  } else {
-    console.log('[watch] Performing initial frontend build…');
-    await buildFrontend();
-    console.log('[watch] Frontend build ready.');
-  }
-  console.log('[watch] Watching for changes.');
+  console.log('[watch] Performing initial frontend build…');
+  await buildFrontend({ clean: true });
+  console.log('[watch] Frontend build ready. Watching for changes.');
 
   let building = false;
   let rebuildQueued = false;

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#083357">
+  <title>Simcoe Transit Agency Marker Options</title>
+  <link rel="stylesheet" href="%APP_CSS%">
+</head>
+<body class="view-a">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Simcoe Region map study</p>
+      <h1>Differentiate agencies without losing route colours</h1>
+      <p class="intro">Compare three ways to make Barrie Transit, LINX, GO Transit, and Ontario Northland recognizable at a glance.</p>
+    </div>
+    <a class="back-link" href="/simcoe">Open live map</a>
+  </header>
+
+  <main>
+    <nav class="option-tabs" aria-label="Marker design options">
+      <button class="option-tab is-active" type="button" data-view="a" aria-pressed="true">
+        <span class="option-letter">A</span><span><strong>Agency halo + code</strong><small>Recommended</small></span>
+      </button>
+      <button class="option-tab" type="button" data-view="b" aria-pressed="false">
+        <span class="option-letter">B</span><span><strong>Different shapes</strong><small>Fast visual grouping</small></span>
+      </button>
+      <button class="option-tab" type="button" data-view="c" aria-pressed="false">
+        <span class="option-letter">C</span><span><strong>Logo flags</strong><small>Strongest branding</small></span>
+      </button>
+    </nav>
+
+    <section class="comparison-grid">
+      <div class="map-card">
+        <div class="map-toolbar">
+          <div><span class="live-dot"></span> Marker preview</div>
+          <span id="option-name">Option A · Agency halo + code</span>
+        </div>
+        <div class="mock-map" aria-label="Illustrative transit map showing agency marker styles">
+          <span class="water water-one"></span><span class="water water-two"></span>
+          <span class="road road-one"></span><span class="road road-two"></span><span class="road road-three"></span>
+          <span class="route-line route-line-one"></span><span class="route-line route-line-two"></span><span class="route-line route-line-three"></span>
+
+          <div class="vehicle vehicle--barrie vehicle-one" style="--route:#a6192e" aria-label="Barrie Transit route 8A">
+            <span class="marker-core"><span class="route-number">8A</span></span><span class="agency-code">BT</span><span class="direction">▲</span>
+            <span class="logo-flag"><img src="./assets/agency-barrie-transit.png" alt=""><b>8A</b></span>
+          </div>
+          <div class="vehicle vehicle--barrie vehicle-two" style="--route:#176b57" aria-label="Barrie Transit route 2">
+            <span class="marker-core"><span class="route-number">2</span></span><span class="agency-code">BT</span><span class="direction">▲</span>
+            <span class="logo-flag"><img src="./assets/agency-barrie-transit.png" alt=""><b>2</b></span>
+          </div>
+          <div class="vehicle vehicle--linx vehicle-three" style="--route:#ff7733" aria-label="Simcoe County LINX route 1">
+            <span class="marker-core"><span class="route-number route-number--dark">1</span></span><span class="agency-code">LINX</span><span class="direction">▲</span>
+            <span class="logo-flag"><img src="./assets/agency-simcoe-linx.png" alt=""><b>1</b></span>
+          </div>
+          <div class="vehicle vehicle--linx vehicle-four" style="--route:#cc33ff" aria-label="Simcoe County LINX route 4">
+            <span class="marker-core"><span class="route-number route-number--dark">4</span></span><span class="agency-code">LINX</span><span class="direction">▲</span>
+            <span class="logo-flag"><img src="./assets/agency-simcoe-linx.png" alt=""><b>4</b></span>
+          </div>
+          <div class="vehicle vehicle--go vehicle-five" style="--route:#007a33" aria-label="GO Transit bus route 68">
+            <span class="marker-core"><span class="route-number">68</span></span><span class="agency-code">GO</span><span class="direction">▲</span>
+            <span class="logo-flag"><img src="./assets/agency-go-transit.svg" alt=""><b>68</b></span>
+          </div>
+          <div class="vehicle vehicle--northland vehicle-six" style="--route:#17365d" aria-label="Ontario Northland coach">
+            <span class="marker-core"><span class="route-number">ON</span></span><span class="agency-code">ONTC</span><span class="direction">▲</span>
+            <span class="logo-flag"><img src="./assets/agency-ontario-northland.png" alt=""><b>ON</b></span>
+          </div>
+
+          <div class="place-label place-barrie">BARRIE</div>
+          <div class="place-label place-midland">MIDLAND</div>
+          <div class="place-label place-collingwood">COLLINGWOOD</div>
+        </div>
+      </div>
+
+      <aside class="decision-card">
+        <p class="eyebrow">Design recommendation</p>
+        <h2 id="decision-title">Use an agency halo and short code</h2>
+        <p id="decision-copy">Keep the circle and route number people already understand. Colour each marker by agency, then add a matching halo and short code so colour is never the only identifier.</p>
+        <ul id="decision-points">
+          <li>Barrie is blue, LINX is blue and yellow, GO is green, and Ontario Northland is yellow</li>
+          <li>Published route colours remain on the route lines</li>
+          <li>Works at the current 44 px marker size</li>
+        </ul>
+        <div class="agency-key" aria-label="Agency identity colours">
+          <div><span class="key-swatch key-barrie"></span><img src="./assets/agency-barrie-transit.png" alt="Barrie Transit"><small>BT</small></div>
+          <div><span class="key-swatch key-linx"></span><img src="./assets/agency-simcoe-linx.png" alt="Simcoe County LINX"><small>LINX</small></div>
+          <div><span class="key-swatch key-go"></span><img src="./assets/agency-go-transit.svg" alt="GO Transit"><small>GO</small></div>
+          <div><span class="key-swatch key-northland"></span><img src="./assets/agency-ontario-northland.png" alt="Ontario Northland"><small>ONTC</small></div>
+        </div>
+      </aside>
+    </section>
+  </main>
+  <script src="%APP_JS%"></script>
+</body>
+</html>

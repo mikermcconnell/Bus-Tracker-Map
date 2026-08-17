@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123f35">
+  <title>Simcoe Region Live Transit</title>
+  <link rel="stylesheet" href="%APP_CSS%">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Barrie and Simcoe County</p>
+        <h1>Simcoe Region Live Transit</h1>
+      </div>
+      <div class="topbar__status" id="overall-status" aria-live="polite">Loading live services…</div>
+    </header>
+    <main class="workspace">
+      <aside class="service-panel" aria-label="Transit services">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Live network</p>
+            <h2>Services</h2>
+          </div>
+          <button id="reset-map" class="reset-button" type="button">Regional view</button>
+        </div>
+        <p class="panel-intro">Choose an agency or route to focus the map. Barrie local service appears as you zoom toward the city.</p>
+        <div id="agency-list" class="agency-list" aria-live="polite"></div>
+        <section id="selection-card" class="selection-card" hidden>
+          <p class="eyebrow">Selected route</p>
+          <h3 id="selection-title"></h3>
+          <p id="selection-description"></p>
+          <button id="clear-selection" type="button">Clear selection</button>
+        </section>
+        <p class="data-note">Live locations depend on each transit provider’s published feed. Scheduled route lines remain visible during an outage.</p>
+      </aside>
+      <section class="map-stage" aria-label="Regional transit map">
+        <div id="map"></div>
+        <div id="map-message" class="map-message" hidden aria-live="assertive"></div>
+        <div class="map-key" aria-label="Map guidance">
+          <span><i class="key-dot key-dot--live"></i> Live vehicle</span>
+          <span><i class="key-line"></i> Published route</span>
+          <span id="zoom-guidance">Zoom in for Barrie routes and stops</span>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="%APP_JS%"></script>
+</body>
+</html>

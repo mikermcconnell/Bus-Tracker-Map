@@ -103,6 +103,15 @@ function normalizeServiceDay(value) {
   return null;
 }
 
+function normalizeServiceLabel(value) {
+  const label = String(value || '').trim();
+  return label || null;
+}
+
+function withServiceLabel(entry, label) {
+  return label ? { ...entry, label } : entry;
+}
+
 function normalizeServiceOverrideEntry(entry) {
   if (entry === null || entry === undefined) return null;
 
@@ -112,26 +121,106 @@ function normalizeServiceOverrideEntry(entry) {
 
   if (!isPlainObject(entry)) return null;
 
+  const label = normalizeServiceLabel(entry.label);
   const rawMode = String(entry.mode ?? entry.service_day ?? entry.serviceDay ?? '').trim().toLowerCase();
   if (!rawMode) return null;
 
   if (['no_service', 'no-service', 'none', 'closed'].includes(rawMode)) {
-    return { mode: 'no_service' };
+    return withServiceLabel({ mode: 'no_service' }, label);
   }
 
   if (rawMode === 'service_day') {
     const normalizedDay = normalizeServiceDay(entry.serviceDay ?? entry.service_day);
     if (normalizedDay) {
-      return { mode: 'service_day', serviceDay: normalizedDay };
+      return withServiceLabel({ mode: 'service_day', serviceDay: normalizedDay }, label);
     }
   }
 
   const normalizedDay = normalizeServiceDay(rawMode);
   if (normalizedDay) {
-    return { mode: 'service_day', serviceDay: normalizedDay };
+    return withServiceLabel({ mode: 'service_day', serviceDay: normalizedDay }, label);
   }
 
   return null;
+}
+
+function getGtfsText(zip, name) {
+  const entry = zip.getEntry(name);
+  return entry ? zip.readAsText(entry) : null;
+}
+
+function isGtfsDate(value) {
+  return /^\d{8}$/.test(String(value || '').trim());
+}
+
+function getFeedDateCoverage(zip) {
+  const starts = [];
+  const ends = [];
+  const addRange = (start, end) => {
+    if (isGtfsDate(start)) starts.push(String(start).trim());
+    if (isGtfsDate(end)) ends.push(String(end).trim());
+  };
+
+  const feedInfoTxt = getGtfsText(zip, 'feed_info.txt');
+  if (feedInfoTxt) {
+    const [feedInfo] = parse(feedInfoTxt, { columns: true, skip_empty_lines: true });
+    if (feedInfo && isGtfsDate(feedInfo.feed_start_date) && isGtfsDate(feedInfo.feed_end_date)) {
+      return {
+        startDate: feedInfo.feed_start_date,
+        endDate: feedInfo.feed_end_date,
+      };
+    }
+    if (feedInfo) addRange(feedInfo.feed_start_date, feedInfo.feed_end_date);
+  }
+
+  const calendarTxt = getGtfsText(zip, 'calendar.txt');
+  if (calendarTxt) {
+    for (const row of parse(calendarTxt, { columns: true, skip_empty_lines: true })) {
+      addRange(row.start_date, row.end_date);
+    }
+  }
+
+  const calendarDatesTxt = getGtfsText(zip, 'calendar_dates.txt');
+  if (calendarDatesTxt) {
+    for (const row of parse(calendarDatesTxt, { columns: true, skip_empty_lines: true })) {
+      if (!isGtfsDate(row.date)) continue;
+      starts.push(row.date);
+      ends.push(row.date);
+    }
+  }
+
+  return {
+    startDate: starts.length ? starts.sort()[0] : null,
+    endDate: ends.length ? ends.sort().at(-1) : null,
+  };
+}
+
+function getScheduleSourceLabel(source) {
+  switch (source) {
+    case 'local_no_service':
+      return 'Approved local holiday calendar';
+    case 'local_service_day':
+      return 'Approved local holiday calendar fallback';
+    case 'gtfs_calendar_dates':
+      return 'GTFS calendar_dates special service';
+    case 'gtfs_calendar':
+    default:
+      return 'GTFS regular calendar';
+  }
+}
+
+function getExpectedScheduleLabel(source, serviceOverride, defaultDay) {
+  if (source === 'local_no_service') return 'No service';
+  if (source === 'gtfs_calendar_dates') {
+    return serviceOverride && serviceOverride.label
+      ? 'GTFS special holiday service'
+      : 'GTFS special-date service';
+  }
+  if (source === 'local_service_day') {
+    const day = normalizeServiceDay(serviceOverride && serviceOverride.serviceDay);
+    return `${day ? day[0].toUpperCase() + day.slice(1) : 'Alternate'} schedule`;
+  }
+  return `${defaultDay[0].toUpperCase() + defaultDay.slice(1)} schedule`;
 }
 
 function normalizeServiceOverrides(rawOverrides) {
@@ -194,42 +283,50 @@ function resolveServiceDayForDate(date, serviceOverride = null) {
   return defaultDay;
 }
 
-/**
- * Resolve active service IDs and record which calendar source won.
- *
- * Local no-service entries are hard overrides. A local service-day entry is a
- * fallback only: when GTFS publishes calendar_dates rows for the target date,
- * those explicit exceptions remain authoritative and the fallback is ignored.
- */
+/** Resolve active service IDs and record which schedule source won. */
 function getActiveServiceSelection(zip, date, serviceOverride = null) {
-  const getText = (name) => {
-    const entry = zip.getEntry(name);
-    return entry ? zip.readAsText(entry) : null;
-  };
-
   const dateStr = formatDate(date); // YYYYMMDD
-  if (serviceOverride && serviceOverride.mode === 'no_service') {
-    return {
-      serviceIds: new Set(),
-      source: 'local_no_service',
-      date: dateStr,
-      calendarDateExceptionCount: 0,
-    };
-  }
+  const defaultDay = resolveServiceDayForDate(date, null);
+  const coverage = getFeedDateCoverage(zip);
+  const feedCoversDate = coverage.startDate || coverage.endDate
+    ? (!coverage.startDate || dateStr >= coverage.startDate)
+      && (!coverage.endDate || dateStr <= coverage.endDate)
+    : null;
 
-  const datesTxt = getText('calendar_dates.txt');
+  const datesTxt = getGtfsText(zip, 'calendar_dates.txt');
   const dateExceptions = datesTxt
     ? parse(datesTxt, { columns: true, skip_empty_lines: true })
       .filter((row) => row.date === dateStr)
     : [];
   const hasGtfsDateExceptions = dateExceptions.length > 0;
+
+  if (serviceOverride && serviceOverride.mode === 'no_service') {
+    const source = 'local_no_service';
+    return {
+      serviceIds: new Set(),
+      source,
+      sourceLabel: getScheduleSourceLabel(source),
+      expectedSchedule: getExpectedScheduleLabel(source, serviceOverride, defaultDay),
+      serviceDay: null,
+      holidayLabel: serviceOverride.label || null,
+      isHoliday: Boolean(serviceOverride.label),
+      date: dateStr,
+      calendarDateExceptionCount: dateExceptions.length,
+      feedCoverageStart: coverage.startDate,
+      feedCoverageEnd: coverage.endDate,
+      feedCoversDate,
+    };
+  }
+
+  // GTFS date exceptions are authoritative. A local service-day entry is only
+  // a fallback for holidays that the current feed has not modeled explicitly.
   const effectiveOverride = hasGtfsDateExceptions ? null : serviceOverride;
   const dayOfWeek = resolveServiceDayForDate(date, effectiveOverride);
 
   const activeIds = new Set();
 
   // 1. Check calendar.txt for regular service
-  const calendarTxt = getText('calendar.txt');
+  const calendarTxt = getGtfsText(zip, 'calendar.txt');
   if (calendarTxt) {
     const rows = parse(calendarTxt, { columns: true, skip_empty_lines: true });
     for (const row of rows) {
@@ -259,16 +356,30 @@ function getActiveServiceSelection(zip, date, serviceOverride = null) {
   return {
     serviceIds: activeIds,
     source,
+    sourceLabel: getScheduleSourceLabel(source),
+    expectedSchedule: getExpectedScheduleLabel(source, serviceOverride, defaultDay),
+    serviceDay: effectiveOverride && effectiveOverride.mode === 'service_day'
+      ? effectiveOverride.serviceDay
+      : defaultDay,
+    holidayLabel: serviceOverride && serviceOverride.label ? serviceOverride.label : null,
+    isHoliday: Boolean(serviceOverride && serviceOverride.label),
     date: dateStr,
     calendarDateExceptionCount: dateExceptions.length,
+    feedCoverageStart: coverage.startDate,
+    feedCoverageEnd: coverage.endDate,
+    feedCoversDate,
   };
 }
 
-/**
- * Parse calendar.txt + calendar_dates.txt to find active service IDs for a date.
- */
+/** Parse calendar.txt + calendar_dates.txt to find active service IDs for a date. */
 function getActiveServiceIds(zip, date, serviceOverride = null) {
   return getActiveServiceSelection(zip, date, serviceOverride).serviceIds;
+}
+
+function getServiceSelectionMetadata(selection) {
+  const metadata = { ...selection };
+  delete metadata.serviceIds;
+  return metadata;
 }
 
 /**
@@ -523,22 +634,39 @@ async function getExpectedBuses(gtfsUrl, cachePath, maxAgeHours = 24, layoverGra
   }
   const totalExpected = todayResult.totalExpected + yesterdayResult.totalExpected;
 
+  const serviceContext = {
+    date: todayServiceSelection.date,
+    holidayLabel: todayServiceSelection.holidayLabel,
+    isHoliday: todayServiceSelection.isHoliday,
+    expectedSchedule: todayServiceSelection.expectedSchedule,
+    scheduleSource: todayServiceSelection.source,
+    scheduleSourceLabel: todayServiceSelection.sourceLabel,
+    calendarDateExceptionCount: todayServiceSelection.calendarDateExceptionCount,
+    activeServiceIdCount: todayServiceSelection.serviceIds.size,
+    feedCoverageStart: todayServiceSelection.feedCoverageStart,
+    feedCoverageEnd: todayServiceSelection.feedCoverageEnd,
+    feedCoversDate: todayServiceSelection.feedCoversDate,
+    includesPreviousServiceDay: yesterdayResult.totalExpected > 0,
+  };
+
+  const coverageIssue = todayServiceSelection.source !== 'local_no_service'
+    && todayServiceSelection.feedCoversDate === false
+    ? {
+      code: 'GTFS_SCHEDULE_DATE_NOT_COVERED',
+      date: todayServiceSelection.date,
+      feedCoverageStart: todayServiceSelection.feedCoverageStart,
+      feedCoverageEnd: todayServiceSelection.feedCoverageEnd,
+    }
+    : null;
+
   return {
     byRoute,
     totalExpected,
+    serviceContext,
+    coverageIssue,
     scheduleSources: {
-      today: {
-        source: todayServiceSelection.source,
-        date: todayServiceSelection.date,
-        calendarDateExceptionCount: todayServiceSelection.calendarDateExceptionCount,
-        activeServiceIdCount: todayServiceSelection.serviceIds.size,
-      },
-      yesterday: {
-        source: yesterdayServiceSelection.source,
-        date: yesterdayServiceSelection.date,
-        calendarDateExceptionCount: yesterdayServiceSelection.calendarDateExceptionCount,
-        activeServiceIdCount: yesterdayServiceSelection.serviceIds.size,
-      },
+      today: getServiceSelectionMetadata(todayServiceSelection),
+      yesterday: getServiceSelectionMetadata(yesterdayServiceSelection),
     },
   };
 }
@@ -571,6 +699,7 @@ module.exports = {
   normalizeServiceOverrideEntry,
   getServiceOverrideForDate,
   resolveServiceDayForDate,
+  getFeedDateCoverage,
   getActiveServiceSelection,
   getActiveServiceIds,
   getTripTimeSpans,

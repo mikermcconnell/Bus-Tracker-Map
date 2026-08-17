@@ -19,7 +19,7 @@ const srcDir = path.join(projectRoot, 'frontend', 'src');
 const dataDir = path.join(projectRoot, 'frontend', 'data');
 const distDir = path.join(projectRoot, 'frontend', 'dist');
 const assetsDir = path.join(distDir, 'assets');
-let atomicWriteSequence = 0;
+const leafletDir = path.dirname(require.resolve('leaflet/package.json'));
 
 // Bundle at a modern target for speed, then downlevel with Babel for legacy screens.
 const DEFAULT_ESBUILD_TARGET = (process.env.ESBUILD_TARGET || 'es2017')
@@ -66,15 +66,29 @@ const entryPoints = [
     entryPath: path.join(srcDir, 'departures', 'main.js'),
     cssPath: path.join(srcDir, 'departures', 'styles.css'),
     templatePath: path.join(srcDir, 'departures', 'index.html'),
-    outputHtml: 'departures.html',
-    assetPrefix: '../../assets/'
+    outputHtml: 'departures.html'
   },
   {
-    key: 'shelterDepartures',
-    entryPath: path.join(srcDir, 'shelter-departures', 'main.js'),
-    cssPath: path.join(srcDir, 'shelter-departures', 'styles.css'),
-    templatePath: path.join(srcDir, 'shelter-departures', 'index.html'),
-    outputHtml: 'shelter-departures.html'
+    key: 'platformDepartures',
+    entryPath: path.join(srcDir, 'platform-departures', 'main.js'),
+    cssPath: path.join(srcDir, 'platform-departures', 'styles.css'),
+    templatePath: path.join(srcDir, 'platform-departures', 'index.html'),
+    outputHtml: 'platform-departures.html'
+  },
+  {
+    key: 'simcoe',
+    entryPath: path.join(srcDir, 'simcoe', 'main.js'),
+    cssPath: path.join(srcDir, 'simcoe', 'styles.css'),
+    includeLeafletCss: true,
+    templatePath: path.join(srcDir, 'simcoe', 'index.html'),
+    outputHtml: 'simcoe.html'
+  },
+  {
+    key: 'simcoeMarkerMockup',
+    entryPath: path.join(srcDir, 'simcoe-marker-mockup', 'main.js'),
+    cssPath: path.join(srcDir, 'simcoe-marker-mockup', 'styles.css'),
+    templatePath: path.join(srcDir, 'simcoe-marker-mockup', 'index.html'),
+    outputHtml: 'simcoe-marker-options.html'
   }
 ];
 
@@ -82,18 +96,8 @@ function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-function writeFileAtomic(filePath, contents) {
-  ensureDir(path.dirname(filePath));
-  const tempPath = path.join(
-    path.dirname(filePath),
-    `.${path.basename(filePath)}.${process.pid}.${atomicWriteSequence += 1}.tmp`
-  );
-  try {
-    fs.writeFileSync(tempPath, contents);
-    fs.renameSync(tempPath, filePath);
-  } finally {
-    fs.rmSync(tempPath, { force: true });
-  }
+function cleanDir(dir) {
+  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 function contentHash(buffer) {
@@ -168,7 +172,7 @@ function copySharedAssets() {
 }
 
 function copyLeafletAssets() {
-  const leafletImagesDir = path.join(projectRoot, 'node_modules', 'leaflet', 'dist', 'images');
+  const leafletImagesDir = path.join(leafletDir, 'dist', 'images');
   if (!fs.existsSync(leafletImagesDir)) {
     throw new Error('Leaflet image assets are missing; run npm install before building');
   }
@@ -203,7 +207,7 @@ async function buildJs(entry) {
   const hash = contentHash(buffer);
   const fileName = `${entry.key}.${hash}.js`;
   const filePath = path.join(assetsDir, fileName);
-  writeFileAtomic(filePath, buffer);
+  fs.writeFileSync(filePath, buffer);
   return fileName;
 }
 
@@ -212,7 +216,7 @@ function buildCss(entry) {
   const buffers = [];
   if (entry.includeLeafletCss) {
     buffers.push(
-      fs.readFileSync(path.join(projectRoot, 'node_modules', 'leaflet', 'dist', 'leaflet.css')),
+      fs.readFileSync(path.join(leafletDir, 'dist', 'leaflet.css')),
       Buffer.from('\n')
     );
   }
@@ -227,46 +231,30 @@ function buildCss(entry) {
   const hash = contentHash(buffer);
   const fileName = `${entry.key}.${hash}.css`;
   const filePath = path.join(assetsDir, fileName);
-  writeFileAtomic(filePath, buffer);
+  fs.writeFileSync(filePath, buffer);
   return fileName;
 }
 
 function writeHtml(entry, assetMap) {
   const template = fs.readFileSync(entry.templatePath, 'utf8');
-  const assetPrefix = entry.assetPrefix || './assets/';
   const html = template
-    .replace(/%APP_JS%/g, `${assetPrefix}${assetMap.js}`)
-    .replace(/%APP_CSS%/g, `${assetPrefix}${assetMap.css}`)
+    .replace(/%APP_JS%/g, `./assets/${assetMap.js}`)
+    .replace(/%APP_CSS%/g, `./assets/${assetMap.css}`)
     .replace(/%BUILD_ID%/g, new Date().toISOString());
-  writeFileAtomic(path.join(distDir, entry.outputHtml), html);
+  fs.writeFileSync(path.join(distDir, entry.outputHtml), html);
 }
 
 function writeManifest(entryAssets) {
   const manifestPath = path.join(distDir, 'manifest.json');
-  writeFileAtomic(manifestPath, JSON.stringify({
+  fs.writeFileSync(manifestPath, JSON.stringify({
     generatedAt: new Date().toISOString(),
     entries: entryAssets,
   }, null, 2));
 }
 
-function pruneStaleBundles(entryAssets) {
-  if (!fs.existsSync(assetsDir)) return;
-  const activeBundles = new Set();
-  Object.values(entryAssets).forEach((assets) => {
-    activeBundles.add(assets.js);
-    activeBundles.add(assets.css);
-  });
-  const bundleKeys = entryPoints.map((entry) => entry.key).join('|');
-  const bundlePattern = new RegExp(`^(?:${bundleKeys})(?:\\.[a-f0-9]{10})?\\.(?:js|css)$`);
-  for (const fileName of fs.readdirSync(assetsDir)) {
-    if (bundlePattern.test(fileName) && !activeBundles.has(fileName)) {
-      fs.rmSync(path.join(assetsDir, fileName), { force: true });
-    }
-  }
-}
-
 async function main() {
   ensureDir(projectRoot);
+  cleanDir(distDir);
   ensureDir(distDir);
   ensureDir(assetsDir);
 
@@ -291,7 +279,6 @@ async function main() {
   copyLeafletAssets();
 
   writeManifest(entryAssets);
-  pruneStaleBundles(entryAssets);
   console.log('Frontend build complete:', entryAssets);
 }
 

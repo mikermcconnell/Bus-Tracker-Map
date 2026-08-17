@@ -7,22 +7,6 @@ export const BATT_COORDS = Object.freeze({
 
 export const TERMINAL_DISPLAY_RADIUS_METERS = 150;
 export const TERMINAL_ARRIVING_NOW_RADIUS_METERS = 250;
-export const TERMINAL_NEARBY_PRIORITY_RADIUS_METERS = 500;
-
-const SOURCE_KEY_BY_AGENCY = Object.freeze({
-  'barrie-transit': 'barrie_transit',
-  'ontario-northland': 'ontario_northland',
-  'go-transit': 'go_transit',
-  'simcoe-linx': 'simcoe_linx'
-});
-
-export function isVehicleSourceLive(vehicle, sources) {
-  if (!vehicle || !sources || typeof sources !== 'object') return true;
-  const agencyId = String(vehicle.agency_id || 'barrie-transit').trim().toLowerCase();
-  const sourceKey = SOURCE_KEY_BY_AGENCY[agencyId];
-  if (!sourceKey || !sources[sourceKey]) return true;
-  return String(sources[sourceKey].feed_status || '').trim().toLowerCase() === 'live';
-}
 
 export function getTerminalDisplayStatus(
   terminalProgressStatus,
@@ -150,7 +134,6 @@ export function selectNearestVehicles(list, options = {}) {
   return (Array.isArray(list) ? list : [])
     .filter((vehicle) => (
       vehicle &&
-      isVehicleSourceLive(vehicle, options.sources) &&
       Number.isFinite(Number(vehicle.lat)) &&
       Number.isFinite(Number(vehicle.lon))
     ))
@@ -185,14 +168,6 @@ export function selectNearestVehicles(list, options = {}) {
       const aAtTerminal = a.terminalStatus === 'at_terminal';
       const bAtTerminal = b.terminalStatus === 'at_terminal';
       if (aAtTerminal !== bAtTerminal) return aAtTerminal ? -1 : 1;
-      const aNearby = a.terminalStatus === 'approaching' &&
-        a.distanceMeters <= TERMINAL_NEARBY_PRIORITY_RADIUS_METERS;
-      const bNearby = b.terminalStatus === 'approaching' &&
-        b.distanceMeters <= TERMINAL_NEARBY_PRIORITY_RADIUS_METERS;
-      if (aNearby !== bNearby) return aNearby ? -1 : 1;
-      if (aNearby && a.distanceMeters !== b.distanceMeters) {
-        return a.distanceMeters - b.distanceMeters;
-      }
       const aHasTime = Number.isFinite(a.terminalEventTime);
       const bHasTime = Number.isFinite(b.terminalEventTime);
       if (aHasTime !== bHasTime) return aHasTime ? -1 : 1;

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Platform Departures</title>
+  <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,viewport-fit=cover">
+  <link rel="stylesheet" href="%APP_CSS%">
+  <meta name="app-build-id" content="%BUILD_ID%">
+</head>
+<body>
+  <main class="departure-screen">
+    <table class="departure-board" aria-label="Platform departures">
+      <thead>
+        <tr>
+          <th colspan="2" scope="colgroup">DEPARTURES</th>
+          <th class="departure-board__clock" scope="col">
+            <time id="departure-clock">--:--</time>
+          </th>
+        </tr>
+      </thead>
+      <tbody id="departure-rows" aria-live="polite">
+        <tr>
+          <th class="platform-cell" rowspan="2" scope="rowgroup">
+            <span>Platform</span>
+            <strong id="platform-number">--</strong>
+          </th>
+          <td class="agency-cell" rowspan="2"></td>
+          <td class="route-cell">Loading departures</td>
+        </tr>
+        <tr class="departure-detail-row">
+          <td class="departure-cell">Please wait&hellip;</td>
+        </tr>
+      </tbody>
+    </table>
+    <p id="departure-status" class="departure-status" role="status" aria-live="polite" hidden></p>
+  </main>
+  <script src="%APP_JS%"></script>
+</body>
+</html>

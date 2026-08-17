@@ -12,9 +12,10 @@ A single-page Leaflet app that shows Barrie Transit routes and live vehicle posi
    - Keep `GTFS_STATIC_URL=https://www.myridebarrie.ca/gtfs/google_transit.zip`.
    - Set `GTFS_RT_VEHICLES_URL` to your exact Vehicle Positions protobuf URL (for example `https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb`).
    - Keep the four `ONTARIO_NORTHLAND_*` feed URLs from `.env.example`; set `ONTARIO_NORTHLAND_ENABLED=false` only if that source must be disabled.
-   - Keep the five `SIMCOE_LINX_*` settings from `.env.example`; LINX vehicle positions come from a shared Ontario feed and are matched to the Simcoe schedule by exact trip ID.
+   - Keep the five `SIMCOE_LINX_*` settings from `.env.example`; LINX live vehicles come from a shared Ontario feed and are accepted only when both trip and route IDs match the Simcoe schedule.
+   - Keep the `LINX_*` static and trip-update feed URLs to include route 2 departures from Allandale Platform 2.
    - Set `METROLINX_API_KEY` to the server-side Metrolinx Open Data API key and leave `GO_TRANSIT_ENABLED=true`.
-   - Set `MAPBOX_ACCESS_TOKEN`, `MAPBOX_USERNAME`, and `MAPBOX_STYLE_ID` to use the custom main-map TV basemap. Set `PLATFORM_MAPBOX_STYLE_ID` when the platform display uses a separate Mapbox GL style, including a Mapbox Standard-import style. Missing settings, tile failures, or unsupported WebGL fall back to OpenStreetMap. See `mapbox/README.md` for style publishing and token restrictions.
+   - Set `MAPBOX_ACCESS_TOKEN`, `MAPBOX_USERNAME`, and `MAPBOX_STYLE_ID` to use the custom TV basemap. When they are omitted or Mapbox tiles fail, the map falls back to OpenStreetMap. See `mapbox/README.md` for style publishing and token restrictions.
    - Leave `POLL_MS=10000` unless you need a different polling interval.
    - Optional: set `BASE_PATH` if the app is hosted from a subdirectory (for example `/transit`).
    - Optional: set `ALLOWED_ORIGINS` (comma separated) to explicitly allow trusted cross-origin clients; otherwise the API is same-origin only.
@@ -31,9 +32,9 @@ npm install
 ```bash
 npm run build
 ```
-This bundles the frontend into `frontend/dist/` (hashed assets for long-lived caching), refreshes Barrie GTFS GeoJSON, creates compact Ontario Northland and Simcoe LINX layers containing only routes that serve Barrie, and creates GO bus/train layers containing only trips serving Allandale stops `08049` and `AD`.
+This bundles the frontend into `frontend/dist/` (hashed assets for long-lived caching), refreshes Barrie GTFS GeoJSON, creates compact Ontario Northland and Simcoe LINX layers containing only routes that serve Barrie, creates GO bus/train layers containing only trips serving Allandale stops `08049` and `AD`, and generates Simcoe LINX route 2 departure metadata.
 
-> Tip: Run `npm run build:northland` to refresh only Ontario Northland data, `npm run build:simcoe` to refresh only Simcoe LINX data, `npm run build:go` to refresh only GO Allandale data, or `npm run build:frontend` to rebuild the SPA bundle by itself.
+> Tip: Run `npm run build:northland` to refresh only Ontario Northland data, `npm run build:simcoe` to refresh LINX live-map data, `npm run build:linx` to refresh LINX departure-board data, `npm run build:go` to refresh only GO Allandale data, or `npm run build:frontend` to rebuild the SPA bundle by itself.
 
 ## 4. Start the server
 ```bash
@@ -61,11 +62,23 @@ Open [http://localhost:3000](http://localhost:3000) in a browser (or on the Smar
 
 The terminal-focused displays are available at `/platform.map` and `/batt.map`. Both consume the same merged, freshness-checked vehicle endpoint and show Ontario Northland and GO vehicles when they enter the calibrated Allandale platform area. The platform display reads `/api/terminal-layout`, overlays current GTFS-derived bay assignments, keeps live markers aligned at 16:9 and 4:3, and marks Platform 14 as having no scheduled service when it is absent from the current Barrie feed.
 
-## Departure displays
+## Simcoe regional map
 
-The **next bus display** for a Barrie bus shelter is available at `/departures?stop=2`. The `stop` query accepts any current Barrie GTFS stop code or stop ID, shows the stop name in the header, and combines scheduled GTFS with Trip Updates when realtime data is available. Its primary target is a 320 x 80 screen: a compact 20-pixel header and three 20-pixel departure rows. It refreshes and advances through additional departures every 10 seconds.
+Open [http://localhost:3000/simcoe](http://localhost:3000/simcoe) locally or `/simcoe` on the production site. **Simcoe Region Live Transit** is an interactive regional view covering Barrie Transit, all six Simcoe County LINX routes, GO route 68 and Barrie line trains, and Barrie-serving Ontario Northland routes. Regional services appear at the county scale; detailed Barrie routes and stops appear as the user zooms in or chooses a service.
 
-The Allandale platform-specific departure display remains available at `/departures/platform.aspx?stop=9002`.
+The regional page uses separate `/api/simcoe/*` data so expanding the county view does not change the existing Allandale-focused map or TV displays.
+
+## Allandale departure board
+
+Open [http://localhost:3000/departures](http://localhost:3000/departures) locally or `/departures` on the production site. The TV-safe board displays the next 10 outbound departures within 24 hours for Barrie Transit, Ontario Northland, GO buses and trains, and Simcoe LINX route 2.
+
+Each terminal platform also has a compact digital departure sign at `/departures/platform.aspx?stop=9002`. Replace `9002` with a terminal code from `9001` through `9014`; the sign filters the terminal-wide departure data to that platform and is optimized for the installed 320 x 80 display.
+
+Rows are selected from the next hour of published service and show only the next trip for each agency, route, destination, and platform combination. A **LIVE** badge and live countdown require both a fresh stop prediction and a fresh vehicle position for the exact agency and trip. Every other row is labelled **SCHED** and uses its published scheduled time. The supporting `GET /api/departures?limit=12` endpoint accepts limits from 1 through 30.
+
+## Downtown Hub departure board
+
+Open [http://localhost:3000/departures/downtown](http://localhost:3000/departures/downtown) locally or `/departures/downtown` on the production site. This board merges Barrie Transit departures from Downtown Hub stops 1 and 2 while retaining each departure's stop number. Its supporting endpoint is `GET /api/departures?board=downtown&limit=12`.
 
 ### Metrolinx data notice
 
@@ -88,7 +101,10 @@ For the terminal TV, disable its sleep/screensaver setting and bookmark the prod
 - `npm run build` - bundle the frontend and rebuild GeoJSON caches.
 - `npm run build:data` - regenerate the cached GeoJSON from the latest GTFS ZIP.
 - `npm run build:northland` - refresh the Barrie-serving Ontario Northland route and trip metadata.
+- `npm run build:simcoe` - refresh Barrie-serving Simcoe LINX routes and live-map trip metadata.
 - `npm run build:go` - refresh only GO route 68 and Barrie line data serving Allandale.
+- `npm run build:linx` - refresh only Simcoe LINX route 2 metadata at Allandale.
+- `npm run build:region` - refresh the separate Simcoe regional routes, stops, and live-feed metadata.
 - `npm run build:frontend` - produce hashed frontend assets in `frontend/dist/`.
 - `npm run watch:frontend` - development watcher that rebuilds the frontend bundle on changes.
 - `npm start` - run the Express server.
@@ -109,11 +125,13 @@ barrie-bus/
     build-geojson.js  # Downloads GTFS static feed and writes GeoJSON caches
     build-ontario-northland.js # Builds the clipped Ontario Northland layer
     build-go-transit.js # Builds GO layers limited to Allandale-serving trips
+    build-linx.js # Builds Simcoe LINX route 2 departure metadata
   server/
     server.js        # Express server, REST endpoints, static hosting
     vehicles.js      # Optional GTFS-Realtime fetch/convert helper
     ontario-northland.js # Ontario Northland vehicles, trip updates, and alerts
     go-transit.js  # Metrolinx vehicles filtered to Allandale routes and Barrie bounds
+    departures.js # Unified static and realtime departure-board service
   cache/             # Generated GeoJSON (routes/stops) after build:data
   .env               # Local configuration (ignored by Git)
   .env.example       # Template for the environment variables
@@ -144,6 +162,8 @@ barrie-bus/
 - The monitor sends `Barrie Transit Email Volume Alert | ...` after 4 operational alert emails within a rolling 60-minute window. The warning has a 180-minute cooldown and does not count daily check-ins, test messages, or itself. Configure this with `EMAIL_VOLUME_ALERT_THRESHOLD`, `EMAIL_VOLUME_WINDOW_MIN`, and `EMAIL_VOLUME_ALERT_COOLDOWN_MIN`.
 - The monitor now ships with a local holiday/service override calendar in `monitor/service-overrides.json` for the current operating year. Update that file annually or whenever special service changes are approved.
 - The scheduled monitor job now refreshes GTFS static more aggressively (`GTFS_CACHE_MAX_AGE_HOURS=6`) to reduce stale service-calendar risk.
+- Holiday dates use explicit GTFS `calendar_dates.txt` service when published; the local Sunday schedule is fallback-only and is never combined with a separate GTFS holiday service. Monitor emails name the holiday, selected schedule, source, and feed coverage used for the expected-bus count.
+- If the published GTFS feed does not cover the monitored date, expected-bus GPS alerts pause and a `GTFS_SCHEDULE_DATE_NOT_COVERED` email is sent instead of silently treating the day as no service.
 - A separate GitHub Actions workflow, **Bus Monitor Daily Check-In**, sends one daily health email with the subject `Barrie Transit Monitor Daily Check-In | ...`. It checks whether the GitHub manual backup workflow is active, reports live feed health, and helps catch obvious backup-workflow problems. Railway run health should be watched with `HEARTBEAT_URL`.
 
 ## Bus monitor holiday calendar maintenance
@@ -153,4 +173,5 @@ barrie-bus/
   - `sunday`
 - After updating the file, run `npm test` to confirm the holiday calendar and fallback logic still pass.
 - Keep the example file (`monitor/service-overrides.example.json`) in sync with the real file so the expected format stays obvious.
+- Keep each `label` human-readable because it appears in daily check-in and GPS alert email subjects and bodies.
 # Bus-Tracker-Map

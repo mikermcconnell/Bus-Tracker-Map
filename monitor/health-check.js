@@ -11,7 +11,7 @@ const {
   getFeedAlertContext,
   getFeedAgeMinutes,
 } = require('./index');
-const { sendHealthCheck, formatIsoTimestamp } = require('./notify');
+const { sendHealthCheck, formatIsoTimestamp, buildScheduleRows } = require('./notify');
 
 const DEFAULT_STATIC_URL = 'https://www.myridebarrie.ca/gtfs/google_transit.zip';
 const DEFAULT_VEHICLE_URL = 'https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb';
@@ -111,6 +111,16 @@ function getRecentVehicleCount(vehicles, now, thresholdMinutes) {
   }).length;
 }
 
+function getExpectedReportingConcern(transitStatus) {
+  if (!transitStatus || transitStatus.scheduleCoverageIssue) return null;
+  const expected = Number(transitStatus.expectedBuses) || 0;
+  const reporting = Number(transitStatus.recentVehicles) || 0;
+  const missing = Math.max(0, expected - reporting);
+  if (expected < 8 || missing < 5 || reporting >= expected * 0.6) return null;
+
+  return `Only ${reporting} of ${expected} expected buses have recent GPS. Verify the selected service schedule and live GPS reporting.`;
+}
+
 async function getTransitFeedStatus(now) {
   const expected = await getExpectedBuses(
     GTFS_STATIC_URL,
@@ -141,9 +151,8 @@ async function getTransitFeedStatus(now) {
   return {
     expectedBuses: expected.totalExpected,
     expectedRoutes: expected.byRoute.size,
-    scheduleSource: expected.scheduleSources && expected.scheduleSources.today
-      ? expected.scheduleSources.today.source
-      : null,
+    serviceContext: expected.serviceContext,
+    scheduleCoverageIssue: expected.coverageIssue,
     totalVehicles: vehicles.length,
     recentVehicles,
     vehicleFeedTimestamp: vehicleData.feed_timestamp,
@@ -174,8 +183,15 @@ function summarizeStatus(workflowStatus, transitStatus, errors = []) {
 
   if (!transitStatus) {
     problems.push('Could not check the transit data feeds.');
-  } else if (transitStatus.feedIssue) {
-    problems.push(`Transit feed issue detected: ${transitStatus.feedIssue.code}.`);
+  } else {
+    if (transitStatus.scheduleCoverageIssue) {
+      problems.push('The published GTFS schedule does not cover today.');
+    }
+    const reportingConcern = getExpectedReportingConcern(transitStatus);
+    if (reportingConcern) problems.push(reportingConcern);
+    if (transitStatus.feedIssue) {
+      problems.push(`Transit feed issue detected: ${transitStatus.feedIssue.code}.`);
+    }
   }
 
   return {
@@ -211,9 +227,9 @@ function buildHealthRows(workflowStatus, transitStatus, errors = []) {
   }
 
   if (transitStatus) {
+    rows.push(...buildScheduleRows(transitStatus.serviceContext));
     rows.push(['Expected buses now', transitStatus.expectedBuses]);
     rows.push(['Expected routes now', transitStatus.expectedRoutes]);
-    rows.push(['Schedule source', transitStatus.scheduleSource || 'unknown']);
     rows.push(['Vehicles in feed', transitStatus.totalVehicles]);
     rows.push(['Vehicles with recent GPS', transitStatus.recentVehicles]);
     rows.push(['Vehicle feed time', formatIsoTimestamp(transitStatus.vehicleFeedTimestamp)]);
@@ -263,7 +279,10 @@ async function main() {
     transitStatus = await getTransitFeedStatus(checkedAt);
     logEvent('monitor_transit_feed_status', {
       expectedBuses: transitStatus.expectedBuses,
-      scheduleSource: transitStatus.scheduleSource,
+      holidayLabel: transitStatus.serviceContext && transitStatus.serviceContext.holidayLabel,
+      expectedSchedule: transitStatus.serviceContext && transitStatus.serviceContext.expectedSchedule,
+      scheduleSource: transitStatus.serviceContext && transitStatus.serviceContext.scheduleSource,
+      scheduleCovered: transitStatus.serviceContext && transitStatus.serviceContext.feedCoversDate,
       totalVehicles: transitStatus.totalVehicles,
       recentVehicles: transitStatus.recentVehicles,
       vehicleFeedAgeMin: transitStatus.vehicleFeedAgeMin,
@@ -282,6 +301,7 @@ async function main() {
     status: summary.status,
     summary: summary.summary,
     rows,
+    serviceContext: transitStatus && transitStatus.serviceContext,
   });
 
   logEvent('monitor_daily_check_completed', {
@@ -302,6 +322,7 @@ module.exports = {
   validateEmailConfig,
   getWorkflowStatus,
   getRecentVehicleCount,
+  getExpectedReportingConcern,
   summarizeStatus,
   buildHealthRows,
 };

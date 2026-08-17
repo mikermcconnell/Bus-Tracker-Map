@@ -11,6 +11,7 @@ describe('monitor service override calendar file', () => {
     expect(raw._maintenance).toEqual(expect.objectContaining({
       checklist: expect.arrayContaining([
         expect.stringContaining('next year'),
+        expect.stringContaining('holiday label'),
         expect.stringContaining('run npm test'),
       ]),
     }));
@@ -26,7 +27,7 @@ describe('monitor service override calendar file', () => {
       '2026-04-05': expect.objectContaining({ mode: 'no_service' }),
       '2026-05-18': expect.objectContaining({ mode: 'no_service' }),
       '2026-07-01': expect.objectContaining({ mode: 'sunday' }),
-      '2026-08-03': expect.objectContaining({ mode: 'sunday' }),
+      '2026-08-03': expect.objectContaining({ label: 'Civic Holiday', mode: 'sunday' }),
       '2026-09-07': expect.objectContaining({ mode: 'sunday' }),
       '2026-10-12': expect.objectContaining({ mode: 'no_service' }),
       '2026-12-25': expect.objectContaining({ mode: 'no_service' }),

@@ -5,8 +5,6 @@ const fetch = require('node-fetch');
 const AdmZip = require('adm-zip');
 const { parse } = require('csv-parse/sync');
 const { buildServiceCalendarMetadata } = require('../shared/gtfs-service-calendar');
-const { buildTerminalApproachFallbacks } = require('../shared/terminal-approach-fallbacks');
-const { buildShelterDepartureMetadata } = require('../shared/shelter-departure-cache');
 require('dotenv').config();
 
 const args = process.argv.slice(2);
@@ -19,15 +17,20 @@ const ADDITIONAL_TERMINAL_STOP_PLATFORMS = Object.freeze({
   '14': '14',
 });
 
+const DEPARTURE_BOARD_CONFIGS = Object.freeze({
+  downtown: Object.freeze({
+    name: 'Downtown Hub',
+    stopIds: Object.freeze(['1', '2']),
+  }),
+});
+
 const OUT_DIR = path.resolve(process.env.CACHE_DIR || path.join(__dirname, '..', 'cache'));
 const ROUTES_PATH = path.join(OUT_DIR, 'routes.geojson');
 const STOPS_PATH = path.join(OUT_DIR, 'stops.geojson');
 const BARRIE_METADATA_PATH = path.join(OUT_DIR, 'barrie-transit.json');
-const BARRIE_DEPARTURES_PATH = path.join(OUT_DIR, 'barrie-departures.json');
 const hasCache = fs.existsSync(ROUTES_PATH) &&
   fs.existsSync(STOPS_PATH) &&
-  fs.existsSync(BARRIE_METADATA_PATH) &&
-  fs.existsSync(BARRIE_DEPARTURES_PATH);
+  fs.existsSync(BARRIE_METADATA_PATH);
 const GTFS_URL = process.env.GTFS_STATIC_URL;
 
 if (!GTFS_URL) {
@@ -55,6 +58,86 @@ function normalizeHexColor(color) {
   return `#${hex.toUpperCase()}`;
 }
 
+function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
+  const terminalIds = terminalStopIds instanceof Set
+    ? terminalStopIds
+    : new Set(Array.from(terminalStopIds || []).map(String));
+  const tripsById = new Map();
+  const stopTimesByTrip = new Map();
+
+  (Array.isArray(trips) ? trips : []).forEach((trip) => {
+    const tripId = String(trip && trip.trip_id || '');
+    if (tripId) tripsById.set(tripId, trip);
+  });
+  (Array.isArray(stopTimes) ? stopTimes : []).forEach((stopTime) => {
+    const tripId = String(stopTime && stopTime.trip_id || '');
+    const stopId = String(stopTime && stopTime.stop_id || '');
+    const stopSequence = Number(stopTime && stopTime.stop_sequence);
+    if (!tripId || !stopId || !Number.isFinite(stopSequence)) return;
+    if (!stopTimesByTrip.has(tripId)) stopTimesByTrip.set(tripId, []);
+    stopTimesByTrip.get(tripId).push({ stop_id: stopId, stop_sequence: stopSequence });
+  });
+
+  const fallbackStats = new Map();
+  stopTimesByTrip.forEach((rows, tripId) => {
+    const trip = tripsById.get(tripId);
+    const routeId = String(trip && trip.route_id || '').trim();
+    const directionId = trip && trip.direction_id !== undefined && trip.direction_id !== null
+      ? String(trip.direction_id).trim()
+      : '';
+    if (!routeId || !directionId) return;
+
+    const orderedRows = rows.slice().sort((a, b) => a.stop_sequence - b.stop_sequence);
+    const terminalVisits = orderedRows.filter((row) => terminalIds.has(row.stop_id));
+    const occurrencesByStop = new Map();
+    orderedRows.forEach((row) => {
+      if (terminalIds.has(row.stop_id)) return;
+      if (!occurrencesByStop.has(row.stop_id)) occurrencesByStop.set(row.stop_id, []);
+      occurrencesByStop.get(row.stop_id).push(row);
+    });
+
+    occurrencesByStop.forEach((occurrences, stopId) => {
+      const key = `${routeId}|${directionId}|${stopId}`;
+      if (!fallbackStats.has(key)) {
+        fallbackStats.set(key, {
+          route_id: routeId,
+          direction_id: directionId,
+          stop_id: stopId,
+          candidate_trip_ids: new Set(),
+          approaching_trip_ids: new Set(),
+          terminal_stop_ids: new Set(),
+        });
+      }
+      const stats = fallbackStats.get(key);
+      stats.candidate_trip_ids.add(tripId);
+
+      const nextTerminalVisits = occurrences.map((occurrence) => (
+        terminalVisits.find((terminal) => terminal.stop_sequence > occurrence.stop_sequence) || null
+      ));
+      if (nextTerminalVisits.some((terminal) => !terminal)) return;
+
+      stats.approaching_trip_ids.add(tripId);
+      nextTerminalVisits.forEach((terminal) => stats.terminal_stop_ids.add(terminal.stop_id));
+    });
+  });
+
+  return Object.fromEntries(
+    Array.from(fallbackStats.entries())
+      .filter(([, stats]) => (
+        stats.approaching_trip_ids.size > 0 &&
+        stats.approaching_trip_ids.size === stats.candidate_trip_ids.size
+      ))
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, stats]) => [key, {
+        route_id: stats.route_id,
+        direction_id: stats.direction_id,
+        stop_id: stats.stop_id,
+        terminal_stop_ids: Array.from(stats.terminal_stop_ids).sort(),
+        candidate_trip_count: stats.candidate_trip_ids.size,
+      }])
+  );
+}
+
 (async function main() {
   try {
     if (!fs.existsSync(OUT_DIR)) fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -76,7 +159,6 @@ function normalizeHexColor(color) {
     const stopTimesTxt = getText('stop_times.txt');
     const calendarTxt = getText('calendar.txt');
     const calendarDatesTxt = getText('calendar_dates.txt');
-    const feedInfoTxt = getText('feed_info.txt');
     const serviceCalendarMetadata = buildServiceCalendarMetadata(
       calendarTxt ? parse(calendarTxt, { columns: true, skip_empty_lines: true }) : [],
       calendarDatesTxt ? parse(calendarDatesTxt, { columns: true, skip_empty_lines: true }) : []
@@ -123,9 +205,8 @@ function normalizeHexColor(color) {
     };
 
     const routeInfoById = new Map();
-    let routesRows = [];
     if (routesTxt) {
-      routesRows = parse(routesTxt, { columns: true, skip_empty_lines: true });
+      const routesRows = parse(routesTxt, { columns: true, skip_empty_lines: true });
       routesRows.forEach((route) => {
         const id = route.route_id;
         if (!id) return;
@@ -251,32 +332,16 @@ function normalizeHexColor(color) {
     }
 
     const terminalStopIds = new Set(terminalStops.map((stop) => String(stop.stop_id)));
-    const stopTimesRows = parse(stopTimesTxt, { columns: true, skip_empty_lines: true });
-    const generatedAt = new Date().toISOString();
-    const feedInfoRows = feedInfoTxt
-      ? parse(feedInfoTxt, { columns: true, skip_empty_lines: true })
-      : [];
-    const shelterDepartureMetadata = buildShelterDepartureMetadata({
-      generatedAt,
-      sourceUrl: GTFS_URL,
-      feedInfo: feedInfoRows[0] || {},
-      serviceCalendarMetadata,
-      stopsRows,
-      routesRows,
-      tripsRows,
-      stopTimesRows,
+    const stopTimeRows = parse(stopTimesTxt, { columns: true, skip_empty_lines: true });
+    const lastStopSequenceByTrip = {};
+    stopTimeRows.forEach((stopTime) => {
+      const tripId = String(stopTime.trip_id || '');
+      const stopSequence = Number(stopTime.stop_sequence);
+      if (!tripId || !Number.isFinite(stopSequence)) return;
+      lastStopSequenceByTrip[tripId] = Math.max(lastStopSequenceByTrip[tripId] || 0, stopSequence);
     });
-    fs.writeFileSync(BARRIE_DEPARTURES_PATH, JSON.stringify(shelterDepartureMetadata));
-    console.log(
-      'Wrote cache/barrie-departures.json with',
-      Object.keys(shelterDepartureMetadata.stops).length,
-      'stops and',
-      Object.values(shelterDepartureMetadata.departures_by_stop)
-        .reduce((total, rows) => total + rows.length, 0),
-      'boardable stop times'
-    );
     const terminalStopsByTrip = {};
-    stopTimesRows.forEach((stopTime) => {
+    stopTimeRows.forEach((stopTime) => {
       const stopId = String(stopTime.stop_id || '');
       const stopSequence = Number(stopTime.stop_sequence);
       if (!terminalStopIds.has(stopId) || !Number.isFinite(stopSequence)) return;
@@ -288,7 +353,67 @@ function normalizeHexColor(color) {
         stop_sequence: stopSequence,
         arrival_time: stopTime.arrival_time || null,
         departure_time: stopTime.departure_time || stopTime.arrival_time || null,
+        is_departure: stopSequence < Number(lastStopSequenceByTrip[tripId] || stopSequence),
       });
+    });
+
+    const departureBoards = {};
+    Object.entries(DEPARTURE_BOARD_CONFIGS).forEach(([boardId, boardConfig]) => {
+      const boardStopIds = new Set(boardConfig.stopIds.map(String));
+      const boardStops = boardConfig.stopIds.map((stopId) => (
+        stopsRows.find((stop) => String(stop.stop_id || '') === String(stopId))
+      )).filter(Boolean);
+      const missingStopIds = boardConfig.stopIds.filter((stopId) => (
+        !boardStops.some((stop) => String(stop.stop_id || '') === String(stopId))
+      ));
+      if (missingStopIds.length) {
+        throw new Error(`${boardConfig.name} departure-board stops missing: ${missingStopIds.join(', ')}`);
+      }
+
+      const boardStopsByTrip = {};
+      stopTimeRows.forEach((stopTime) => {
+        const stopId = String(stopTime.stop_id || '');
+        const stopSequence = Number(stopTime.stop_sequence);
+        if (!boardStopIds.has(stopId) || !Number.isFinite(stopSequence)) return;
+        const tripId = String(stopTime.trip_id || '');
+        if (!tripId) return;
+        if (!boardStopsByTrip[tripId]) boardStopsByTrip[tripId] = [];
+        boardStopsByTrip[tripId].push({
+          stop_id: stopId,
+          stop_sequence: stopSequence,
+          arrival_time: stopTime.arrival_time || null,
+          departure_time: stopTime.departure_time || stopTime.arrival_time || null,
+          is_departure: stopSequence < Number(lastStopSequenceByTrip[tripId] || stopSequence),
+        });
+      });
+
+      const boardTrips = {};
+      tripsRows.forEach((trip) => {
+        const tripId = String(trip.trip_id || '');
+        const stops = boardStopsByTrip[tripId];
+        if (!tripId || !stops || !stops.length) return;
+        boardTrips[tripId] = {
+          route_id: String(trip.route_id || ''),
+          direction_id: trip.direction_id !== undefined && trip.direction_id !== null
+            ? String(trip.direction_id)
+            : null,
+          service_id: String(trip.service_id || ''),
+          shape_id: String(trip.shape_id || '') || null,
+          headsign: trip.trip_headsign || null,
+          terminal_stops: stops.sort((a, b) => a.stop_sequence - b.stop_sequence),
+        };
+      });
+
+      departureBoards[boardId] = {
+        name: boardConfig.name,
+        stop_ids: boardConfig.stopIds.map(String),
+        stops: boardStops.map((stop) => ({
+          id: String(stop.stop_id),
+          name: stop.stop_name || boardConfig.name,
+          platform_code: String(stop.stop_code || stop.stop_id),
+        })),
+        trips: boardTrips,
+      };
     });
 
     const tripMetadata = {};
@@ -310,24 +435,23 @@ function normalizeHexColor(color) {
 
     const terminalApproachFallbacks = buildTerminalApproachFallbacks(
       tripsRows,
-      stopTimesRows,
+      stopTimeRows,
       terminalStopIds
     );
 
     fs.writeFileSync(BARRIE_METADATA_PATH, JSON.stringify({
-      generated_at: generatedAt,
+      generated_at: new Date().toISOString(),
       source_url: GTFS_URL,
       terminal_stop_ids: Array.from(terminalStopIds).sort(),
       terminal_stops: terminalStops.map((stop) => ({
         id: String(stop.stop_id),
         name: stop.stop_name || null,
-        lat: Number(stop.stop_lat),
-        lon: Number(stop.stop_lon),
         platform_code: stop.platform_code ||
           ADDITIONAL_TERMINAL_STOP_PLATFORMS[String(stop.stop_id || '')] ||
           null,
       })),
       ...serviceCalendarMetadata,
+      departure_boards: departureBoards,
       terminal_approach_fallbacks: terminalApproachFallbacks,
       trips: tripMetadata,
     }));

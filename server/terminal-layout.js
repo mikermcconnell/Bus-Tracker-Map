@@ -14,19 +14,6 @@ const PLATFORM_BY_EXTERNAL_STOP = Object.freeze({
   }),
 });
 
-// The current Barrie GTFS names the terminal platforms but leaves
-// platform_code blank. Keep these stable stop IDs as a fallback so scheduled
-// service remains visible; a published platform_code still takes precedence.
-const BARRIE_PLATFORM_BY_STOP = Object.freeze({
-  '14': '14',
-  '9003': '3',
-  '9004': '4',
-  '9005': '5',
-  '9006': '6',
-  '9012': '12',
-  '9013': '13',
-});
-
 const BARRIE_PLATFORM_LABELS = Object.freeze({
   '3|8A': 'Yonge Southbound',
   '4|8B': 'Essa Southbound',
@@ -47,27 +34,14 @@ function cleanHeadsign(value, agencyId) {
   return label.replace(/\s+/g, ' ');
 }
 
-function readStopPlatformMap(metadata, fallback = {}) {
-  const result = Object.assign(Object.create(null), fallback);
+function readStopPlatformMap(metadata) {
+  const result = Object.create(null);
   (Array.isArray(metadata && metadata.terminal_stops) ? metadata.terminal_stops : [])
     .forEach((stop) => {
       const id = String(stop && (stop.id || stop.stop_id) || '');
       const platform = String(stop && stop.platform_code || '');
       if (id && platform) result[id] = platform;
     });
-  return result;
-}
-
-function readStopCoordinates(metadata) {
-  const result = Object.create(null);
-  ['terminal_stops', 'allandale_stops', 'barrie_stops'].forEach((key) => {
-    (Array.isArray(metadata && metadata[key]) ? metadata[key] : []).forEach((stop) => {
-      const id = String(stop && (stop.id || stop.stop_id) || '');
-      const lat = Number(stop && (stop.lat ?? stop.stop_lat));
-      const lon = Number(stop && (stop.lon ?? stop.stop_lon));
-      if (id && Number.isFinite(lat) && Number.isFinite(lon)) result[id] = { lat, lon };
-    });
-  });
   return result;
 }
 
@@ -152,10 +126,9 @@ function nextDepartureForStop(metadata, trip, stop, nowSeconds, serviceDateKeys)
 
 function collectAssignments(metadata, agencyId, agencyName, nowSeconds) {
   const platformByStop = agencyId === 'barrie-transit'
-    ? readStopPlatformMap(metadata, BARRIE_PLATFORM_BY_STOP)
+    ? readStopPlatformMap(metadata)
     : PLATFORM_BY_EXTERNAL_STOP[agencyId] || {};
   const assignmentsByKey = new Map();
-  const coordinatesByStop = readStopCoordinates(metadata);
   const serviceDateKeys = localServiceDateKeys(nowSeconds * 1000);
 
   Object.values(metadata && metadata.trips || {}).forEach((trip) => {
@@ -168,7 +141,6 @@ function collectAssignments(metadata, agencyId, agencyName, nowSeconds) {
       let assignment = assignmentsByKey.get(key);
       if (!assignment) {
         const configuredLabel = BARRIE_PLATFORM_LABELS[`${platform}|${route.route_id}`];
-        const coordinates = coordinatesByStop[stopId] || null;
         assignment = {
           platform,
           stop_id: stopId,
@@ -176,8 +148,6 @@ function collectAssignments(metadata, agencyId, agencyName, nowSeconds) {
           agency_name: agencyName,
           ...route,
           destination: configuredLabel || route.destination || cleanHeadsign(trip.headsign, agencyId),
-          stop_lat: coordinates ? coordinates.lat : null,
-          stop_lon: coordinates ? coordinates.lon : null,
           next_departure_time: null,
           next_departure_source: null,
         };
@@ -246,13 +216,11 @@ function buildTerminalLayout({
 }
 
 module.exports = {
-  BARRIE_PLATFORM_BY_STOP,
   BARRIE_PLATFORM_LABELS,
   PLATFORM_BY_EXTERNAL_STOP,
   buildTerminalLayout,
   cleanHeadsign,
   localServiceDateKeys,
-  readStopCoordinates,
 };
 const { scheduledTimeToEpochSeconds } = require('./terminal-progress');
 const { isServiceActiveOnDate } = require('../shared/gtfs-service-calendar');

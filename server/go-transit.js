@@ -12,16 +12,17 @@ const PROXY_FAILURE_REASONS = new Set([
   'feed_not_configured',
   'missing_timestamp',
 ]);
-let realtimeCache = null;
-let lastSuccessfulRealtime = null;
+const realtimeCaches = new Map();
+const lastSuccessfulRealtimeByKey = new Map();
+const rawRealtimeCaches = new Map();
 
-function loadMetadata(cacheDir) {
-  const metadataPath = path.join(cacheDir, 'go-transit.json');
+function loadMetadata(cacheDir, metadataFile = 'go-transit.json', routesFile = 'go-transit-routes.geojson') {
+  const metadataPath = path.join(cacheDir, metadataFile);
   if (!fs.existsSync(metadataPath)) {
     throw new Error('GO Transit static metadata is not built');
   }
   const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-  const routesPath = path.join(cacheDir, 'go-transit-routes.geojson');
+  const routesPath = path.join(cacheDir, routesFile);
   if (fs.existsSync(routesPath)) {
     const routes = JSON.parse(fs.readFileSync(routesPath, 'utf8'));
     metadata.shape_coordinates = buildShapeCoordinateIndex(routes);
@@ -40,13 +41,41 @@ function readEpochSeconds(value) {
   return Math.floor(timestamp >= 1e12 ? timestamp / 1000 : timestamp);
 }
 
-function cacheSuccessfulRealtime(now, value) {
-  realtimeCache = { cachedAt: now, value };
-  lastSuccessfulRealtime = { cachedAt: now, value };
+function cacheSuccessfulRealtime(now, value, cacheKey = 'barrie') {
+  realtimeCaches.set(cacheKey, { cachedAt: now, value });
+  lastSuccessfulRealtimeByKey.set(cacheKey, { cachedAt: now, value });
   return value;
 }
 
-function useLastSuccessfulRealtime(now, error) {
+async function fetchRealtimeJson(url, fetchImpl, label) {
+  const now = Date.now();
+  const cached = rawRealtimeCaches.get(url);
+  if (cached && now - cached.cachedAt < REALTIME_CACHE_MS) return cached.promise;
+  const promise = (async () => {
+    const response = await fetchImpl(url, {
+      timeout: 10_000,
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'Barrie-Bus-Tracker/1.0',
+      },
+    });
+    if (!response.ok) throw new Error(`${label} failed: ${response.status}`);
+    return response.json();
+  })();
+  rawRealtimeCaches.set(url, { cachedAt: now, promise });
+  try {
+    return await promise;
+  } catch (error) {
+    rawRealtimeCaches.delete(url);
+    if (error && /^GO Transit proxy feed failed:|^Metrolinx vehicle feed failed:/.test(String(error.message || ''))) {
+      throw error;
+    }
+    throw new Error(`${label} unavailable`, { cause: error });
+  }
+}
+
+function useLastSuccessfulRealtime(now, error, cacheKey = 'barrie') {
+  const lastSuccessfulRealtime = lastSuccessfulRealtimeByKey.get(cacheKey);
   if (!lastSuccessfulRealtime || now - lastSuccessfulRealtime.cachedAt > STALE_IF_ERROR_MS) {
     throw error;
   }
@@ -55,7 +84,7 @@ function useLastSuccessfulRealtime(now, error) {
     generated_at: now,
     stale_if_error: true,
   };
-  realtimeCache = { cachedAt: now, value };
+  realtimeCaches.set(cacheKey, { cachedAt: now, value });
   return value;
 }
 
@@ -275,29 +304,21 @@ async function fetchGoTransitRealtime(options = {}) {
   }
 
   const now = Date.now();
+  const cacheKey = String(options.cacheKey || options.metadataFile || 'barrie');
+  const realtimeCache = realtimeCaches.get(cacheKey);
   if (realtimeCache && now - realtimeCache.cachedAt < REALTIME_CACHE_MS) {
     return realtimeCache.value;
   }
 
   if (!apiKey && proxyUrl) {
     try {
-      const response = await fetchImpl(proxyUrl, {
-        timeout: 10_000,
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': 'Barrie-Bus-Tracker/1.0',
-        },
-      });
-      if (!response.ok) {
-        throw new Error(`GO Transit proxy feed failed: ${response.status}`);
-      }
-      const payload = await response.json();
+      const payload = await fetchRealtimeJson(proxyUrl, fetchImpl, 'GO Transit proxy feed');
       const source = payload && payload.sources && payload.sources.go_transit || {};
       if (PROXY_FAILURE_REASONS.has(String(source.status_reason || '').toLowerCase())) {
         throw new Error(`GO Transit proxy source unavailable: ${source.status_reason}`);
       }
       const cacheDir = path.resolve(options.cacheDir || path.join(__dirname, '..', 'cache'));
-      const metadata = loadMetadata(cacheDir);
+      const metadata = loadMetadata(cacheDir, options.metadataFile, options.routesFile);
       const sourceTimestamp = readEpochSeconds(source.latest_data_timestamp) ||
         readEpochSeconds(payload && payload.feed_timestamp);
       const proxyResponseTimestamp = readEpochSeconds(payload && payload.generated_at);
@@ -323,29 +344,18 @@ async function fetchGoTransitRealtime(options = {}) {
         configured: true,
         agency: { id: 'go-transit', name: 'GO Transit' },
       };
-      return cacheSuccessfulRealtime(now, value);
+      return cacheSuccessfulRealtime(now, value, cacheKey);
     } catch (error) {
-      return useLastSuccessfulRealtime(now, error);
+      return useLastSuccessfulRealtime(now, error, cacheKey);
     }
   }
 
   const cacheDir = path.resolve(options.cacheDir || path.join(__dirname, '..', 'cache'));
-  const metadata = loadMetadata(cacheDir);
+  const metadata = loadMetadata(cacheDir, options.metadataFile, options.routesFile);
   const apiBase = String(options.apiBase || DEFAULT_API_BASE).replace(/\/+$/, '');
   const endpoint = `${apiBase}/Gtfs/Feed/VehiclePosition?key=${encodeURIComponent(apiKey)}`;
   try {
-    const response = await fetchImpl(endpoint, {
-      timeout: 10_000,
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'Barrie-Bus-Tracker/1.0',
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`Metrolinx vehicle feed failed: ${response.status}`);
-    }
-
-    const feed = await response.json();
+    const feed = await fetchRealtimeJson(endpoint, fetchImpl, 'Metrolinx vehicle feed');
     const value = {
       generated_at: now,
       feed_timestamp: readEpochSeconds(feed.header && feed.header.timestamp),
@@ -353,15 +363,16 @@ async function fetchGoTransitRealtime(options = {}) {
       configured: true,
       agency: metadata.agency,
     };
-    return cacheSuccessfulRealtime(now, value);
+    return cacheSuccessfulRealtime(now, value, cacheKey);
   } catch (error) {
-    return useLastSuccessfulRealtime(now, error);
+    return useLastSuccessfulRealtime(now, error, cacheKey);
   }
 }
 
 function resetGoTransitCache() {
-  realtimeCache = null;
-  lastSuccessfulRealtime = null;
+  realtimeCaches.clear();
+  lastSuccessfulRealtimeByKey.clear();
+  rawRealtimeCaches.clear();
 }
 
 module.exports = {

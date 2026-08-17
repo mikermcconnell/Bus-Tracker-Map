@@ -55,7 +55,7 @@ async function sendViaResend(config, message) {
   try {
     parsed = JSON.parse(body);
   } catch (_) {
-    // Resend can return a successful response without a JSON body.
+    parsed = null;
   }
 
   const messageId = parsed && parsed.id ? parsed.id : 'unknown';
@@ -64,33 +64,18 @@ async function sendViaResend(config, message) {
 }
 
 async function sendMail(config, message) {
-  let info;
   if (config.resendApiKey && config.resendFromEmail) {
-    info = await sendViaResend(config, message);
-  } else {
-    const transport = createTransport(config);
-    info = await transport.sendMail({
-      from: `"Barrie Transit Monitor" <${config.smtpUser}>`,
-      to: config.recipient,
-      subject: message.subject,
-      html: message.html,
-      text: message.text,
-    });
+    return sendViaResend(config, message);
   }
 
-  if (typeof config.onDelivered === 'function') {
-    try {
-      await config.onDelivered({
-        sentAt: new Date(),
-        category: message.category || 'uncategorized',
-        subject: message.subject,
-        messageId: info && info.messageId ? info.messageId : null,
-      });
-    } catch (err) {
-      console.error('[notify] Post-delivery tracking failed:', err.message || err);
-    }
-  }
-
+  const transport = createTransport(config);
+  const info = await transport.sendMail({
+    from: `"Barrie Transit Monitor" <${config.smtpUser}>`,
+    to: config.recipient,
+    subject: message.subject,
+    html: message.html,
+    text: message.text,
+  });
   return info;
 }
 
@@ -138,10 +123,7 @@ function buildGtfsStaticChangeMessage(change) {
 }
 
 async function sendGtfsStaticChangeAlert(config, change) {
-  return sendMail(config, {
-    ...buildGtfsStaticChangeMessage(change),
-    category: 'gtfs_static_change',
-  });
+  return sendMail(config, buildGtfsStaticChangeMessage(change));
 }
 
 function formatAlertTimestamp(value) {
@@ -193,48 +175,100 @@ function buildGtfsIntegritySubject(code, summary) {
   return `Barrie Transit GTFS Integrity Alert | ${normalizedCode} | ${summary}`;
 }
 
+function appendHolidayToSubject(subject, payload) {
+  const holidayLabel = payload && payload.serviceContext && payload.serviceContext.holidayLabel;
+  return holidayLabel ? `${subject} | ${holidayLabel}` : subject;
+}
+
+function formatGtfsDate(value) {
+  const raw = String(value || '');
+  if (!/^\d{8}$/.test(raw)) return raw || 'unknown';
+  return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+}
+
+function buildScheduleRows(serviceContext) {
+  if (!serviceContext) return [];
+
+  const coverageStart = formatGtfsDate(serviceContext.feedCoverageStart);
+  const coverageEnd = formatGtfsDate(serviceContext.feedCoverageEnd);
+  const coverageStatus = serviceContext.feedCoversDate === false
+    ? `NOT COVERED (${coverageStart} to ${coverageEnd})`
+    : serviceContext.feedCoversDate === true
+      ? `Covered (${coverageStart} to ${coverageEnd})`
+      : 'Coverage dates unavailable';
+
+  return [
+    ['Service date', formatGtfsDate(serviceContext.date)],
+    ['Holiday / special day', serviceContext.holidayLabel || 'No'],
+    ['Expected schedule', serviceContext.expectedSchedule || 'unknown'],
+    ['Schedule source', serviceContext.scheduleSourceLabel || serviceContext.scheduleSource || 'unknown'],
+    ['GTFS schedule coverage', coverageStatus],
+  ];
+}
+
 function buildSystemSubject(payload) {
+  let subject;
   switch (payload.kind) {
     case 'recovered':
-      return buildMonitorSubject(payload.code || 'SYSTEM_RECOVERED', 'Monitoring restored');
+      subject = buildMonitorSubject(payload.code || 'SYSTEM_RECOVERED', 'Monitoring restored');
+      break;
     case 'vehicle_feed_stale':
-      return buildTaggedSubject(payload.code || 'VEHICLE_FEED_STALE', 'Live vehicle location feed delayed');
+      subject = buildTaggedSubject(payload.code || 'VEHICLE_FEED_STALE', 'Live vehicle location feed delayed');
+      break;
     case 'vehicle_feed_unreachable':
-      return buildTaggedSubject(payload.code || 'VEHICLE_FEED_UNREACHABLE', 'Live vehicle location feed unavailable');
+      subject = buildTaggedSubject(payload.code || 'VEHICLE_FEED_UNREACHABLE', 'Live vehicle location feed unavailable');
+      break;
     case 'vehicle_feed_out_of_sync':
-      return buildTaggedSubject(
+      subject = buildTaggedSubject(
         payload.code || 'VEHICLE_FEED_OUT_OF_SYNC',
         'Trip updates current, live vehicle locations delayed'
       );
+      break;
     case 'no_recent_vehicle_gps':
-      return buildTaggedSubject(
+      subject = buildTaggedSubject(
         payload.code || 'NO_RECENT_VEHICLE_GPS',
         'No expected buses have recent GPS'
       );
+      break;
     case 'possible_service_calendar_mismatch':
-      return buildTaggedSubject(
+      subject = buildTaggedSubject(
         payload.code || 'POSSIBLE_SERVICE_CALENDAR_MISMATCH',
         'Expected service may not match holiday or special-day service'
       );
+      break;
+    case 'schedule_data_out_of_range':
+      subject = buildTaggedSubject(
+        payload.code || 'GTFS_SCHEDULE_DATE_NOT_COVERED',
+        'Published schedule does not cover today'
+      );
+      break;
     case 'gtfs_integrity':
-      return buildGtfsIntegritySubject(payload.code || 'GTFS_DATA_INCORRECT', 'Review required');
+      subject = buildGtfsIntegritySubject(payload.code || 'GTFS_DATA_INCORRECT', 'Review required');
+      break;
     case 'gtfs_integrity_recovered':
-      return buildGtfsIntegritySubject(payload.code || 'GTFS_DATA_RECOVERED', 'Integrity restored');
+      subject = buildGtfsIntegritySubject(payload.code || 'GTFS_DATA_RECOVERED', 'Integrity restored');
+      break;
     case 'all_buses_not_tracking':
-      return buildTaggedSubject(payload.code || 'ALL_BUSES_NOT_TRACKING', 'Fleet-wide GPS reporting gap');
+      subject = buildTaggedSubject(payload.code || 'ALL_BUSES_NOT_TRACKING', 'Fleet-wide GPS reporting gap');
+      break;
     case 'runtime_failure':
-      return buildTaggedSubject(payload.code || 'MONITOR_RUNTIME_FAILURE', 'Monitor check did not complete');
+      subject = buildTaggedSubject(payload.code || 'MONITOR_RUNTIME_FAILURE', 'Monitor check did not complete');
+      break;
     case 'issue_recovered':
-      return buildTaggedSubject(payload.code || 'SYSTEM_RECOVERED', 'Issue resolved');
+      subject = buildTaggedSubject(payload.code || 'SYSTEM_RECOVERED', 'Issue resolved');
+      break;
     case 'down':
     default:
-      return buildMonitorSubject(payload.code || 'MONITOR_WATCHDOG_DOWN', 'Monitoring check overdue');
+      subject = buildMonitorSubject(payload.code || 'MONITOR_WATCHDOG_DOWN', 'Monitoring check overdue');
+      break;
   }
+
+  return appendHolidayToSubject(subject, payload);
 }
 
 function buildHealthCheckSubject(payload) {
   const status = payload && payload.status === 'ok' ? 'Working' : 'Attention needed';
-  return `Barrie Transit Monitor Daily Check-In | ${status}`;
+  return appendHolidayToSubject(`Barrie Transit Monitor Daily Check-In | ${status}`, payload);
 }
 
 function buildSystemDescriptor(payload) {
@@ -382,6 +416,19 @@ function buildSystemDescriptor(payload) {
           ['More details', payload.details || '—'],
         ],
       };
+    case 'schedule_data_out_of_range':
+      return {
+        banner: '#7C3AED',
+        title: 'BARRIE TRANSIT SCHEDULE ALERT',
+        rows: [
+          ['Alert ID', payload.code || 'GTFS_SCHEDULE_DATE_NOT_COVERED'],
+          ['Checked at', checkedAt],
+          ['Summary', 'The published GTFS schedule does not cover the service date being monitored.'],
+          ['Operational impact', 'Expected bus counts cannot be trusted, so GPS missing-bus alerts are paused for this check.'],
+          ['Recommended action', 'Publish or load a current GTFS static feed that covers today, then confirm the expected bus count before relying on GPS alerts.'],
+          ['More details', payload.details || 'â€”'],
+        ],
+      };
     case 'runtime_failure':
       return {
         banner: '#7F1D1D',
@@ -503,6 +550,14 @@ function buildHealthCheckMessage(payload) {
 function buildSystemMessage(payload) {
   const subject = buildSystemSubject(payload);
   const descriptor = buildSystemDescriptor(payload);
+  const scheduleRows = buildScheduleRows(payload.serviceContext);
+  if (scheduleRows.length) {
+    descriptor.rows = [
+      ...descriptor.rows.slice(0, 2),
+      ...scheduleRows,
+      ...descriptor.rows.slice(2),
+    ];
+  }
 
   const htmlRows = descriptor.rows
     .map(([label, value]) => `
@@ -547,7 +602,7 @@ async function sendAlert(config, report) {
   const html = buildHtml(report);
   const text = buildPlainText(report);
   const subject = buildAlertSubject(report);
-  const info = await sendMail(config, { subject, html, text, category: 'operational_alert' });
+  const info = await sendMail(config, { subject, html, text });
   return info;
 }
 
@@ -566,7 +621,7 @@ async function sendSystemAlert(config, payload) {
 
 async function sendHealthCheck(config, payload) {
   const message = buildHealthCheckMessage(payload);
-  const info = await sendMail(config, { ...message, category: 'health_check' });
+  const info = await sendMail(config, message);
   console.log('[notify] Health check email sent:', info.messageId);
   return info;
 }
@@ -615,7 +670,7 @@ async function sendTestAlert(config, payload) {
     `Checked at: ${timestamp}`,
     `Details: ${details}`,
   ].join('\n');
-  const info = await sendMail(config, { subject, html, text, category: 'test' });
+  const info = await sendMail(config, { subject, html, text });
 
   console.log('[notify] Test email sent:', info.messageId);
   return info;
@@ -670,7 +725,10 @@ async function sendEmailVolumeAlert(config, payload) {
 }
 
 function buildAlertSubject(report) {
-  return buildTaggedSubject('BUSES_NOT_REPORTING', missingSummary(report));
+  return appendHolidayToSubject(
+    buildTaggedSubject('BUSES_NOT_REPORTING', missingSummary(report)),
+    report
+  );
 }
 
 function missingSummary(report) {
@@ -697,6 +755,15 @@ function alertDuration(row, missingCount) {
 
 function buildHtml(report) {
   const timestamp = formatAlertTimestamp(report.checkedAt);
+  const scheduleRows = buildScheduleRows(report.serviceContext);
+  const scheduleHtml = scheduleRows.length
+    ? `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:16px">${scheduleRows.map(([label, value]) => `
+      <tr>
+        <td style="padding:6px 10px;border:1px solid #D1D5DB;background:#F9FAFB;font-weight:bold;width:34%">${escapeHtml(label)}</td>
+        <td style="padding:6px 10px;border:1px solid #D1D5DB">${escapeHtml(String(value))}</td>
+      </tr>`).join('')}
+    </table>`
+    : '';
 
   const tableRows = report.rows
     .map((row, i) => {
@@ -745,6 +812,7 @@ function buildHtml(report) {
     </tr>
     <tr>
       <td style="padding:0 20px">
+        ${scheduleHtml}
         <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
           <tr style="background:#1F4E79">
             <th style="padding:8px 12px;border:1px solid #CCCCCC;color:#FFFFFF;text-align:center">Route</th>
@@ -777,6 +845,8 @@ function buildHtml(report) {
 
 function buildPlainText(report) {
   const timestamp = formatAlertTimestamp(report.checkedAt);
+  const scheduleLines = buildScheduleRows(report.serviceContext)
+    .map(([label, value]) => `${label}: ${value}`);
 
   const lines = [
     'BARRIE TRANSIT GPS ALERT',
@@ -784,6 +854,7 @@ function buildPlainText(report) {
     '',
     missingSummary(report),
     `Checked at: ${timestamp}`,
+    ...scheduleLines,
     '',
     'Route  | Expected | Reporting | Missing | Duration (min)',
     '-------+----------+----------+---------+---------',
@@ -831,4 +902,5 @@ module.exports = {
   missingSummary,
   buildHtml,
   buildPlainText,
+  buildScheduleRows,
 };

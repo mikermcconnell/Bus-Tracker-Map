@@ -41,6 +41,8 @@ function createGtfsZipBuffer() {
     '1001,1001,Terminal,44.3900,-79.6900,0,,',
     '1002,1002,Approach,44.3800,-79.6900,0,,',
     '1003,1003,Branch,44.3810,-79.6910,0,,',
+    '1,1,Downtown Hub,44.3878,-79.6903,0,,',
+    '2,2,Downtown Hub,44.3877,-79.6902,0,,',
     '14,14,Essa at Gowan,44.373522,-79.691152,0,,',
     'BATT,BATT,Barrie Allandale Transit Terminal,44.3740,-79.6902,1,,',
     '9006,9006,Barrie Allandale Transit Terminal Platform 6,44.3742,-79.6897,0,BATT,6',
@@ -50,10 +52,12 @@ function createGtfsZipBuffer() {
   zip.addFile('stop_times.txt', Buffer.from([
     'trip_id,arrival_time,departure_time,stop_id,stop_sequence',
     'trip-1,12:00:00,12:00:00,1001,1',
-    'trip-1,12:05:00,12:05:00,1002,2',
-    'trip-1,12:15:00,12:20:00,9006,3',
+    'trip-1,12:02:00,12:02:00,1,2',
+    'trip-1,12:05:00,12:05:00,1002,3',
+    'trip-1,12:15:00,12:20:00,9006,4',
     'trip-1-branch,12:00:00,12:00:00,1001,1',
-    'trip-1-branch,12:05:00,12:05:00,1003,2',
+    'trip-1-branch,12:02:00,12:02:00,2,2',
+    'trip-1-branch,12:05:00,12:05:00,1003,3',
     'trip-12b,15:34:00,15:34:00,14,1',
     ''
   ].join('\n'), 'utf8'));
@@ -105,11 +109,9 @@ test('build-geojson emits routes and stops artefacts', async () => {
     const routesPath = path.join(cacheDir, 'routes.geojson');
     const stopsPath = path.join(cacheDir, 'stops.geojson');
     const metadataPath = path.join(cacheDir, 'barrie-transit.json');
-    const departuresPath = path.join(cacheDir, 'barrie-departures.json');
     expect(fs.existsSync(routesPath)).toBe(true);
     expect(fs.existsSync(stopsPath)).toBe(true);
     expect(fs.existsSync(metadataPath)).toBe(true);
-    expect(fs.existsSync(departuresPath)).toBe(true);
 
     const routes = JSON.parse(fs.readFileSync(routesPath, 'utf8'));
     expect(routes.type).toBe('FeatureCollection');
@@ -126,9 +128,7 @@ test('build-geojson emits routes and stops artefacts', async () => {
     const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
     expect(metadata.terminal_stop_ids).toEqual(['14', '9006']);
     expect(metadata.terminal_stops).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: '14', name: 'Essa at Gowan', platform_code: '14', lat: 44.373522, lon: -79.691152,
-      }),
+      expect.objectContaining({ id: '14', name: 'Essa at Gowan', platform_code: '14' }),
     ]));
     expect(metadata.trips['trip-12b'].terminal_stops).toEqual([
       {
@@ -136,19 +136,35 @@ test('build-geojson emits routes and stops artefacts', async () => {
         stop_sequence: 1,
         arrival_time: '15:34:00',
         departure_time: '15:34:00',
+        is_departure: false,
       },
     ]);
     expect(metadata.trips['trip-1'].terminal_stops).toEqual([
       {
         stop_id: '9006',
-        stop_sequence: 3,
+        stop_sequence: 4,
         arrival_time: '12:15:00',
         departure_time: '12:20:00',
+        is_departure: false,
       },
     ]);
     expect(metadata.trips['trip-1'].service_id).toBe('weekday');
     expect(metadata.trips['trip-1'].direction_id).toBe('0');
     expect(metadata.trips['trip-1'].shape_id).toBe('shape-1');
+    expect(metadata.departure_boards.downtown).toMatchObject({
+      name: 'Downtown Hub',
+      stop_ids: ['1', '2'],
+    });
+    expect(metadata.departure_boards.downtown.stops).toEqual([
+      expect.objectContaining({ id: '1', platform_code: '1' }),
+      expect.objectContaining({ id: '2', platform_code: '2' }),
+    ]);
+    expect(metadata.departure_boards.downtown.trips['trip-1'].terminal_stops).toEqual([
+      expect.objectContaining({ stop_id: '1', departure_time: '12:02:00', is_departure: true }),
+    ]);
+    expect(metadata.departure_boards.downtown.trips['trip-1-branch'].terminal_stops).toEqual([
+      expect.objectContaining({ stop_id: '2', departure_time: '12:02:00', is_departure: true }),
+    ]);
     expect(metadata.terminal_approach_fallbacks['1|0|1002']).toEqual({
       route_id: '1',
       direction_id: '0',
@@ -159,18 +175,6 @@ test('build-geojson emits routes and stops artefacts', async () => {
     expect(metadata.terminal_approach_fallbacks['1|0|1001']).toBeUndefined();
     expect(metadata.service_calendars.weekday.monday).toBe(true);
     expect(metadata.service_exceptions['20260803'].weekday).toBe(2);
-
-    const departures = JSON.parse(fs.readFileSync(departuresPath, 'utf8'));
-    expect(departures.stops['1001']).toMatchObject({
-      id: '1001', code: '1001', name: 'Terminal',
-    });
-    expect(departures.stop_ids_by_code['1001']).toBe('1001');
-    expect(departures.trips['trip-1']).toMatchObject({
-      route_id: '1', service_id: 'weekday', direction_id: '0', headsign: 'Downtown',
-    });
-    expect(departures.departures_by_stop['1001'][0]).toEqual([
-      'trip-1', '12:00:00', 1, null,
-    ]);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     fs.rmSync(cacheDir, { recursive: true, force: true });

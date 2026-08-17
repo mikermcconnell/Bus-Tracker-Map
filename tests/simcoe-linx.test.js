@@ -22,13 +22,11 @@ function createStaticZip() {
     'stops.txt': [
       'stop_id,stop_name,stop_lat,stop_lon',
       'SCSTOP210,Barrie Allandale Bus Station - Detour,44.373913,-79.689146',
-      'SCSTOP200,Barrie Downtown,44.385,-79.690',
       'SCSTOP405,Collingwood Terminal,44.50,-80.21',
       '',
     ],
     'stop_times.txt': [
       'trip_id,arrival_time,departure_time,stop_id,stop_sequence',
-      'linx-2-trip,08:45:00,08:45:00,SCSTOP200,5',
       'linx-2-trip,09:00:00,09:05:00,SCSTOP210,6',
       'linx-4-trip,10:00:00,10:05:00,SCSTOP405,2',
       '',
@@ -90,10 +88,6 @@ describe('Simcoe LINX integration', () => {
       headsign: 'Wasaga Beach',
       terminal_stops: [expect.objectContaining({ stop_id: 'SCSTOP210', stop_sequence: 6 })],
     });
-    expect(result.metadata.terminal_approach_fallbacks['2|0|SCSTOP200']).toMatchObject({
-      terminal_stop_ids: ['SCSTOP210'],
-      candidate_trip_count: 1,
-    });
     expect(result.routes.features).toHaveLength(1);
     expect(result.routes.features[0].properties).toMatchObject({
       route_id: 'LINX-2',
@@ -144,31 +138,6 @@ describe('Simcoe LINX integration', () => {
       lat: 44.3745,
       lon: -79.6906,
     }, metadata)).toBeNull();
-  });
-
-  test('uses a safe stop-pattern fallback only after exact Simcoe trip ownership is established', () => {
-    const metadata = buildArtifactsFromZip(createStaticZip(), barrieBounds()).metadata;
-    metadata.trips['linx-2-trip'] = {
-      ...metadata.trips['linx-2-trip'],
-      terminal_stops: [],
-    };
-
-    const vehicle = qualifyVehicle({
-      id: 'linx-upstream',
-      route_id: '2',
-      trip_id: 'linx-2-trip',
-      direction_id: 0,
-      stop_id: 'SCSTOP200',
-      current_stop_sequence: 5,
-      lat: 44.385,
-      lon: -79.690,
-    }, metadata);
-
-    expect(vehicle).toMatchObject({
-      terminal_progress_status: 'approaching',
-      terminal_stop_id: 'SCSTOP210',
-      terminal_progress_source: 'route_direction_stop_fallback',
-    });
   });
 
   test('fails explicitly when generated static metadata is unavailable', () => {

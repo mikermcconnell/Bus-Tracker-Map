@@ -43,24 +43,17 @@ describe('platform map model', () => {
     });
   });
 
-  test('formats Simcoe LINX vehicles with the agency and route number', () => {
-    expect(getVehicleLabel({ agency_id: 'simcoe-linx', source_route_id: '2' })).toBe('LINX 2');
+  test('labels Simcoe live vehicles with the LINX route number', () => {
+    expect(getVehicleLabel({
+      agency_id: 'simcoe-linx', source_route_id: '2', route_label: 'LINX 2'
+    })).toBe('LINX 2');
   });
 
   test('hides departed vehicles even while their last position remains at the terminal', () => {
     const atTerminal = { lat: 44.3742256, lon: -79.6897583 };
-    expect(isTerminalDisplayVehicle({
-      ...atTerminal,
-      terminal_progress_status: 'departed',
-    })).toBe(false);
-    expect(isTerminalDisplayVehicle({
-      ...atTerminal,
-      terminal_progress_status: 'approaching',
-    })).toBe(true);
-    expect(isTerminalDisplayVehicle({
-      ...atTerminal,
-      terminal_progress_status: 'at_terminal',
-    })).toBe(true);
+    expect(isTerminalDisplayVehicle({ ...atTerminal, terminal_progress_status: 'departed' })).toBe(false);
+    expect(isTerminalDisplayVehicle({ ...atTerminal, terminal_progress_status: 'approaching' })).toBe(true);
+    expect(isTerminalDisplayVehicle({ ...atTerminal, terminal_progress_status: 'at_terminal' })).toBe(true);
   });
 
   test('groups current assignments without inventing retired platforms', () => {

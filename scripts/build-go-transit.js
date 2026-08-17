@@ -105,6 +105,13 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
   const allandaleShapeIds = new Set(
     allandaleTrips.map((trip) => String(trip.shape_id || '')).filter(Boolean)
   );
+  const lastStopSequenceByTrip = {};
+  stopTimes.forEach((stopTime) => {
+    const tripId = String(stopTime.trip_id || '');
+    const stopSequence = Number(stopTime.stop_sequence);
+    if (!tripId || !Number.isFinite(stopSequence)) return;
+    lastStopSequenceByTrip[tripId] = Math.max(lastStopSequenceByTrip[tripId] || 0, stopSequence);
+  });
   const terminalStopsByTrip = {};
   stopTimes.forEach((stopTime) => {
     const stopId = String(stopTime.stop_id || '');
@@ -118,10 +125,9 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
       stop_sequence: stopSequence,
       arrival_time: stopTime.arrival_time || null,
       departure_time: stopTime.departure_time || stopTime.arrival_time || null,
+      is_departure: stopSequence < Number(lastStopSequenceByTrip[tripId] || stopSequence),
     });
   });
-  const routeById = Object.fromEntries(routes.map((route) => [String(route.route_id), route]));
-
   const primaryAgency = agencies.find((agency) => String(agency.agency_id) === 'GO') || agencies[0] || {};
   const agency = {
     id: 'go-transit',

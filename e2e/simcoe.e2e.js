@@ -1,0 +1,87 @@
+const { test, expect } = require('@playwright/test');
+
+const transparentTile = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64'
+);
+
+test('regional map loads, focuses a route, and reveals live service status', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  const now = Math.floor(Date.now() / 1000);
+  await page.route('**/region-tile/**', (route) => route.fulfill({ status: 200, contentType: 'image/png', body: transparentTile }));
+  await page.route('**/api/simcoe/config?*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      bounds: [-80.23, 44.05, -79.4, 44.79],
+      barrie_reveal_zoom: 11,
+      stops_reveal_zoom: 13,
+      poll_ms: 30000,
+      feed_offline_after_ms: 900000,
+      basemap: { url: '/region-tile/{z}/{x}/{y}.png', tile_size: 256, zoom_offset: 0, max_zoom: 19 },
+    }),
+  }));
+  await page.route('**/api/simcoe/routes.geojson?*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ type: 'FeatureCollection', features: [
+      { type: 'Feature', properties: { agency_id: 'simcoe-linx', agency_name: 'Simcoe County LINX', route_id: 'LINX-1', route_short_name: 'LINX 1', route_long_name: 'Barrie–Midland', route_color: '#FF7733' }, geometry: { type: 'LineString', coordinates: [[-80.22, 44.49], [-80.0, 44.52]] } },
+      { type: 'Feature', properties: { agency_id: 'go-transit', agency_name: 'GO Transit', route_id: 'GO-TRAIN', route_short_name: 'GO TRAIN', route_long_name: 'Barrie line', route_color: '#003767' }, geometry: { type: 'LineString', coordinates: [[-79.7, 44.1], [-79.69, 44.38]] } },
+      { type: 'Feature', properties: { agency_id: 'ontario-northland', agency_name: 'Ontario Northland', route_id: 'ONTC', route_short_name: 'ON', route_long_name: 'Ontario Northland', route_color: '#00214D' }, geometry: { type: 'LineString', coordinates: [[-79.7, 44.3], [-79.5, 44.7]] } },
+      { type: 'Feature', properties: { agency_id: 'barrie-transit', agency_name: 'Barrie Transit', route_id: '8A', route_short_name: '8A', route_long_name: 'RVH / Yonge', route_color: '#A6192E' }, geometry: { type: 'LineString', coordinates: [[-79.72, 44.35], [-79.67, 44.42]] } },
+    ] }),
+  }));
+  await page.route('**/api/simcoe/stops.geojson?*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ type: 'FeatureCollection', features: [{
+      type: 'Feature',
+      properties: { stop_id: 'simcoe-linx:SCSTOP4', source_stop_id: 'SCSTOP4', stop_name: 'Midland stop', agency_id: 'simcoe-linx', agency_name: 'Simcoe County LINX', route_ids: ['LINX-1'] },
+      geometry: { type: 'Point', coordinates: [-80.18, 44.5] },
+    }] }),
+  }));
+  await page.route('**/api/simcoe/vehicles.json?*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      feed_status: 'live',
+      vehicles: [{ id: 'linx-1', route_id: 'LINX-1', route_label: 'LINX 1', agency_id: 'simcoe-linx', agency_name: 'Simcoe County LINX', lat: 44.51, lon: -80.1, bearing: 90, last_reported: now, route_color: '#FF7733', trip_headsign: 'Midland' }],
+      sources: {
+        simcoe_linx: { feed_status: 'live', vehicle_count: 1 },
+        go_transit: { feed_status: 'live', vehicle_count: 0 },
+        ontario_northland: { feed_status: 'live', vehicle_count: 0 },
+        barrie_transit: { feed_status: 'live', vehicle_count: 0 },
+      },
+    }),
+  }));
+
+  await page.goto('/simcoe');
+  await expect(page).toHaveTitle('Simcoe Region Live Transit');
+  await expect(page.locator('#map')).toHaveClass(/leaflet-container/);
+  await expect(page.locator('.leaflet-tile-pane > .leaflet-layer')).toHaveCSS('opacity', '0.8');
+  await expect(page.locator('#overall-status')).toHaveText('1 live vehicle');
+  await expect(page.locator('.agency-card')).toHaveCount(4);
+  await expect(page.locator('.agency-logo')).toHaveCount(4);
+  expect(await page.locator('.agency-logo').evaluateAll((logos) =>
+    logos.every((logo) => /agency-/.test(logo.getAttribute('src') || ''))
+  )).toBe(true);
+  await expect(page.locator('.stop-marker')).toHaveCount(0);
+  await page.getByRole('button', { name: /LINX 1/ }).click();
+  await expect(page.locator('#selection-card')).toBeVisible();
+  await expect(page.locator('#selection-title')).toHaveText('LINX 1');
+  await expect(page.locator('.vehicle-marker')).toHaveCount(1);
+  await expect(page.locator('.vehicle-marker')).toHaveClass(/vehicle-marker--simcoe-linx/);
+  await expect(page.locator('.vehicle-marker__agency')).toHaveText('LINX');
+  await expect(page.locator('.vehicle-marker')).toHaveCSS('background-color', 'rgb(255, 119, 51)');
+  await expect(page.locator('.vehicle-marker')).toHaveCSS('color', 'rgb(8, 51, 87)');
+  await expect(page.locator('.vehicle-marker__agency')).toHaveCSS('background-color', 'rgb(231, 166, 20)');
+  await expect(page.locator('.vehicle-marker__arrow')).toHaveCount(1);
+  await expect(page.locator('.stop-marker')).toHaveCount(1);
+  await page.locator('.stop-marker').click();
+  await expect(page.locator('.leaflet-popup-content')).toContainText('Stop 4');
+  expect(errors).toEqual([]);
+});

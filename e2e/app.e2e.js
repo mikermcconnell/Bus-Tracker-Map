@@ -123,6 +123,232 @@ test('platform map loads without runtime errors', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test('departures board shows every departure in the one-hour window without scrolling', async ({ page }) => {
+  const errors = captureRuntimeErrors(page);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.route('**/api/config', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ poll_ms: 10000, base_path: '/' }) });
+  });
+  await page.route('**/api/departures?*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        generated_at: Date.now(),
+        departures: Array.from({ length: 30 }, (_, index) => ({
+          id: `departure-${index}`,
+          agency_id: index === 0 || index === 10 ? 'go-transit' : index === 5 ? 'ontario-northland' : index === 4 ? 'simcoe-linx' : 'barrie-transit',
+          agency_name: index === 0 || index === 10 ? 'GO Transit' : index === 5 ? 'Ontario Northland' : index === 4 ? 'Simcoe LINX' : 'Barrie Transit',
+          route_id: index === 5 ? '201' : undefined,
+          route_label: index === 0 ? 'TRAIN' : index === 10 ? '68' : index === 5 ? 'ONTC' : index === 4 ? '2' : '8A',
+          destination: index === 0 ? 'Toronto / Union Station' : index === 10 ? 'Barrie / Newmarket' : index === 5 ? 'North Bay' : index === 4 ? 'Wasaga Beach 45th St' : 'Yonge Southbound',
+          platform: index === 0 ? '1' : index === 8 ? '14' : index === 10 ? '7' : index === 5 ? '8' : index === 4 ? '2' : '3',
+          platform_type: index === 8 ? 'stop' : 'platform',
+          scheduled_departure_time: nowSeconds + (index + 1) * 300,
+          expected_departure_time: nowSeconds + (index + 1) * 300 + (index === 0 ? 120 : 0),
+          departure_source: index === 2 ? 'estimated' : index % 2 ? 'scheduled' : 'realtime',
+        })).reverse(),
+        sources: {
+          barrie_transit: { display_mode: 'mixed', realtime_status: 'live' },
+          ontario_northland: { display_mode: 'scheduled', realtime_status: 'offline' },
+          go_transit: { display_mode: 'realtime', realtime_status: 'live' },
+          simcoe_linx: { display_mode: 'scheduled', realtime_status: 'delayed' },
+        },
+      }),
+    });
+  });
+
+  await page.goto('/departures');
+  await expect(page).toHaveTitle(/Allandale Departures/);
+  await expect(page.locator('.departure')).toHaveCount(11);
+  await expect(page.locator('.destination').first()).toContainText('TORONTO');
+  await expect(page.locator('.platform strong').first()).toHaveText('01');
+  await expect(page.locator('.departure').first().locator('.departure-status')).toHaveText('LIVE');
+  await expect(page.locator('.departure').first().locator('[data-departure-time]')).toHaveAttribute('data-departure-time', String(nowSeconds + 420));
+  await expect(page.locator('.departure').nth(1).locator('.departure-status')).toHaveText('SCHED');
+  await expect(page.locator('.departure').nth(2).locator('.departure-status')).toHaveText('SCHED');
+  await expect(page.locator('.departure').nth(2).locator('.departure-status'))
+    .toHaveAttribute('aria-label', 'Scheduled time');
+  await expect(page.locator('#service-health')).toContainText('GO Feed active');
+  await expect(page.locator('#service-health')).toContainText('ON Schedule only');
+  await expect(page.locator('#service-health')).toContainText('LINX Feed delayed');
+  await expect(page.locator('.agency-ontario_northland .route')).toHaveText('201');
+  await expect(page.locator('.departure').nth(10).locator('.route')).toHaveText('68');
+  await expect(page.locator('.departure').nth(10).locator('.destination')).toHaveText('BARRIE / NEWMARKET');
+  await expect(page.locator('.departure').first()).toHaveCSS('background-color', 'rgb(217, 217, 216)');
+  await expect(page.locator('.departure').nth(1)).toHaveCSS('background-color', 'rgb(187, 187, 188)');
+  const logoAlignment = await page.locator('.departure').first().evaluate((row) => {
+    const cell = row.querySelector('.agency-logo').getBoundingClientRect();
+    const logo = row.querySelector('.agency-logo img').getBoundingClientRect();
+    return {
+      horizontal: Math.abs((cell.left + cell.width / 2) - (logo.left + logo.width / 2)),
+      vertical: Math.abs((cell.top + cell.height / 2) - (logo.top + logo.height / 2)),
+    };
+  });
+  expect(logoAlignment.horizontal).toBeLessThanOrEqual(1);
+  expect(logoAlignment.vertical).toBeLessThanOrEqual(1);
+  const routeAlignment = await page.locator('.route').evaluateAll((routes) => routes.map((route) => {
+    const cell = route.getBoundingClientRect();
+    const range = route.ownerDocument.createRange();
+    range.selectNodeContents(route);
+    const text = range.getBoundingClientRect();
+    return {
+      horizontal: Math.abs((cell.left + cell.width / 2) - (text.left + text.width / 2)),
+      vertical: Math.abs((cell.top + cell.height / 2) - (text.top + text.height / 2)),
+    };
+  }));
+  expect(Math.max(...routeAlignment.map((alignment) => alignment.horizontal)))
+    .toBeLessThanOrEqual(1);
+  expect(Math.max(...routeAlignment.map((alignment) => alignment.vertical)))
+    .toBeLessThanOrEqual(1);
+  const trainLabelGap = await page.locator('.departure').first().evaluate((row) => {
+    const textBounds = (element) => {
+      const range = element.ownerDocument.createRange();
+      range.selectNodeContents(element);
+      return range.getBoundingClientRect();
+    };
+    const route = textBounds(row.querySelector('.route'));
+    const destination = textBounds(row.querySelector('.destination'));
+    return destination.left - route.right;
+  });
+  expect(trainLabelGap).toBeGreaterThanOrEqual(14);
+  const platformNumberRightEdges = await page.locator('.platform strong').evaluateAll((numbers) => (
+    numbers.map((number) => number.getBoundingClientRect().right)
+  ));
+  expect(Math.max(...platformNumberRightEdges) - Math.min(...platformNumberRightEdges))
+    .toBeLessThanOrEqual(1);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  const wideLayout = await page.locator('body').evaluate((body) => {
+    const pageDocument = body.ownerDocument;
+    const textBounds = (element) => {
+      const range = pageDocument.createRange();
+      range.selectNodeContents(element);
+      return range.getBoundingClientRect();
+    };
+    const train = pageDocument.querySelector('.agency-go_transit');
+    const rightEdges = Array.from(pageDocument.querySelectorAll('.platform strong'))
+      .map((number) => number.getBoundingClientRect().right);
+    const routeAlignment = Array.from(pageDocument.querySelectorAll('.route')).map((route) => {
+      const cell = route.getBoundingClientRect();
+      const text = textBounds(route);
+      return {
+        horizontal: Math.abs((cell.left + cell.width / 2) - (text.left + text.width / 2)),
+        vertical: Math.abs((cell.top + cell.height / 2) - (text.top + text.height / 2)),
+      };
+    });
+    return {
+      trainLabelGap: textBounds(train.querySelector('.destination')).left -
+        textBounds(train.querySelector('.route')).right,
+      platformNumberSpread: Math.max(...rightEdges) - Math.min(...rightEdges),
+      routeHorizontalSpread: Math.max(...routeAlignment.map((alignment) => alignment.horizontal)),
+      routeVerticalSpread: Math.max(...routeAlignment.map((alignment) => alignment.vertical)),
+    };
+  });
+  expect(wideLayout.trainLabelGap).toBeGreaterThanOrEqual(24);
+  expect(wideLayout.platformNumberSpread).toBeLessThanOrEqual(1);
+  expect(wideLayout.routeHorizontalSpread).toBeLessThanOrEqual(1);
+  expect(wideLayout.routeVerticalSpread).toBeLessThanOrEqual(1);
+  await expect(page.locator('.agency-logo img').first()).toHaveCSS('mix-blend-mode', 'multiply');
+  await expect(page.locator('.agency-simcoe_linx .agency-logo img')).toHaveCSS('mix-blend-mode', 'normal');
+  const northlandLogo = page.locator('.agency-ontario_northland .agency-logo img');
+  await expect(northlandLogo).toHaveCSS('width', '72px');
+  await expect(northlandLogo).toHaveCSS('height', '40px');
+  await expect(northlandLogo).toHaveCSS('object-fit', 'cover');
+  await expect(northlandLogo).toHaveCSS('object-position', '0% 50%');
+  await expect(northlandLogo).toHaveCSS('mix-blend-mode', 'normal');
+  await expect(northlandLogo).not.toHaveCSS('filter', 'none');
+  const dimensions = await page.locator('html').evaluate((element) => ({
+    height: element.scrollHeight,
+    viewport: element.clientHeight,
+  }));
+  expect(dimensions.height).toBeLessThanOrEqual(dimensions.viewport);
+
+  await page.setViewportSize({ width: 3840, height: 2160 });
+  const ultraHdLayout = await page.locator('html').evaluate((element) => {
+    const destination = element.ownerDocument.querySelector('.destination');
+    const platform = element.ownerDocument.querySelector('.platform strong');
+    const logo = element.ownerDocument.querySelector('.agency-logo img');
+    const view = element.ownerDocument.defaultView;
+    return {
+      height: element.scrollHeight,
+      viewport: element.clientHeight,
+      destinationFont: Number.parseFloat(view.getComputedStyle(destination).fontSize),
+      platformFont: Number.parseFloat(view.getComputedStyle(platform).fontSize),
+      logoWidth: logo.getBoundingClientRect().width,
+    };
+  });
+  expect(ultraHdLayout.height).toBeLessThanOrEqual(ultraHdLayout.viewport);
+  expect(ultraHdLayout.destinationFont).toBeGreaterThanOrEqual(100);
+  expect(ultraHdLayout.platformFont).toBeGreaterThanOrEqual(130);
+  expect(ultraHdLayout.logoWidth).toBeGreaterThanOrEqual(100);
+  expect(errors).toEqual([]);
+});
+
+test('Downtown Hub board requests and labels the merged stop 1 and 2 board', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  let requestedBoard = null;
+  await page.route('**/api/config', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ poll_ms: 10000, base_path: '/' }) });
+  });
+  await page.route('**/api/departures?*', async (route) => {
+    requestedBoard = new URL(route.request().url()).searchParams.get('board');
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        generated_at: Date.now(),
+        board: 'downtown',
+        departures: [
+          { id: 'stop-1', agency_id: 'barrie-transit', agency_name: 'Barrie Transit', route_label: '2A', destination: 'Park Place', platform: '1', platform_type: 'stop', scheduled_departure_time: nowSeconds + 300, expected_departure_time: nowSeconds + 300, departure_source: 'scheduled' },
+          { id: 'stop-2', agency_id: 'barrie-transit', agency_name: 'Barrie Transit', route_label: '8A', destination: 'Georgian College', platform: '2', platform_type: 'stop', scheduled_departure_time: nowSeconds + 600, expected_departure_time: nowSeconds + 600, departure_source: 'scheduled' },
+        ],
+        sources: { barrie_transit: { display_mode: 'scheduled', realtime_status: 'live' } },
+      }),
+    });
+  });
+
+  await page.goto('/departures/downtown');
+
+  await expect(page).toHaveTitle(/Downtown Hub Departures/);
+  await expect(page.locator('#page-title')).toHaveText('Downtown Hub Departures');
+  await expect(page.locator('.departure')).toHaveCount(2);
+  await expect(page.locator('.platform strong')).toHaveText(['01', '02']);
+  expect(requestedBoard).toBe('downtown');
+});
+
+test('departures board keeps longer waits as minute countdowns', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.route('**/api/config', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ poll_ms: 10000, base_path: '/' }) });
+  });
+  await page.route('**/api/departures?*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        generated_at: Date.now(),
+        departures: [{
+          id: 'long-wait',
+          agency_id: 'ontario-northland',
+          agency_name: 'Ontario Northland',
+          route_id: '101',
+          route_label: 'ONTC',
+          destination: 'North Bay',
+          platform: '8',
+          scheduled_departure_time: nowSeconds + 90 * 60,
+          expected_departure_time: nowSeconds + 90 * 60,
+          departure_source: 'realtime',
+        }],
+        sources: {},
+      }),
+    });
+  });
+
+  await page.goto('/departures');
+  await expect(page.locator('[data-departure-time]')).toHaveText('90 min');
+});
+
 test('platform map renders current assignments and updates markers in place', async ({ page }) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   let vehiclePoll = 0;
@@ -162,8 +388,6 @@ test('platform map renders current assignments and updates markers in place', as
       assignments: [
         {
           platform: '3',
-          stop_lat: 44.3738731374332,
-          stop_lon: -79.6893515732343,
           route_id: '8A',
           route_label: '8A',
           destination: 'Yonge Southbound',
@@ -172,8 +396,6 @@ test('platform map renders current assignments and updates markers in place', as
         },
         {
           platform: '13',
-          stop_lat: 44.3741351975798,
-          stop_lon: -79.6904420505482,
           route_id: '12A',
           route_label: '12A',
           destination: 'Georgian Mall',
@@ -181,8 +403,6 @@ test('platform map renders current assignments and updates markers in place', as
         },
         {
           platform: '5',
-          stop_lat: 44.3739253232581,
-          stop_lon: -79.6897531198448,
           route_id: '8A',
           route_label: '8A',
           destination: 'RVH Northbound',
@@ -191,8 +411,6 @@ test('platform map renders current assignments and updates markers in place', as
         },
         {
           platform: '3',
-          stop_lat: 44.3738731374332,
-          stop_lon: -79.6893515732343,
           route_id: '8B',
           route_label: '8B',
           destination: 'Essa Southbound',
@@ -202,8 +420,6 @@ test('platform map renders current assignments and updates markers in place', as
         {
           platform: '14',
           stop_id: '14',
-          stop_lat: 44.373522,
-          stop_lon: -79.691152,
           route_id: '12B',
           route_label: '12B',
           destination: 'Barrie South GO',
@@ -211,27 +427,13 @@ test('platform map renders current assignments and updates markers in place', as
         },
         {
           platform: '7',
-          stop_lat: 44.3744078047372,
-          stop_lon: -79.6892602227835,
           route_id: 'GO-BUS',
           route_label: '68',
           destination: 'Aurora / East Gwillimbury',
           agency_id: 'go-transit',
         },
         {
-          platform: '8',
-          stop_lat: 44.374194,
-          stop_lon: -79.689194,
-          route_id: 'ONTC',
-          route_label: 'ON',
-          source_route_id: '202',
-          destination: 'Toronto Union Station',
-          agency_id: 'ontario-northland',
-        },
-        {
           platform: '1',
-          stop_lat: 44.374139,
-          stop_lon: -79.687858,
           route_id: 'GO-TRAIN',
           route_label: 'TRAIN',
           destination: 'Toronto / Union Station',
@@ -240,15 +442,11 @@ test('platform map renders current assignments and updates markers in place', as
         },
         {
           platform: '2',
-          stop_id: 'SCSTOP210',
-          stop_lat: 44.373913,
-          stop_lon: -79.689146,
           route_id: 'LINX-2',
-          route_label: 'LINX 2',
-          source_route_id: '2',
-          destination: 'Wasaga Beach',
+          route_label: '2',
+          destination: 'Wasaga Beach 45th St',
           agency_id: 'simcoe-linx',
-          departure_label: 'Schedule',
+          next_departure_time: nowSeconds + 1800,
         },
       ],
     }),
@@ -300,47 +498,10 @@ test('platform map renders current assignments and updates markers in place', as
           terminal_stop_id: '9007',
           terminal_departure_time: nowSeconds + 540,
         }],
-        terminal_departures: [{
-          platform: '3',
-          agency_id: 'barrie-transit',
-          route_id: '8A',
-          route_label: '8A',
-          departure_time: nowSeconds + 240,
-          scheduled_departure_time: nowSeconds + 600,
-          departure_source: 'realtime',
-          progress_status: 'approaching',
-        }, {
-          platform: '3',
-          agency_id: 'barrie-transit',
-          route_id: '8B',
-          route_label: '8B',
-          departure_time: nowSeconds + 1200,
-          scheduled_departure_time: nowSeconds + 1200,
-          departure_source: 'static',
-          progress_status: 'scheduled',
-        }, {
-          platform: '13',
-          agency_id: 'barrie-transit',
-          route_id: '12A',
-          route_label: '12A',
-          departure_time: nowSeconds + 330,
-          scheduled_departure_time: nowSeconds + 600,
-          departure_source: 'realtime',
-          progress_status: 'approaching',
-        }, {
-          platform: '7',
-          agency_id: 'go-transit',
-          route_id: 'GO-BUS',
-          route_label: '68',
-          departure_time: nowSeconds + 540,
-          departure_source: 'realtime',
-          progress_status: 'at_terminal',
-        }],
         sources: {
           barrie_transit: { feed_status: 'live' },
           go_transit: { feed_status: 'live' },
           ontario_northland: { feed_status: 'live' },
-          simcoe_linx: { feed_status: 'offline' },
         },
       }),
     });
@@ -354,33 +515,12 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(page.locator('.vehicle-marker__route').nth(1)).toContainText('GO');
   await expect(page.locator('.vehicle-marker__route').nth(1)).toContainText('68');
   await expect(page.locator('.platform-directory #assignment-layer')).toBeVisible();
-  await expect(page.locator('#departure-page-label')).toHaveText('P1–P6');
-  await expect(page.locator('#departure-page-count')).toHaveText('1 / 2');
-  await expect(page.locator('#departure-page-countdown')).toHaveText(/Next page in (?:14|15)s/);
-  await expect(page.locator('.platform-card[data-platform="3"]')).toBeVisible();
-  await expect(page.locator('.platform-card[data-platform="7"]')).toBeHidden();
-  await expect(page.locator('.platform-card[data-platform="2"]')).toBeVisible();
-  await expect(page.locator('.platform-card[data-platform="2"]')).toContainText('Wasaga Beach');
-  await expect(page.locator('.platform-card[data-platform="2"]')).toContainText('Schedule');
-  await expect(page.locator('.platform-connection[data-platform="9"]')).toHaveCount(0);
-  await page.evaluate(() => globalThis.__platformMapApp.showDeparturePage(1));
-  await expect(page.locator('#departure-page-label')).toHaveText('P7–P13 + Stop 14');
-  await expect(page.locator('#departure-page-count')).toHaveText('2 / 2');
-  await expect(page.locator('.platform-card[data-platform="7"]')).toBeVisible();
-  await expect(page.locator('.platform-card[data-platform="8"] .platform-card__route')).toHaveText('202');
-  await expect(page.locator('.platform-card[data-platform="13"]')).toBeVisible();
-  await expect(page.locator('.platform-card[data-platform="14"]')).toBeVisible();
-  await expect(page.locator('.platform-card[data-platform="1"]')).toBeHidden();
-  await expect(page.locator('.platform-card[data-platform="2"]')).toBeHidden();
-  await page.evaluate(() => globalThis.__platformMapApp.showDeparturePage(0));
   await expect(page.locator('.platform-card[data-platform="3"]')).toContainText('Yonge Southbound');
   await expect(page.locator('.platform-card[data-platform="3"]')).toContainText('Essa Southbound');
   await expect(page.locator('.platform-card[data-platform="3"] .platform-card__state')).toHaveText('Arriving');
   const arrivingRow = page.locator('.platform-card[data-platform="3"] .platform-card__service[data-route-id="8A"]');
   await expect(arrivingRow).toHaveClass(/platform-card__service--active/);
   await expect(arrivingRow.locator('.platform-card__service-countdown')).toHaveText('4 min');
-  await expect(arrivingRow.locator('.platform-card__service-source')).toHaveText('Live');
-  await expect(arrivingRow.locator('.platform-card__service-source')).toHaveAttribute('data-source', 'live');
   const inactiveRow = page.locator('.platform-card[data-platform="3"] .platform-card__service[data-route-id="8B"]');
   const inactiveScheduledTime = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Toronto',
@@ -392,16 +532,6 @@ test('platform map renders current assignments and updates markers in place', as
     .toHaveText('20 min');
   await expect(inactiveRow.locator('.platform-card__service-scheduled'))
     .toHaveText(inactiveScheduledTime);
-  await expect(inactiveRow.locator('.platform-card__service-source')).toHaveText('Scheduled');
-  await expect(inactiveRow.locator('.platform-card__service-source')).toHaveAttribute('data-source', 'scheduled');
-  const predictedWithoutNearbyVehicle = page.locator(
-    '.platform-card[data-platform="13"] .platform-card__service[data-route-id="12A"]'
-  );
-  await expect(predictedWithoutNearbyVehicle.locator('.platform-card__service-source')).toHaveText('Live');
-  await expect(predictedWithoutNearbyVehicle.locator('.platform-card__service-countdown')).toHaveText('6 min');
-  await expect(predictedWithoutNearbyVehicle).not.toHaveClass(/platform-card__service--active/);
-  await expect(page.locator('.map-platform-anchor__label[data-pointer-label="P13"]'))
-    .toHaveAttribute('data-live-state', '');
   const pastDepartureRow = page.locator('.platform-card[data-platform="5"] .platform-card__service');
   await expect(pastDepartureRow.locator('.platform-card__service-countdown')).toHaveText('No time');
   await expect(pastDepartureRow).not.toContainText('9:32 AM');
@@ -409,80 +539,12 @@ test('platform map renders current assignments and updates markers in place', as
   const trainRouteBadge = page.locator('.platform-card[data-platform="1"] .platform-card__route');
   await expect(trainRouteBadge).toHaveText('TRAIN');
   expect(await trainRouteBadge.evaluate((badge) => badge.scrollWidth <= badge.clientWidth)).toBe(true);
-  await expect(page.locator('.platform-card[data-platform="13"]')).toHaveCount(1);
-  await expect(page.locator('.platform-card[data-platform="13"]')).toBeHidden();
+  await expect(page.locator('.platform-card[data-platform="13"]')).toContainText('Georgian Mall');
   await expect(page.locator('.platform-card[data-platform="14"] .platform-card__title')).toHaveText('Stop 14');
   await expect(page.locator('.platform-card[data-platform="14"]')).toContainText('12B');
   await expect(page.locator('.platform-card[data-platform="14"]')).toContainText('Barrie South GO');
   await expect(page.locator('.platform-card[data-platform="14"] .platform-card__route').first()).toHaveCSS('background-color', 'rgb(244, 154, 193)');
-  await expect(page.locator('.platform-card[data-platform="1"] .platform-card__agency-logo'))
-    .toHaveAttribute('src', './assets/agency-go-transit.svg');
-  await expect(page.locator('.platform-card[data-platform="3"] .platform-card__agency-logo'))
-    .toHaveAttribute('src', './assets/agency-barrie-transit.png');
-  await expect(page.locator('.platform-card[data-platform="2"] .platform-card__agency-logo'))
-    .toHaveAttribute('src', './assets/agency-simcoe-linx.png');
   await expect(page.locator('#map-label-layer .map-platform-card')).toHaveCount(11);
-  await expect(page.locator('#map-label-layer .map-platform-card[data-geographic-anchor]')).toHaveCount(0);
-  await expect(page.locator('#map-connector-layer')).toHaveCount(0);
-  await expect(page.locator('.map-platform-leader, .map-platform-leader-halo')).toHaveCount(0);
-  await expect(page.locator('#map-platform-layer .map-platform-anchor')).toHaveCount(12);
-  await expect(page.locator('#map-label-layer > .map-platform-anchor__label')).toHaveCount(12);
-  await expect(page.locator('#map-platform-layer .map-platform-anchor--pickup-dropoff')).toHaveCount(0);
-  await expect(page.locator('.map-platform-anchor__label[data-pointer-label="P2"]')).toHaveText('P2');
-  for (const platform of ['2', '3', '4', '5']) {
-    await expect(page.locator(`.map-platform-anchor__label[data-pointer-label="P${platform}"]`))
-      .toHaveAttribute('data-label-placement', 'below');
-  }
-  for (const platform of ['6', '7', '8']) {
-    await expect(page.locator(`.map-platform-anchor__label[data-pointer-label="P${platform}"]`))
-      .toHaveAttribute('data-label-placement', 'above');
-  }
-  await expect(page.locator('.map-platform-anchor__label[data-pointer-label="P/D"]')).toHaveCount(0);
-  const manualPointers = await page.locator(
-    '.map-platform-card[data-manual-pointer="true"], .map-connection-card[data-manual-pointer="true"]'
-  )
-    .evaluateAll((cards) => Object.fromEntries(cards.map((card) => [card.dataset.platform, {
-      lat: card.dataset.pointerLat,
-      lon: card.dataset.pointerLon,
-    }])));
-  expect(manualPointers).toEqual({
-    1: { lat: '44.373611', lon: '-79.688611' },
-    2: { lat: '44.373833', lon: '-79.689111' },
-    3: { lat: '44.373861', lon: '-79.689333' },
-    4: { lat: '44.373889', lon: '-79.689583' },
-    5: { lat: '44.373917', lon: '-79.689806' },
-    6: { lat: '44.37425', lon: '-79.689722' },
-    7: { lat: '44.37425', lon: '-79.689472' },
-    8: { lat: '44.374194', lon: '-79.689194' },
-    9: { lat: '44.374306', lon: '-79.688944' },
-    12: { lat: '44.374167', lon: '-79.690444' },
-    13: { lat: '44.374028', lon: '-79.690528' },
-    14: { lat: '44.373583', lon: '-79.691111' },
-  });
-  await expect(page.locator('#map-label-rail-top > *')).toHaveCount(6);
-  await expect(page.locator('#map-label-rail-bottom > *')).toHaveCount(6);
-  await expect(page.locator('#map-label-rail-right > *')).toHaveCount(0);
-  const lowerRailOrder = await page.locator('#map-label-rail-bottom > *').evaluateAll((cards) => cards
-    .sort((left, right) => left.getBoundingClientRect().left - right.getBoundingClientRect().left)
-    .map((card) => card.dataset.platform));
-  expect(lowerRailOrder).toEqual(['14', '5', '4', '3', '2', '1']);
-  const lowerRailTops = await page.locator('#map-label-rail-bottom > *').evaluateAll((cards) => (
-    cards.map((card) => Math.round(card.getBoundingClientRect().top))
-  ));
-  expect(new Set(lowerRailTops).size).toBe(1);
-  const locationBadgeSizes = await page.locator('.map-platform-anchor__label').evaluateAll((labels) => labels.map((label) => {
-    const bounds = label.getBoundingClientRect();
-    return { width: bounds.width, height: bounds.height };
-  }));
-  expect(locationBadgeSizes.every(({ width, height }) => width >= 32 && height >= 32)).toBe(true);
-  const platformCardSizes = await page.locator('.map-platform-card').evaluateAll((cards) => Object.fromEntries(cards.map((card) => {
-    const bounds = card.getBoundingClientRect();
-    return [card.dataset.platform, { width: bounds.width, height: bounds.height }];
-  })));
-  expect(platformCardSizes['4'].width).toBeLessThan(platformCardSizes['3'].width);
-  expect(platformCardSizes['4'].height).toBeLessThan(platformCardSizes['3'].height);
-  await expect(page.locator('.map-platform-card[data-platform="4"] .map-platform-card__body')).toBeHidden();
-  await expect(page.locator('.map-platform-card[data-platform="3"] .map-platform-card__body')).toBeVisible();
   await expect(page.locator('.map-platform-card .map-platform-card__logo')).toHaveCount(0);
   await expect(page.locator('.map-platform-card[data-platform="6"] .map-platform-card__brand-logo'))
     .toHaveAttribute('src', './assets/agency-barrie-transit.png');
@@ -490,55 +552,21 @@ test('platform map renders current assignments and updates markers in place', as
     .toHaveAttribute('src', './assets/agency-go-transit.svg');
   await expect(page.locator('.map-platform-card[data-platform="8"] .map-platform-card__brand-logo'))
     .toHaveAttribute('src', './assets/agency-ontario-northland.png');
-  await expect(page.locator('.map-platform-card[data-platform="8"] .map-platform-card__route')).toHaveText('202');
   await expect(page.locator('.map-platform-card[data-platform="2"] .map-platform-card__brand-logo'))
     .toHaveAttribute('src', './assets/agency-simcoe-linx.png');
-  await expect(page.locator('.vehicle-marker__route[data-agency-id="go-transit"]'))
-    .toHaveCSS('background-color', 'rgb(0, 132, 61)');
+  await expect(page.locator('.map-platform-card[data-platform="2"]')).toContainText('2');
   await expect(page.locator('#map-label-layer .map-connection-card')).toHaveCount(1);
   await expect(page.locator('.map-connection-card[data-platform="9"]')).toContainText('On Demand');
   await expect(page.locator('.map-connection-card[data-platform="9"] .map-connection-card__logo'))
     .toHaveAttribute('src', './assets/agency-barrie-transit.png');
+  await expect(page.locator('.map-connection-card[data-platform="9"]')).toContainText('Stop 900');
+  await expect(page.locator('.platform-card[data-platform="2"]')).toContainText('Wasaga Beach');
   await expect(page.locator('#source-statuses .source-chip')).toHaveCount(1);
   await expect(page.locator('#source-statuses .source-chip')).toContainText('LINX');
   await expect(page.locator('#service-notice-text'))
     .toHaveText('Holiday service — Sunday schedule on Monday, August 3.');
-  const pickupDropoff = page.locator('#map-label-layer .map-dropoff-card');
-  await expect(pickupDropoff).toContainText('Passenger');
-  await expect(pickupDropoff).toContainText('Pick-up / drop-off');
-  await expect(pickupDropoff).toHaveAttribute('data-pointer-lat', '44.373639');
-  await expect(pickupDropoff).toHaveAttribute('data-pointer-lon', '-79.687411');
-  await expect(pickupDropoff).toHaveAttribute('data-geographic-card', 'true');
+  await expect(page.locator('#map-label-layer .map-dropoff-card')).toContainText('Passenger');
   await expect(page.locator('.map-platform-card[data-platform="3"] .map-platform-card__status')).toHaveText('8A arriving');
-  await expect(page.locator('.map-platform-card[data-platform="3"] .map-platform-card__route--active')).toHaveText('8A');
-  await expect(page.locator('.map-platform-anchor__label[data-pointer-label="P3"]'))
-    .toHaveAttribute('data-live-state', 'approaching');
-  await expect(page.locator('.map-platform-anchor__label[data-pointer-label="P3"] .map-platform-anchor__state'))
-    .toHaveText('Arriving');
-  await expect(page.locator('.map-platform-anchor__label[data-pointer-label="P3"] .map-platform-anchor__state'))
-    .toBeHidden();
-  await expect(page.locator('.map-platform-anchor__label[data-pointer-label="P7"]'))
-    .toHaveAttribute('data-live-state', 'occupied');
-  await expect(page.locator('.map-platform-anchor__label[data-pointer-label="P7"] .map-platform-anchor__state'))
-    .toHaveText('At platform');
-  await expect(page.locator('.map-platform-anchor__label[data-pointer-label="P7"] .map-platform-anchor__state'))
-    .toBeHidden();
-  const badgeSizes = await page.locator('.map-platform-anchor__label').evaluateAll((labels) => Object.fromEntries(
-    labels.map((label) => [label.dataset.pointerLabel, {
-      width: label.getBoundingClientRect().width,
-      height: label.getBoundingClientRect().height,
-    }])
-  ));
-  expect(badgeSizes.P3).toEqual(badgeSizes.P2);
-  expect(badgeSizes.P7).toEqual(badgeSizes.P8);
-  await expect(page.locator('.map-platform-anchor__label[data-pointer-label="P3"]'))
-    .toHaveCSS('box-shadow', /rgba?\(74, 222, 128/);
-  await expect(page.locator('.map-terminal-building__name')).toHaveText('Allandale Terminal Building');
-  await expect(page.locator('.map-terminal-building__here')).toHaveText('You Are Here');
-  await expect(page.locator('#map-platform-layer > .map-terminal-building__footprint--map')).toHaveCount(1);
-  await expect(page.locator('#map-label-layer .map-terminal-building__footprint')).toHaveCount(0);
-  await expect(page.locator('.platform-card__destination').first()).toHaveCSS('text-overflow', 'clip');
-  await expect(page.locator('.platform-card__destination').first()).toHaveCSS('white-space', 'normal');
   await expect(page.locator('.map-platform-card[data-platform="7"] .map-platform-card__status')).toContainText('Departs');
   await expect(page.locator('.map-platform-card[data-platform="7"] .map-platform-card__route')).toContainText('68');
   await expect(page.locator('.map-platform-card[data-platform="14"]')).toContainText('12B');
@@ -574,46 +602,6 @@ test('platform map renders current assignments and updates markers in place', as
     return lastItem.getBoundingClientRect().bottom <= directory.getBoundingClientRect().bottom;
   });
   expect(compactDirectoryFits).toBe(true);
-  for (const viewport of [
-    { width: 1280, height: 720 },
-    { width: 1366, height: 768 },
-    { width: 1440, height: 900 },
-    { width: 1680, height: 1050 },
-    { width: 1920, height: 1080 },
-  ]) {
-    await page.setViewportSize(viewport);
-    await expect.poll(() => page.locator('#map-label-layer').evaluate((labelLayer) => {
-      const stage = labelLayer.closest('.map-stage').getBoundingClientRect();
-      const cards = Array.from(labelLayer.querySelectorAll(
-        '.map-platform-card, .map-connection-card, .map-dropoff-card'
-      )).map((card) => {
-        const bounds = card.getBoundingClientRect();
-        return {
-          left: bounds.left,
-          top: bounds.top,
-          right: bounds.right,
-          bottom: bounds.bottom,
-        };
-      });
-      const clipped = cards
-        .map((card, index) => ({ card, index }))
-        .filter(({ card }) => (
-          card.left < stage.left || card.right > stage.right ||
-          card.top < stage.top || card.bottom > stage.bottom
-        ))
-        .map(({ card, index }) => ({
-          index,
-          card: [card.left, card.top, card.right, card.bottom].map(Math.round),
-          stage: [stage.left, stage.top, stage.right, stage.bottom].map(Math.round),
-        }));
-      const overlaps = cards.some((card, index) => cards.slice(index + 1).some((other) => (
-        card.left < other.right && card.right > other.left &&
-        card.top < other.bottom && card.bottom > other.top
-      )));
-      return { clipped, overlaps };
-    })).toEqual({ clipped: [], overlaps: false });
-  }
-  await page.setViewportSize({ width: 1280, height: 720 });
   const initialPosition = await page.locator('.vehicle-marker').evaluate(
     (element) => `${element.style.left}|${element.style.top}`
   );
@@ -629,10 +617,9 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(page.locator('.vehicle-marker')).toHaveAttribute('data-audit-identity', 'preserved');
 });
 
-test('platform marker action strip omits duplicate at-platform countdowns', async ({ page }) => {
+test('platform marker disappears once its vehicle has departed', async ({ page }) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   let phase = 'approaching';
-  let departureTime = nowSeconds + 240;
   let polls = 0;
 
   await page.route('**/api/config', (route) => route.fulfill({
@@ -664,7 +651,7 @@ test('platform marker action strip omits duplicate at-platform countdowns', asyn
           last_reported: nowSeconds,
           terminal_progress_status: phase,
           terminal_stop_id: '9006',
-          terminal_departure_time: departureTime,
+          terminal_departure_time: nowSeconds + 240,
         }],
         sources: {
           barrie_transit: { feed_status: 'live' },
@@ -676,45 +663,18 @@ test('platform marker action strip omits duplicate at-platform countdowns', asyn
   });
 
   await page.goto('/platform.map');
-  const platformSix = page.locator('.platform-card[data-platform="6"]');
-  await expect(platformSix).toBeVisible();
-  expect(await platformSix.evaluate((card) => {
-    const services = card.querySelector('.platform-card__services').getBoundingClientRect();
-    const bounds = card.getBoundingClientRect();
-    return services.top >= bounds.top && services.bottom <= bounds.bottom;
-  })).toBe(true);
+  await expect(page.locator('.vehicle-marker')).toHaveCount(1);
   await expect(page.locator('.vehicle-marker__detail')).toHaveCount(0);
-  await expect(page.locator('.map-platform-card[data-platform="6"] .map-platform-card__status'))
-    .toHaveText('7B arriving');
-  await expect(page.locator('.map-platform-card[data-platform="6"] .map-platform-card__route--active'))
-    .toHaveText('7B');
-  await expect(page.locator('.map-platform-card[data-platform="6"] .map-platform-card__route:not(.map-platform-card__route--active)'))
-    .toHaveText('7A');
 
   const approachingPoll = polls;
   phase = 'at_terminal';
   await expect.poll(() => polls).toBeGreaterThan(approachingPoll);
-  await expect(platformSix).toHaveAttribute('data-live-state', 'occupied');
-
-  const overduePoll = polls;
-  departureTime = nowSeconds - 120;
-  await expect.poll(() => polls).toBeGreaterThan(overduePoll);
-  await expect(platformSix.locator('.platform-card__service[data-route-id="7B"] .platform-card__service-countdown'))
-    .toHaveText('Now');
-  await expect(page.locator('.map-platform-card[data-platform="6"] .map-platform-card__status'))
-    .toHaveText('At platform');
+  await expect(page.locator('.vehicle-marker')).toHaveCount(1);
 
   const platformPoll = polls;
   phase = 'departed';
   await expect.poll(() => polls).toBeGreaterThan(platformPoll);
   await expect(page.locator('.vehicle-marker')).toHaveCount(0);
-  await expect(platformSix).toHaveAttribute('data-live-state', '');
-  await expect(platformSix.locator('.platform-card__service[data-route-id="7B"] .platform-card__service-source'))
-    .toHaveText('Scheduled');
-  await expect(page.locator('.map-platform-anchor__label[data-pointer-label="P6"]'))
-    .toHaveAttribute('data-live-state', '');
-  await expect(page.locator('.map-platform-card[data-platform="6"] .map-platform-card__route--active'))
-    .toHaveCount(0);
 });
 
 test('platform map calibration stays inside the image at a 4:3 viewport', async ({ page }) => {
@@ -748,18 +708,15 @@ test('platform map calibration stays inside the image at a 4:3 viewport', async 
     const canvas = globalThis.document.getElementById('platform-canvas').getBoundingClientRect();
     const marker = globalThis.document.querySelector('.vehicle-marker').getBoundingClientRect();
     const header = globalThis.document.querySelector('.platform-header').getBoundingClientRect();
-    const image = globalThis.document.querySelector('.map-plane').getBoundingClientRect();
     return {
       inside:
         marker.left >= canvas.left &&
         marker.right <= canvas.right &&
         marker.top >= header.bottom &&
         marker.bottom <= canvas.bottom,
-      mapRatio: image.width / image.height,
     };
   });
   expect(bounds.inside).toBe(true);
-  expect(bounds.mapRatio).toBeCloseTo(11659 / 9010, 2);
 });
 
 test('platform map hides vehicle icons when the live feed goes offline', async ({ page }) => {

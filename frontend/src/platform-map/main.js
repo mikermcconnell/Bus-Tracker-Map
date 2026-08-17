@@ -1441,20 +1441,46 @@ function setupPlatformApp() {
     setStatus('');
   }
 
-  function renderPayload(payload) {
+  function normalizeDepartureBoard(payload) {
+    return (payload && Array.isArray(payload.departures) ? payload.departures : [])
+      .map((departure) => {
+        const source = String(departure && departure.departure_source || '').toLowerCase();
+        const scheduled = Number(departure && departure.scheduled_departure_time);
+        const expected = Number(departure && departure.expected_departure_time);
+        return {
+          ...departure,
+          departure_time: source === 'realtime' && Number.isFinite(expected)
+            ? expected
+            : (Number.isFinite(scheduled) ? scheduled : expected),
+        };
+      });
+  }
+
+  function renderPayload(payload, departuresPayload) {
     const freshness = assessVehicleFeedFreshness(payload, { delayedAfterMs, offlineAfterMs });
     applyFeedState(payload, freshness);
     const visible = selectVehiclesForDisplay(payload, freshness, { maxAgeMs: offlineAfterMs })
       .filter((vehicle) => isSourceVehicleVisible(vehicle, payload && payload.sources));
-    renderVehicles(visible, payload && payload.terminal_departures);
+    renderVehicles(
+      visible,
+      departuresPayload === undefined
+        ? lastTerminalDepartures
+        : normalizeDepartureBoard(departuresPayload)
+    );
   }
 
   function pollVehicles() {
-    dataClient.fetchVehicles()
-      .then((payload) => {
+    Promise.all([
+      dataClient.fetchVehicles(),
+      dataClient.fetchDepartures(50).catch((err) => {
+        console.warn('Platform departures poll failed; using scheduled layout times:', err);
+        return null;
+      }),
+    ])
+      .then(([payload, departuresPayload]) => {
         if (!payload || !Array.isArray(payload.vehicles)) throw new Error('Invalid vehicle response');
         lastPayload = payload;
-        renderPayload(payload);
+        renderPayload(payload, departuresPayload);
       })
       .catch((err) => {
         lastPayload = null;

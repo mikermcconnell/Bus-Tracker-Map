@@ -16,7 +16,7 @@ function normalizeBasePath(value) {
 }
 
 function resolveWithBase(basePath, targetPath) {
-  const sanitizedTarget = targetPath.startsWith('/')
+  const sanitizedTarget = targetPath.charAt(0) === '/'
     ? targetPath.slice(1)
     : targetPath;
   const normalizedBase = basePath === DEFAULT_BASE_PATH
@@ -27,10 +27,34 @@ function resolveWithBase(basePath, targetPath) {
 }
 
 function fetchJson(url, options) {
+  const timeoutMs = Number(options && options.timeoutMs);
+  const requestOptions = { ...(options || {}) };
+  delete requestOptions.timeoutMs;
   if (typeof fetch === 'function') {
-    return fetch(url, options).then((response) => {
-      if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-      return response.json();
+    return new Promise((resolve, reject) => {
+      const controller = Number.isFinite(timeoutMs) && timeoutMs > 0 && typeof AbortController === 'function'
+        ? new AbortController()
+        : null;
+      if (controller) requestOptions.signal = controller.signal;
+      let settled = false;
+      const finish = (callback, value) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        callback(value);
+      };
+      const timer = Number.isFinite(timeoutMs) && timeoutMs > 0
+        ? setTimeout(() => {
+          if (controller) controller.abort();
+          finish(reject, new Error(`Request timed out after ${timeoutMs}ms`));
+        }, timeoutMs)
+        : null;
+      fetch(url, requestOptions)
+        .then((response) => {
+          if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+          return response.json();
+        })
+        .then((payload) => finish(resolve, payload), (error) => finish(reject, error));
     });
   }
 
@@ -41,7 +65,8 @@ function fetchJson(url, options) {
     }
 
     const request = new XMLHttpRequest();
-    request.open((options && options.method) || 'GET', url, true);
+    request.open(requestOptions.method || 'GET', url, true);
+    if (Number.isFinite(timeoutMs) && timeoutMs > 0) request.timeout = timeoutMs;
     request.onreadystatechange = function () {
       if (request.readyState !== 4) return;
       if (request.status >= 200 && request.status < 300) {
@@ -57,6 +82,9 @@ function fetchJson(url, options) {
     request.onerror = function () {
       reject(new Error('Network request failed'));
     };
+    request.ontimeout = function () {
+      reject(new Error(`Request timed out after ${timeoutMs}ms`));
+    };
     request.send(null);
   });
 }
@@ -65,18 +93,20 @@ export function createDataClient(options = {}) {
   let baseUrl = options.baseUrl || '';
 
   function resolveUrl(path) {
-    if (baseUrl.endsWith('/') && path.startsWith('/')) {
+    const baseHasTrailingSlash = baseUrl.charAt(baseUrl.length - 1) === '/';
+    const pathHasLeadingSlash = path.charAt(0) === '/';
+    if (baseHasTrailingSlash && pathHasLeadingSlash) {
       return baseUrl + path.slice(1);
     }
-    if (!baseUrl.endsWith('/') && !path.startsWith('/')) {
+    if (!baseHasTrailingSlash && !pathHasLeadingSlash) {
       return baseUrl + '/' + path;
     }
     return baseUrl + path;
   }
 
   return {
-    fetchConfig() {
-      return fetchJson(resolveUrl('/api/config'));
+    fetchConfig(options) {
+      return fetchJson(resolveUrl('/api/config'), options);
     },
 
     fetchRoutes() {
@@ -96,6 +126,16 @@ export function createDataClient(options = {}) {
     fetchTerminalLayout() {
       const cacheBust = Date.now().toString(36);
       return fetchJson(resolveUrl(`/api/terminal-layout?cb=${cacheBust}`), { cache: 'no-store' });
+    },
+
+    fetchDepartures(limit = 12, options = {}) {
+      const cacheBust = Date.now().toString(36);
+      const { board, ...fetchOptions } = options;
+      const boardQuery = board ? `&board=${encodeURIComponent(board)}` : '';
+      return fetchJson(resolveUrl(`/api/departures?limit=${encodeURIComponent(limit)}${boardQuery}&cb=${cacheBust}`), {
+        ...fetchOptions,
+        cache: 'no-store',
+      });
     },
 
     fetchVehicles() {

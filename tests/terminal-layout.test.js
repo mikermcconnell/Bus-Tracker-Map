@@ -11,7 +11,7 @@ describe('terminal platform layout', () => {
         source_url: 'https://example.test/barrie.zip',
         terminal_stops: [
           { id: '14', platform_code: '14' },
-          { id: '9003', platform_code: '3', lat: 44.373873, lon: -79.689352 },
+          { id: '9003', platform_code: '3' },
           { id: '9013', platform_code: '13' },
         ],
         trips: {
@@ -39,8 +39,6 @@ describe('terminal platform layout', () => {
         platform: '3',
         route_id: '8A',
         destination: 'Yonge Southbound',
-        stop_lat: 44.373873,
-        stop_lon: -79.689352,
       }),
       expect.objectContaining({
         platform: '13',
@@ -59,7 +57,6 @@ describe('terminal platform layout', () => {
   test('maps regional stop identifiers to physical platforms', () => {
     const layout = buildTerminalLayout({
       ontarioNorthland: {
-        barrie_stops: [{ id: '315', lat: 44.374099, lon: -79.690194 }],
         trips: {
           coach: {
             route_id: '201',
@@ -69,10 +66,6 @@ describe('terminal platform layout', () => {
         },
       },
       goTransit: {
-        allandale_stops: [
-          { id: '08049', lat: 44.374408, lon: -79.689260 },
-          { id: 'AD', lat: 44.374139, lon: -79.687858 },
-        ],
         trips: {
           bus: {
             route_id: '06260926-68',
@@ -87,7 +80,6 @@ describe('terminal platform layout', () => {
         },
       },
       simcoeLinx: {
-        terminal_stops: [{ id: 'SCSTOP210', lat: 44.373913, lon: -79.689146 }],
         trips: {
           linx: {
             route_id: '2',
@@ -99,50 +91,13 @@ describe('terminal platform layout', () => {
     });
 
     expect(layout.assignments).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        platform: '1',
-        route_id: 'GO-TRAIN',
-        destination: 'Toronto / Union Station',
-      }),
+      expect.objectContaining({ platform: '1', route_id: 'GO-TRAIN', destination: 'Toronto / Union Station' }),
       expect.objectContaining({ platform: '7', route_id: 'GO-BUS', route_label: '68' }),
       expect.objectContaining({ platform: '8', route_id: 'ONTC', route_label: 'ON' }),
       expect.objectContaining({
-        platform: '2', route_id: 'LINX-2', route_label: '2', destination: 'Wasaga Beach',
-        stop_lat: 44.373913, stop_lon: -79.689146,
+        platform: '2', route_id: 'LINX-2', route_label: '2', destination: 'Wasaga Beach'
       }),
     ]));
-  });
-
-  test('restores scheduled Barrie platforms when published platform codes are blank', () => {
-    const terminalStops = ['9003', '9004', '9005', '9006', '9012', '9013']
-      .map((id) => ({ id, platform_code: null }));
-    const routesByStop = {
-      '9003': '8A', '9004': '8B', '9005': '8A',
-      '9006': '7A', '9012': '8B', '9013': '12A',
-    };
-    const trips = Object.fromEntries(Object.entries(routesByStop).map(([stopId, routeId]) => [
-      `trip-${stopId}`,
-      { route_id: routeId, service_id: 'daily', terminal_stops: [{ stop_id: stopId, departure_time: '12:00:00' }] },
-    ]));
-    const layout = buildTerminalLayout({
-      now: '2026-08-12T14:00:00Z',
-      barrie: {
-        terminal_stops: terminalStops,
-        service_calendars: {
-          daily: {
-            start_date: '20260801', end_date: '20260831',
-            monday: true, tuesday: true, wednesday: true, thursday: true,
-            friday: true, saturday: true, sunday: true,
-          },
-        },
-        service_exceptions: {},
-        trips,
-      },
-    });
-
-    expect(new Set(layout.assignments.map(({ platform }) => platform)))
-      .toEqual(new Set(['3', '4', '5', '6', '12', '13']));
-    expect(layout.assignments.every(({ next_departure_source: source }) => source === 'static')).toBe(true);
   });
 
   test('cleans regional route prefixes from headsigns', () => {

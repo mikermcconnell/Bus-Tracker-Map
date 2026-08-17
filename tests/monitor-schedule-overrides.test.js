@@ -39,6 +39,10 @@ function writeGtfsZip(cacheDir, options = {}) {
     ].join('\n')));
   }
 
+  zip.addFile('feed_info.txt', Buffer.from([
+    'feed_publisher_name,feed_publisher_url,feed_lang,feed_start_date,feed_end_date,feed_version',
+    'Test Transit,https://example.com,en,20260101,20261231,2026-test',
+  ].join('\n')));
   zip.addFile('trips.txt', Buffer.from(trips.join('\n')));
   zip.addFile('stop_times.txt', Buffer.from(stopTimes.join('\n')));
 
@@ -57,7 +61,7 @@ describe('monitor schedule service overrides', () => {
     const cacheDir = makeTempDir();
     writeGtfsZip(cacheDir);
     writeOverrides(cacheDir, {
-      '2026-04-03': { mode: 'no_service' },
+      '2026-04-03': { label: 'Good Friday', mode: 'no_service' },
     });
 
     const result = await getExpectedBuses(
@@ -73,13 +77,19 @@ describe('monitor schedule service overrides', () => {
 
     expect(result.totalExpected).toBe(0);
     expect(result.byRoute.size).toBe(0);
+    expect(result.serviceContext).toEqual(expect.objectContaining({
+      holidayLabel: 'Good Friday',
+      expectedSchedule: 'No service',
+      scheduleSource: 'local_no_service',
+      feedCoversDate: true,
+    }));
   });
 
   test('applies sunday-style holiday service on a non-sunday date', async () => {
     const cacheDir = makeTempDir();
     writeGtfsZip(cacheDir);
     writeOverrides(cacheDir, {
-      '2026-12-26': { mode: 'sunday' },
+      '2026-12-26': { label: 'Boxing Day', mode: 'sunday' },
     });
 
     const result = await getExpectedBuses(
@@ -95,14 +105,18 @@ describe('monitor schedule service overrides', () => {
 
     expect(result.totalExpected).toBe(1);
     expect(result.byRoute.get('1')).toBe(1);
-    expect(result.scheduleSources.today.source).toBe('local_service_day');
+    expect(result.serviceContext).toEqual(expect.objectContaining({
+      holidayLabel: 'Boxing Day',
+      expectedSchedule: 'Sunday schedule',
+      scheduleSource: 'local_service_day',
+    }));
   });
 
-  test('uses GTFS calendar_dates instead of unioning a sunday fallback with holiday service', async () => {
+  test('uses GTFS calendar_dates instead of unioning Sunday fallback with holiday service', async () => {
     const cacheDir = makeTempDir();
     writeGtfsZip(cacheDir, { includeHolidayService: true });
     writeOverrides(cacheDir, {
-      '2026-08-03': { mode: 'sunday' },
+      '2026-08-03': { label: 'Civic Holiday', mode: 'sunday' },
     });
 
     const result = await getExpectedBuses(
@@ -119,19 +133,20 @@ describe('monitor schedule service overrides', () => {
     expect(result.totalExpected).toBe(1);
     expect(result.byRoute.get('2')).toBe(1);
     expect(result.byRoute.has('1')).toBe(false);
-    expect(result.scheduleSources.today).toEqual(expect.objectContaining({
-      source: 'gtfs_calendar_dates',
-      date: '20260803',
+    expect(result.serviceContext).toEqual(expect.objectContaining({
+      holidayLabel: 'Civic Holiday',
+      expectedSchedule: 'GTFS special holiday service',
+      scheduleSource: 'gtfs_calendar_dates',
       calendarDateExceptionCount: 2,
       activeServiceIdCount: 1,
     }));
   });
 
-  test('keeps no-service as a hard override even when GTFS adds holiday service', async () => {
+  test('keeps an approved no-service holiday as a hard override', async () => {
     const cacheDir = makeTempDir();
     writeGtfsZip(cacheDir, { includeHolidayService: true });
     writeOverrides(cacheDir, {
-      '2026-08-03': { mode: 'no_service' },
+      '2026-08-03': { label: 'Approved Closure', mode: 'no_service' },
     });
 
     const result = await getExpectedBuses(
@@ -146,7 +161,37 @@ describe('monitor schedule service overrides', () => {
     );
 
     expect(result.totalExpected).toBe(0);
-    expect(result.scheduleSources.today.source).toBe('local_no_service');
+    expect(result.serviceContext).toEqual(expect.objectContaining({
+      holidayLabel: 'Approved Closure',
+      expectedSchedule: 'No service',
+      scheduleSource: 'local_no_service',
+      calendarDateExceptionCount: 2,
+    }));
+  });
+
+  test('reports when the published feed does not cover the monitored service date', async () => {
+    const cacheDir = makeTempDir();
+    writeGtfsZip(cacheDir);
+
+    const result = await getExpectedBuses(
+      'https://example.invalid/gtfs.zip',
+      cacheDir,
+      24,
+      0,
+      {
+        now: new Date('2027-01-04T10:15:00-05:00'),
+        timeZone: 'America/Toronto',
+        serviceOverrides: {},
+      }
+    );
+
+    expect(result.totalExpected).toBe(0);
+    expect(result.coverageIssue).toEqual({
+      code: 'GTFS_SCHEDULE_DATE_NOT_COVERED',
+      date: '20270104',
+      feedCoverageStart: '20260101',
+      feedCoverageEnd: '20261231',
+    });
   });
 
   test('prefers a cache override file over the repo-level default file', () => {

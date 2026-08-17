@@ -7,7 +7,6 @@ const AdmZip = require('adm-zip');
 const { parse } = require('csv-parse/sync');
 const bboxClip = require('@turf/bbox-clip').default;
 const { buildServiceCalendarMetadata } = require('../shared/gtfs-service-calendar');
-const { buildTerminalApproachFallbacks } = require('../shared/terminal-approach-fallbacks');
 const { getFeatureCollectionBounds } = require('./build-ontario-northland');
 require('dotenv').config();
 
@@ -94,11 +93,6 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
       departure_time: stopTime.departure_time || stopTime.arrival_time || null,
     });
   });
-  const terminalApproachFallbacks = buildTerminalApproachFallbacks(
-    barrieTrips,
-    stopTimes,
-    terminalStopIds
-  );
 
   const primaryAgency = agencies[0] || {};
   const agency = {
@@ -200,7 +194,6 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
       barrie_stop_ids: Array.from(barrieStopIds).sort(),
       barrie_route_ids: Array.from(barrieRouteIds).sort(),
       terminal_stop_ids: Array.from(terminalStopIds).sort(),
-      terminal_approach_fallbacks: terminalApproachFallbacks,
       terminal_stops: terminalStops.map((stop) => ({
         id: String(stop.stop_id),
         name: stop.stop_name || null,
