@@ -9,6 +9,19 @@
   },
   "headers": [
     {
+      "source": "/departures/platform.aspx",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self' data:; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self';"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
       "source": "/notices",
       "headers": [
         {
@@ -51,6 +64,10 @@
     {
       "source": "/departures",
       "destination": "/departures.html"
+    },
+    {
+      "source": "/departures/platform.aspx",
+      "destination": "/platform-departures.html"
     },
     {
       "source": "/departures/downtown",

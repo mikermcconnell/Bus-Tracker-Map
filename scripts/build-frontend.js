@@ -66,6 +66,13 @@ const entryPoints = [
     outputHtml: 'departures.html'
   },
   {
+    key: 'platformDepartures',
+    entryPath: path.join(srcDir, 'platform-departures', 'main.js'),
+    cssPath: path.join(srcDir, 'platform-departures', 'styles.css'),
+    templatePath: path.join(srcDir, 'platform-departures', 'index.html'),
+    outputHtml: 'platform-departures.html'
+  },
+  {
     key: 'simcoe',
     entryPath: path.join(srcDir, 'simcoe', 'main.js'),
     cssPath: path.join(srcDir, 'simcoe', 'styles.css'),

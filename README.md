@@ -72,6 +72,8 @@ The regional page uses separate `/api/simcoe/*` data so expanding the county vie
 
 Open [http://localhost:3000/departures](http://localhost:3000/departures) locally or `/departures` on the production site. The TV-safe board displays the next 10 outbound departures within 24 hours for Barrie Transit, Ontario Northland, GO buses and trains, and Simcoe LINX route 2.
 
+Each terminal platform also has a compact digital departure sign at `/departures/platform.aspx?stop=9002`. Replace `9002` with a terminal code from `9001` through `9014`; the sign filters the terminal-wide departure data to that platform and is optimized for the installed 320 x 80 display.
+
 Rows are selected from the next hour of published service and show only the next trip for each agency, route, destination, and platform combination. A **LIVE** badge and live countdown require both a fresh stop prediction and a fresh vehicle position for the exact agency and trip. Every other row is labelled **SCHED** and uses its published scheduled time. The supporting `GET /api/departures?limit=12` endpoint accepts limits from 1 through 30.
 
 ## Downtown Hub departure board
