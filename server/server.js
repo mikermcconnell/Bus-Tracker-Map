@@ -153,6 +153,9 @@ const POLL_MS = Number(process.env.POLL_MS || 10000);
 const MAPBOX_ACCESS_TOKEN = String(process.env.MAPBOX_ACCESS_TOKEN || '').trim();
 const MAPBOX_USERNAME = String(process.env.MAPBOX_USERNAME || '').trim();
 const MAPBOX_STYLE_ID = String(process.env.MAPBOX_STYLE_ID || '').trim();
+const PLATFORM_MAPBOX_STYLE_ID = String(
+  process.env.PLATFORM_MAPBOX_STYLE_ID || MAPBOX_STYLE_ID
+).trim();
 const RT_URL = process.env.GTFS_RT_VEHICLES_URL || '';
 const RT_TRIP_UPDATES_URL = process.env.GTFS_RT_TRIP_UPDATES_URL ||
   'https://www.myridebarrie.ca/gtfs/GTFS_TripUpdates.pb';
@@ -254,6 +257,22 @@ function buildBasemapConfig(styleId = MAPBOX_STYLE_ID) {
     zoom_offset: -1,
     max_zoom: 19,
     opacity: 1,
+    attribution: MAPBOX_ATTRIBUTION,
+    fallback_url: OSM_TILE_URL,
+    fallback_attribution: OSM_ATTRIBUTION,
+  };
+}
+
+function buildPlatformBasemapConfig() {
+  const mapboxConfigured = Boolean(
+    MAPBOX_ACCESS_TOKEN && MAPBOX_USERNAME && PLATFORM_MAPBOX_STYLE_ID
+  );
+  if (!mapboxConfigured) return buildBasemapConfig('');
+
+  return {
+    provider: 'mapbox-gl',
+    style_url: `mapbox://styles/${MAPBOX_USERNAME}/${PLATFORM_MAPBOX_STYLE_ID}`,
+    access_token: MAPBOX_ACCESS_TOKEN,
     attribution: MAPBOX_ATTRIBUTION,
     fallback_url: OSM_TILE_URL,
     fallback_attribution: OSM_ATTRIBUTION,
@@ -672,6 +691,7 @@ apiRouter.get('/stops.geojson', (req, res) => {
 
 apiRouter.get('/config', (req, res) => {
   const basemap = buildBasemapConfig();
+  const platformBasemap = buildPlatformBasemapConfig();
   res.json({
     poll_ms: POLL_MS,
     feed_delayed_after_ms: Number.isFinite(FEED_DELAYED_AFTER_MS) && FEED_DELAYED_AFTER_MS > 0
@@ -682,6 +702,7 @@ apiRouter.get('/config', (req, res) => {
       : 15 * 60 * 1000,
     base_path: BASE_PATH,
     basemap,
+    platform_basemap: platformBasemap,
     // Keep the original field during the client migration.
     tiles: basemap.url,
     rt_feed_configured: Boolean(RT_URL) || ONTARIO_NORTHLAND_ENABLED || GO_TRANSIT_ENABLED || SIMCOE_LINX_ENABLED,

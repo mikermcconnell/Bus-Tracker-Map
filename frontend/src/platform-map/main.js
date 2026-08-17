@@ -1,4 +1,5 @@
 import L from 'leaflet';
+import mapboxgl from 'mapbox-gl';
 import { createDataClient } from '../data/client.js';
 import { BATT_COORDS, getTerminalListStatus } from '../map/nearby-vehicles.js';
 import { clusterVehicles, distanceBetweenMeters } from '../map/vehicle-groups.js';
@@ -22,6 +23,8 @@ const DEPARTURE_NOW_GRACE_MS = 60 * 1000;
 const DEPARTURE_PAGE_ROTATION_SECONDS = 15;
 const PLATFORM_MAP_CENTER = Object.freeze([44.373974, -79.689423]);
 const PLATFORM_MAP_ZOOM = 18.1;
+const PLATFORM_MAPBOX_ZOOM = PLATFORM_MAP_ZOOM - 1;
+const PLATFORM_BASEMAP_LOAD_TIMEOUT_MS = 15000;
 const SOURCE_DEFINITIONS = Object.freeze([
   Object.freeze({ key: 'barrie_transit', agencyId: 'barrie-transit', label: 'Barrie Transit', short: 'BT' }),
   Object.freeze({ key: 'go_transit', agencyId: 'go-transit', label: 'GO Transit', short: 'GO' }),
@@ -279,8 +282,93 @@ function setupPlatformBasemap(config, onProjectionChange) {
   const mapPlane = container && container.closest('.map-plane');
   const basemap = config && (config.platform_basemap || config.basemap);
   if (!container || !mapPlane || !basemap) return null;
-  if (!basemap.url && !basemap.fallback_url) return null;
-  return setupLeafletBasemap(container, mapPlane, basemap, onProjectionChange);
+
+  if (basemap.provider !== 'mapbox-gl') {
+    if (!basemap.url && !basemap.fallback_url) return null;
+    return setupLeafletBasemap(container, mapPlane, basemap, onProjectionChange);
+  }
+
+  let map = null;
+  let fallbackMap = null;
+  let fallbackStarted = false;
+  let styleLoaded = false;
+  let loadTimer = null;
+
+  function startFallback(reason) {
+    if (fallbackStarted || !basemap.fallback_url) return;
+    fallbackStarted = true;
+    if (loadTimer) clearTimeout(loadTimer);
+    if (reason) console.warn(`Platform Mapbox basemap unavailable (${reason}); using OpenStreetMap.`);
+    if (map) {
+      map.remove();
+      map = null;
+    }
+    container.replaceChildren();
+    mapPlane.classList.remove('map-plane--live-basemap');
+    fallbackMap = setupLeafletBasemap(container, mapPlane, {
+      url: basemap.fallback_url,
+      attribution: basemap.fallback_attribution,
+      tile_size: 256,
+      zoom_offset: 0,
+      max_zoom: 19,
+    }, onProjectionChange);
+  }
+
+  if (
+    !basemap.style_url || !basemap.access_token ||
+    typeof mapboxgl.supported !== 'function' ||
+    !mapboxgl.supported({ failIfMajorPerformanceCaveat: true })
+  ) {
+    startFallback('WebGL is not supported');
+    return fallbackMap;
+  }
+
+  mapboxgl.accessToken = basemap.access_token;
+  map = new mapboxgl.Map({
+    container,
+    style: basemap.style_url,
+    center: [PLATFORM_MAP_CENTER[1], PLATFORM_MAP_CENTER[0]],
+    zoom: PLATFORM_MAPBOX_ZOOM,
+    bearing: 0,
+    pitch: 0,
+    interactive: false,
+    attributionControl: true,
+    fadeDuration: 0,
+    renderWorldCopies: false,
+  });
+
+  loadTimer = setTimeout(() => startFallback('load timed out'), PLATFORM_BASEMAP_LOAD_TIMEOUT_MS);
+  map.once('load', () => {
+    styleLoaded = true;
+    if (loadTimer) clearTimeout(loadTimer);
+    mapPlane.classList.add('map-plane--live-basemap');
+    if (onProjectionChange) onProjectionChange();
+  });
+  map.on('error', (event) => {
+    const message = event && event.error && event.error.message || 'style failed to load';
+    if (!styleLoaded) startFallback(message);
+    else console.warn('Platform Mapbox resource error:', event.error || event);
+  });
+  map.getCanvas().addEventListener('webglcontextlost', () => startFallback('WebGL context was lost'), { once: true });
+  requestAnimationFrame(() => map && map.resize());
+
+  return {
+    project(lat, lon) {
+      if (fallbackMap) return fallbackMap.project(lat, lon);
+      if (!map) return null;
+      return projectedPercent(container, map.project([lon, lat]));
+    },
+    remove() {
+      if (loadTimer) clearTimeout(loadTimer);
+      if (map) map.remove();
+      if (fallbackMap) fallbackMap.remove();
+    },
+    resize() {
+      if (map) map.resize();
+      if (fallbackMap) fallbackMap.resize();
+      if (onProjectionChange) onProjectionChange();
+    },
+  };
 }
 
 function formatFeedTime(timestampSeconds) {
