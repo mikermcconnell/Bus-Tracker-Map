@@ -228,8 +228,12 @@ export function normalizeDepartureBoard(payload) {
 }
 
 export function departureSourceDisplay(departure, hasActiveVehicle = false) {
-  const source = String(departure && departure.departure_source || '').toLowerCase();
-  if (hasActiveVehicle || source === 'realtime') return { key: 'live', label: 'Live' };
-  if (source === 'estimated') return { key: 'estimated', label: 'Estimated' };
+  const liveEvidence = String(departure && departure.live_evidence || '').toLowerCase();
+  const hasMatchingVehicle = Boolean(
+    hasActiveVehicle ||
+    departure && departure.live_vehicle_id ||
+    liveEvidence.includes('vehicle')
+  );
+  if (hasMatchingVehicle) return { key: 'live', label: 'Live' };
   return { key: 'scheduled', label: 'Scheduled' };
 }

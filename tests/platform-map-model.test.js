@@ -92,10 +92,24 @@ describe('platform map model', () => {
       departure_time: 160,
     });
     expect(departureSourceDisplay(normalized[0])).toEqual({
-      key: 'estimated',
-      label: 'Estimated',
+      key: 'scheduled',
+      label: 'Scheduled',
     });
     expect(departureSourceDisplay(normalized[0], true)).toEqual({
+      key: 'live',
+      label: 'Live',
+    });
+    expect(departureSourceDisplay({
+      departure_source: 'realtime',
+      live_evidence: 'trip_update',
+    })).toEqual({
+      key: 'scheduled',
+      label: 'Scheduled',
+    });
+    expect(departureSourceDisplay({
+      departure_source: 'realtime',
+      live_vehicle_id: 'vehicle-1',
+    })).toEqual({
       key: 'live',
       label: 'Live',
     });

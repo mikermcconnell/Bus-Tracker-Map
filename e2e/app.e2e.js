@@ -580,16 +580,16 @@ test('platform map renders current assignments and updates markers in place', as
     .toHaveText('25 min');
   await expect(inactiveRow.locator('.platform-card__service-scheduled'))
     .toHaveText(inactiveExpectedTime);
-  await expect(inactiveRow.locator('.platform-card__service-source')).toHaveText('Estimated');
+  await expect(inactiveRow.locator('.platform-card__service-source')).toHaveText('Scheduled');
   await expect(inactiveRow.locator('.platform-card__service-source'))
-    .toHaveAttribute('data-source', 'estimated');
+    .toHaveAttribute('data-source', 'scheduled');
   const longDwellCard = page.locator('.platform-card[data-platform="5"]');
   const longDwellRow = longDwellCard.locator('.platform-card__service');
   await expect(longDwellCard).not.toHaveClass(/platform-card--occupied/);
   await expect(longDwellCard.locator('.platform-card__state')).toBeHidden();
   await expect(longDwellRow).not.toHaveClass(/platform-card__service--active/);
   await expect(longDwellRow.locator('.platform-card__service-countdown')).toHaveText('21 min');
-  await expect(longDwellRow.locator('.platform-card__service-source')).toHaveText('Live');
+  await expect(longDwellRow.locator('.platform-card__service-source')).toHaveText('Scheduled');
   await expect(page.locator('.platform-card[data-platform="7"] .platform-card__state')).toHaveText('At platform');
   const trainRouteBadge = page.locator('.platform-card[data-platform="1"] .platform-card__route');
   await expect(trainRouteBadge).toHaveText('TRAIN');
