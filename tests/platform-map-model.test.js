@@ -6,6 +6,7 @@ import {
   getVehicleLabel,
   getVehicleStyle,
   groupPlatformAssignments,
+  isAtPlatformDepartureEligible,
   isTerminalDisplayVehicle,
   normalizeDepartureBoard,
   projectVehicleToImage,
@@ -56,6 +57,17 @@ describe('platform map model', () => {
     expect(isTerminalDisplayVehicle({ ...atTerminal, terminal_progress_status: 'departed' })).toBe(false);
     expect(isTerminalDisplayVehicle({ ...atTerminal, terminal_progress_status: 'approaching' })).toBe(true);
     expect(isTerminalDisplayVehicle({ ...atTerminal, terminal_progress_status: 'at_terminal' })).toBe(true);
+  });
+
+  test('limits at-platform highlighting to departures within twenty minutes', () => {
+    const now = Date.parse('2026-08-17T16:00:00Z');
+    expect(isAtPlatformDepartureEligible({
+      terminal_departure_time: now / 1000 + 20 * 60,
+    }, now)).toBe(true);
+    expect(isAtPlatformDepartureEligible({
+      terminal_departure_time: now / 1000 + 20 * 60 + 1,
+    }, now)).toBe(false);
+    expect(isAtPlatformDepartureEligible({}, now)).toBe(true);
   });
 
   test('groups current assignments without inventing retired platforms', () => {

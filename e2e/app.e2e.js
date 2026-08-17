@@ -475,6 +475,14 @@ test('platform map renders current assignments and updates markers in place', as
           scheduled_departure_time: nowSeconds + 1200,
           expected_departure_time: nowSeconds + 1500,
           departure_source: 'estimated',
+        }, {
+          platform: '5',
+          agency_id: 'barrie-transit',
+          route_id: '8A',
+          route_label: '8A',
+          scheduled_departure_time: nowSeconds + 1260,
+          expected_departure_time: nowSeconds + 1260,
+          departure_source: 'realtime',
         }],
       }),
     });
@@ -525,6 +533,18 @@ test('platform map renders current assignments and updates markers in place', as
           terminal_progress_status: 'at_terminal',
           terminal_stop_id: '9007',
           terminal_departure_time: nowSeconds + 540,
+        }, {
+          id: 'long-dwell-platform-bus',
+          route_id: '8A',
+          route_label: '8A',
+          agency_id: 'barrie-transit',
+          agency_name: 'Barrie Transit',
+          lat,
+          lon: -79.689279,
+          last_reported: nowSeconds,
+          terminal_progress_status: 'at_terminal',
+          terminal_stop_id: '9005',
+          terminal_departure_time: nowSeconds + 1260,
         }],
         sources: {
           barrie_transit: { feed_status: 'live' },
@@ -537,7 +557,7 @@ test('platform map renders current assignments and updates markers in place', as
 
   await page.goto('/platform.map');
   await expect(page.locator('.vehicle-marker img')).toHaveCount(0);
-  await expect(page.locator('.vehicle-marker__route')).toHaveCount(2);
+  await expect(page.locator('.vehicle-marker__route')).toHaveCount(3);
   await expect(page.locator('.vehicle-marker__route').first()).toHaveCSS('border-radius', '50%');
   await expect(page.locator('.vehicle-marker__route').first()).toContainText('8A');
   await expect(page.locator('.vehicle-marker__route').nth(1)).toContainText('GO');
@@ -563,9 +583,13 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(inactiveRow.locator('.platform-card__service-source')).toHaveText('Estimated');
   await expect(inactiveRow.locator('.platform-card__service-source'))
     .toHaveAttribute('data-source', 'estimated');
-  const pastDepartureRow = page.locator('.platform-card[data-platform="5"] .platform-card__service');
-  await expect(pastDepartureRow.locator('.platform-card__service-countdown')).toHaveText('No time');
-  await expect(pastDepartureRow).not.toContainText('9:32 AM');
+  const longDwellCard = page.locator('.platform-card[data-platform="5"]');
+  const longDwellRow = longDwellCard.locator('.platform-card__service');
+  await expect(longDwellCard).not.toHaveClass(/platform-card--occupied/);
+  await expect(longDwellCard.locator('.platform-card__state')).toBeHidden();
+  await expect(longDwellRow).not.toHaveClass(/platform-card__service--active/);
+  await expect(longDwellRow.locator('.platform-card__service-countdown')).toHaveText('21 min');
+  await expect(longDwellRow.locator('.platform-card__service-source')).toHaveText('Live');
   await expect(page.locator('.platform-card[data-platform="7"] .platform-card__state')).toHaveText('At platform');
   const trainRouteBadge = page.locator('.platform-card[data-platform="1"] .platform-card__route');
   await expect(trainRouteBadge).toHaveText('TRAIN');
@@ -606,6 +630,7 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(page.locator('#map-label-layer .map-dropoff-card')).toContainText('Passenger');
   await expect(page.locator('.map-platform-card[data-platform="3"] .map-platform-card__status')).toHaveText('8A arriving');
   await expect(page.locator('.map-platform-card[data-platform="7"] .map-platform-card__status')).toContainText('Departs');
+  await expect(page.locator('.map-platform-card[data-platform="5"]')).not.toHaveClass(/map-platform-card--occupied/);
   await expect(page.locator('.map-platform-card[data-platform="7"] .map-platform-card__route')).toContainText('68');
   await expect(page.locator('.map-platform-card[data-platform="14"]')).toContainText('12B');
   const rowsOverlap = await page.locator('.platform-card:not([hidden])').evaluateAll((cards) => cards.some((card, index) => {
@@ -630,7 +655,7 @@ test('platform map renders current assignments and updates markers in place', as
   expect(tvTypography.scheduledTime).toBeGreaterThanOrEqual(20);
   expect(tvTypography.insidePanel).toBe(true);
   await expect(page.locator('.vehicle-marker')).toHaveCount(1);
-  await expect(page.locator('.vehicle-marker__count')).toHaveText('2 vehicles');
+  await expect(page.locator('.vehicle-marker__count')).toHaveText('3 vehicles');
   await expect(page.locator('.vehicle-marker__detail')).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.evaluate(() => globalThis.window.__platformMapApp.showDeparturePage(1));

@@ -10,6 +10,7 @@ import {
   getVehicleLabel,
   getVehicleStyle,
   groupPlatformAssignments,
+  isAtPlatformDepartureEligible,
   isTerminalDisplayVehicle,
   normalizeDepartureBoard,
   normalizeBearing,
@@ -488,9 +489,11 @@ function terminalDisplayStatus(vehicle) {
   return getTerminalListStatus(vehicle, distance);
 }
 
-function livePlatformState(vehicle) {
+function livePlatformState(vehicle, nowMs = Date.now()) {
   const status = terminalDisplayStatus(vehicle);
-  if (status === 'at_terminal') return 'occupied';
+  if (status === 'at_terminal') {
+    return isAtPlatformDepartureEligible(vehicle, nowMs) ? 'occupied' : '';
+  }
   if (status === 'approaching') {
     const distance = distanceBetweenMeters(
       Number(vehicle.lat),
@@ -499,7 +502,7 @@ function livePlatformState(vehicle) {
       BATT_COORDS.lon
     );
     const departureMs = Number(vehicle && vehicle.terminal_departure_time) * 1000;
-    const timeUntilDeparture = departureMs - Date.now();
+    const timeUntilDeparture = departureMs - nowMs;
     if (
       Number.isFinite(distance) &&
       distance <= APPROACHING_DISTANCE_METERS &&
@@ -980,9 +983,10 @@ function setupPlatformApp() {
 
   function updatePlatformActivity(vehicles, terminalDepartures = lastTerminalDepartures) {
     const platformStates = new Map();
+    const activityNow = Date.now();
     (Array.isArray(vehicles) ? vehicles : []).forEach((vehicle) => {
       const platform = platformForVehicle(vehicle);
-      const state = livePlatformState(vehicle);
+      const state = livePlatformState(vehicle, activityNow);
       if (!platform || !state) return;
       const current = platformStates.get(platform);
       const departure = Number(vehicle && vehicle.terminal_departure_time) || Number.POSITIVE_INFINITY;

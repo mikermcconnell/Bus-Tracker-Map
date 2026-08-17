@@ -2,6 +2,8 @@ export const MAP_IMAGE_WIDTH = 11659;
 export const MAP_IMAGE_HEIGHT = 9010;
 export const MAP_IMAGE_RATIO = MAP_IMAGE_WIDTH / MAP_IMAGE_HEIGHT;
 
+const AT_PLATFORM_MAX_LEAD_MS = 20 * 60 * 1000;
+
 const REFERENCE_VIEWPORT = Object.freeze({ width: 1920, height: 1080 });
 const REFERENCE_CALIBRATION = Object.freeze([
   Object.freeze({ lat: 44.373837, lon: -79.689279, x: 54.18848167539267, y: 55.32381997804611 }),
@@ -189,6 +191,12 @@ export function isTerminalDisplayVehicle(vehicle) {
   if (!vehicle || !projectVehicleToImage(vehicle.lat, vehicle.lon)) return false;
   const status = String(vehicle.terminal_progress_status || '').toLowerCase();
   return status !== 'not_serving' && status !== 'departed';
+}
+
+export function isAtPlatformDepartureEligible(vehicle, nowMs = Date.now()) {
+  const departureMs = Number(vehicle && vehicle.terminal_departure_time) * 1000;
+  if (!Number.isFinite(departureMs) || departureMs <= 0) return true;
+  return departureMs - nowMs <= AT_PLATFORM_MAX_LEAD_MS;
 }
 
 export function groupPlatformAssignments(assignments) {
