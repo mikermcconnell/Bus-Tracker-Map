@@ -15,6 +15,7 @@
     "express": "^4.22.2",
     "gtfs-realtime-bindings": "^2.2.0",
     "leaflet": "^1.9.4",
+    "mapbox-gl": "^3.25.0",
     "node-fetch": "2.7.0",
     "nodemailer": "^9.0.3",
     "pdf-to-img": "^6.2.0",

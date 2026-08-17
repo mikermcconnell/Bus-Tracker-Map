@@ -45,6 +45,9 @@ const entryPoints = [
     key: 'platformMap',
     entryPath: path.join(srcDir, 'platform-map', 'main.js'),
     cssPath: path.join(srcDir, 'platform-map', 'styles.css'),
+    includeLeafletCss: true,
+    includeMapboxCss: true,
+    skipLegacyDownlevel: true,
     templatePath: path.join(srcDir, 'platform-map', 'index.html'),
     outputHtml: 'platform.map.html'
   },
@@ -160,7 +163,9 @@ async function buildJs(entry) {
   }
 
   const rawCode = Buffer.from(output.contents).toString('utf8');
-  const transformed = await downlevelJavaScript(rawCode, { filename: path.basename(entry.entryPath) });
+  const transformed = entry.skipLegacyDownlevel
+    ? rawCode
+    : await downlevelJavaScript(rawCode, { filename: path.basename(entry.entryPath) });
   const outPath = path.join(assetsDir, `${entry.key}.js`);
   fs.writeFileSync(outPath, transformed);
 
@@ -170,13 +175,21 @@ async function buildJs(entry) {
 function buildCss(entry) {
   const outPath = path.join(assetsDir, `${entry.key}.css`);
   const appCss = fs.readFileSync(entry.cssPath);
-  const buffer = entry.includeLeafletCss
-    ? Buffer.concat([
+  const buffers = [];
+  if (entry.includeLeafletCss) {
+    buffers.push(
       fs.readFileSync(path.join(projectRoot, 'node_modules', 'leaflet', 'dist', 'leaflet.css')),
-      Buffer.from('\n'),
-      appCss,
-    ])
-    : appCss;
+      Buffer.from('\n')
+    );
+  }
+  if (entry.includeMapboxCss) {
+    buffers.push(
+      fs.readFileSync(path.join(projectRoot, 'node_modules', 'mapbox-gl', 'dist', 'mapbox-gl.css')),
+      Buffer.from('\n')
+    );
+  }
+  buffers.push(appCss);
+  const buffer = Buffer.concat(buffers);
   fs.writeFileSync(outPath, buffer);
   return `${entry.key}.css`;
 }
