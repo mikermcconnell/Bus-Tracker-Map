@@ -12,3 +12,8 @@ monitor/logs/
 *.JPG
 *.png
 *.PNG
+
+# The Railway-hosted departure signs render these at runtime.
+!frontend/src/assets/agency-barrie-transit.png
+!frontend/src/assets/agency-ontario-northland.png
+!frontend/src/assets/agency-simcoe-linx.png
