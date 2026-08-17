@@ -53,6 +53,46 @@ test('legacy platform URL renders a responsive LINX departure sign', async ({ pa
   expect(boardBounds.width).toBeGreaterThan(1000);
   expect(boardBounds.width).toBeLessThanOrEqual(1152);
 });
+
+test('platform sign renders without newer browser convenience APIs', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.setViewportSize({ width: 320, height: 80 });
+  await page.addInitScript(() => {
+    String.prototype.padStart = undefined;
+    globalThis.Element.prototype.replaceChildren = undefined;
+    globalThis.NodeList.prototype.forEach = undefined;
+    globalThis.fetch = undefined;
+  });
+  await page.route('**/api/departures?*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      stop_code: '9002',
+      platform: '2',
+      platform_display: '02',
+      generated_at: Date.now(),
+      status: 'ok',
+      departures: [{
+        agency_id: 'simcoe-linx',
+        agency_name: 'Simcoe County LINX',
+        route_id: 'LINX-2',
+        route_label: '2',
+        destination: 'Wasaga Beach 45th St',
+        departure_time: nowSeconds + 54 * 60,
+        departure_source: 'realtime',
+        progress_status: 'approaching',
+      }],
+    }),
+  }));
+
+  await page.goto('/departures/platform.aspx?stop=9002');
+
+  await expect(page.locator('#departure-clock')).not.toHaveText('--:--');
+  await expect(page.locator('#platform-number')).toHaveText('02');
+  await expect(page.locator('.route-cell')).toHaveText('2 - Wasaga Beach 45th St');
+  await expect(page.locator('.departure-cell')).toContainText(/Departing in 5[34] min/);
+});
+
 test('valid empty and invalid platform URLs show clear states', async ({ page }) => {
   await page.route('**/api/departures?*', (route) => route.fulfill({
     status: 200,

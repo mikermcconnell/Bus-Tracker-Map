@@ -52,8 +52,14 @@ function parseStopCode(value) {
   return {
     stopCode,
     platform: String(platform),
-    display: String(platform).padStart(2, '0'),
+    display: platform < 10 ? `0${platform}` : String(platform),
   };
+}
+
+function clearChildren(element) {
+  while (element.firstChild) {
+    element.removeChild(element.firstChild);
+  }
 }
 
 function formatTorontoTime(date) {
@@ -159,7 +165,7 @@ function routeDescription(departure) {
 
 function renderEmpty(platformDisplay, message, detail) {
   const rows = document.getElementById('departure-rows');
-  rows.replaceChildren();
+  clearChildren(rows);
   const routeRow = document.createElement('tr');
   routeRow.appendChild(createPlatformCell(platformDisplay, 2));
   routeRow.appendChild(createCell('td', 'agency-cell'));
@@ -182,7 +188,7 @@ function renderDepartures(payload) {
     renderEmpty(platformDisplay, 'No departures scheduled', 'Please check again shortly');
     return;
   }
-  rows.replaceChildren();
+  clearChildren(rows);
   visibleDepartures.forEach((departure, index) => {
     const routeRow = document.createElement('tr');
     if (index === 0) {
@@ -207,9 +213,11 @@ function renderDepartures(payload) {
 }
 
 function refreshCountdowns() {
-  document.querySelectorAll('[data-departure-time]').forEach((cell) => {
+  const cells = document.querySelectorAll('[data-departure-time]');
+  for (let index = 0; index < cells.length; index += 1) {
+    const cell = cells[index];
     cell.textContent = formatDepartureText(cell.dataset.departureTime);
-  });
+  }
 }
 
 function updateClock() {
@@ -229,13 +237,46 @@ function setStatus(message) {
   status.hidden = !message;
 }
 
-async function loadDepartures(stopCode) {
-  const response = await fetch(`${API_PATH}?view=platform&stop=${encodeURIComponent(stopCode)}`, {
+function requestJsonWithXhr(url) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('GET', url, true);
+    request.setRequestHeader('Accept', 'application/json');
+    request.timeout = 15_000;
+    request.onreadystatechange = () => {
+      if (request.readyState !== 4) return;
+      if (request.status < 200 || request.status >= 300) {
+        reject(new Error(`Departure request failed (${request.status})`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(request.responseText));
+      } catch (err) {
+        reject(new Error('Departure response was not valid JSON'));
+      }
+    };
+    request.onerror = () => reject(new Error('Departure request failed (network error)'));
+    request.ontimeout = () => reject(new Error('Departure request failed (timeout)'));
+    request.send();
+  });
+}
+
+async function requestJson(url) {
+  if (typeof fetch !== 'function') {
+    return requestJsonWithXhr(url);
+  }
+  const response = await fetch(url, {
     cache: 'no-store',
     headers: { Accept: 'application/json' },
   });
   if (!response.ok) throw new Error(`Departure request failed (${response.status})`);
-  const payload = await response.json();
+  return response.json();
+}
+
+async function loadDepartures(stopCode) {
+  const payload = await requestJson(
+    `${API_PATH}?view=platform&stop=${encodeURIComponent(stopCode)}`
+  );
   renderDepartures(payload);
   setStatus('');
   return true;
