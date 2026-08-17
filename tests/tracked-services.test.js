@@ -11,14 +11,16 @@ describe('tracked service summaries', () => {
     const vehicles = [
       { id: 'bt-1', agency_id: 'barrie-transit', lat: 44.38, lon: -79.69 },
       { id: 'go-bus-1', agency_id: 'go-transit', route_mode: 'bus', lat: 44.37, lon: -79.69 },
-      { id: 'on-1', agency_id: 'ontario-northland', lat: 45.62, lon: -79.41 }
+      { id: 'on-1', agency_id: 'ontario-northland', lat: 45.62, lon: -79.41 },
+      { id: 'linx-2', agency_id: 'simcoe-linx', lat: 44.37, lon: -79.69 }
     ];
     const summaries = buildTrackedServiceSummaries({
       vehicles,
       sources: {
         barrie_transit: { feed_status: 'live' },
         go_transit: { feed_status: 'live' },
-        ontario_northland: { feed_status: 'live' }
+        ontario_northland: { feed_status: 'live' },
+        simcoe_linx: { feed_status: 'live' }
       },
       isOnMap: (vehicle) => vehicle.id !== 'on-1'
     });
@@ -41,7 +43,7 @@ describe('tracked service summaries', () => {
     expect(summaries[1].statusLabel).toBe('1 live on map');
     expect(summaries[2].statusLabel).toBe('0 live on map');
     expect(summaries[3].statusLabel).toBe('1 tracked · 0 on map');
-    expect(summaries[4].statusLabel).toBe('Not tracked');
+    expect(summaries[4].statusLabel).toBe('1 live on map');
   });
 
   test('groups modes under one agency logo while preserving per-mode counts', () => {
@@ -51,7 +53,8 @@ describe('tracked service summaries', () => {
         { id: 'go-train-1', agency_id: 'go-transit', route_mode: 'train' }
       ],
       sources: {
-        go_transit: { feed_status: 'live' }
+        go_transit: { feed_status: 'live' },
+        simcoe_linx: { feed_status: 'empty' }
       },
       isOnMap: (vehicle) => vehicle.id === 'go-bus-1'
     });
@@ -69,7 +72,7 @@ describe('tracked service summaries', () => {
       '1 tracked · 0 on map'
     ]);
     expect(agencies[3].logoSrc).toBe('./assets/agency-simcoe-linx.png');
-    expect(agencies[3].services[0].statusLabel).toBe('Not tracked');
+    expect(agencies[3].services[0].statusLabel).toBe('0 live on map');
   });
 
   test('shares Live Services agency branding with terminal rows', () => {
@@ -79,6 +82,8 @@ describe('tracked service summaries', () => {
       .toBe('./assets/agency-go-transit.svg');
     expect(getAgencyBranding('ontario-northland').logoSrc)
       .toBe('./assets/agency-ontario-northland.png');
+    expect(getAgencyBranding('simcoe-linx').logoSrc)
+      .toBe('./assets/agency-simcoe-linx.png');
   });
 
   test('uses feed-health wording instead of claiming delayed or offline vehicles are live', () => {

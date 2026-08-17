@@ -383,7 +383,7 @@ test('terminal board shows a GO train departure countdown at Allandale', async (
       }],
       sources: {
         go_transit: {
-          feed_status: 'delayed',
+          feed_status: 'live',
           latest_data_timestamp: nowSeconds,
           data_age_seconds: 0,
         },
@@ -405,5 +405,90 @@ test('terminal board shows a GO train departure countdown at Allandale', async (
   await expect(trainRow.locator('.nearby-bus__platform-number')).toHaveText('1');
   await expect(trainRow.locator('.nearby-bus__departure')).toHaveText('Departs in 5 min');
   await expect(page.locator('#banner')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('terminal board ignores viewport and route-layer visibility but excludes delayed agencies', async ({ page }) => {
+  const errors = captureRuntimeErrors(page);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const transparentTile = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+
+  await page.route('**/review-tile/**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'image/png',
+    body: transparentTile,
+  }));
+  await page.route('**/api/config', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      poll_ms: 5000,
+      feed_delayed_after_ms: 120000,
+      feed_offline_after_ms: 900000,
+      base_path: '/',
+      tiles: '/review-tile/{z}/{x}/{y}.png',
+      rt_feed_configured: true,
+    }),
+  }));
+  await page.route('**/api/routes.geojson*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ type: 'FeatureCollection', features: [] }),
+  }));
+  await page.route('**/api/vehicles.json?*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      generated_at: Date.now(),
+      feed_timestamp: nowSeconds,
+      latest_data_timestamp: nowSeconds,
+      feed_status: 'live',
+      vehicles: [{
+        id: 'northland-outside-map',
+        route_id: 'ONTC',
+        route_label: 'ON',
+        source_route_id: '101',
+        agency_id: 'ontario-northland',
+        agency_name: 'Ontario Northland',
+        trip_headsign: 'NORTH BAY',
+        lat: 45.1,
+        lon: -79.7,
+        last_reported: nowSeconds,
+        terminal_progress_status: 'approaching',
+        terminal_arrival_time: nowSeconds + 15 * 60,
+      }, {
+        id: 'delayed-go-at-terminal',
+        route_id: 'GO-BUS',
+        route_label: 'GO 68',
+        agency_id: 'go-transit',
+        agency_name: 'GO Transit',
+        lat: 44.3740170437343,
+        lon: -79.6899831810679,
+        last_reported: nowSeconds,
+        terminal_progress_status: 'at_terminal',
+      }],
+      sources: {
+        ontario_northland: {
+          feed_status: 'live',
+          latest_data_timestamp: nowSeconds,
+          data_age_seconds: 0,
+        },
+        go_transit: {
+          feed_status: 'delayed',
+          latest_data_timestamp: nowSeconds - 300,
+          data_age_seconds: 300,
+        },
+      },
+    }),
+  }));
+
+  await page.goto('/');
+
+  await expect(page.locator('.nearby-bus[data-vehicle-id="northland-outside-map"]')).toBeVisible();
+  await expect(page.locator('.nearby-bus[data-vehicle-id="delayed-go-at-terminal"]')).toHaveCount(0);
+  await expect(page.locator('.vehicle-bubble')).toHaveCount(0);
   expect(errors).toEqual([]);
 });

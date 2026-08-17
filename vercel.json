@@ -9,6 +9,32 @@
   },
   "headers": [
     {
+      "source": "/departures",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self' data:; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self';"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
+      "source": "/departures/platform.aspx",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self' data:; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self';"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    },
+    {
       "source": "/notices",
       "headers": [
         {
@@ -33,6 +59,14 @@
   ],
   "rewrites": [
     {
+      "source": "/departures",
+      "destination": "/shelter-departures.html"
+    },
+    {
+      "source": "/departures/platform.aspx",
+      "destination": "/departures.html"
+    },
+    {
       "source": "/batt.map",
       "destination": "/batt.map.html"
     },
@@ -55,12 +89,17 @@
     "ONTARIO_NORTHLAND_GTFS_RT_VEHICLES_URL": "https://ontarionorthland.tmix.se/gtfs-realtime/vehicleupdates.pb",
     "ONTARIO_NORTHLAND_GTFS_RT_TRIP_UPDATES_URL": "https://ontarionorthland.tmix.se/gtfs-realtime/tripupdates.pb",
     "ONTARIO_NORTHLAND_GTFS_RT_ALERTS_URL": "https://ontarionorthland.tmix.se/gtfs-realtime/alerts.pb",
+    "SIMCOE_LINX_ENABLED": "true",
+    "SIMCOE_LINX_GTFS_RT_VEHICLES_URL": "https://metrolinx.tmix.se/gtfs-realtime-belleville/vehiclepositions.pb",
+    "SIMCOE_LINX_GTFS_RT_TRIP_UPDATES_URL": "http://metrolinx.tmix.se/gtfs-realtime-simcoe/tripupdates.pb",
+    "SIMCOE_LINX_GTFS_RT_ALERTS_URL": "http://metrolinx.tmix.se/gtfs-realtime-simcoe/alerts.pb",
     "POLL_MS": "10000"
   },
   "build": {
     "env": {
       "GTFS_STATIC_URL": "https://www.myridebarrie.ca/gtfs/google_transit.zip",
-      "ONTARIO_NORTHLAND_GTFS_STATIC_URL": "https://ontarionorthland.tmix.se/gtfs/gtfs.zip"
+      "ONTARIO_NORTHLAND_GTFS_STATIC_URL": "https://ontarionorthland.tmix.se/gtfs/gtfs.zip",
+      "SIMCOE_LINX_GTFS_STATIC_URL": "https://metrolinx.tmix.se/gtfs/gtfs-simcoe.zip"
     }
   }
 }

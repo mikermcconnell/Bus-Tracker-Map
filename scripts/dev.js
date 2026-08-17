@@ -60,10 +60,13 @@ async function main() {
   await runOnce(nodeCmd, [path.join(__dirname, 'build-geojson.js'), '--skip-if-cache'], {
     cwd: projectRoot
   });
+  await runOnce(nodeCmd, [path.join(__dirname, 'build-frontend.js')], {
+    cwd: projectRoot
+  });
 
   const watcher = spawnTracked(nodeCmd, [path.join(__dirname, 'watch-frontend.js')], {
     cwd: projectRoot,
-    env: { ...process.env }
+    env: { ...process.env, SKIP_INITIAL_BUILD: '1' }
   });
 
   watcher.on('close', (code) => {

@@ -17,6 +17,7 @@ const srcDir = path.join(projectRoot, 'frontend', 'src');
 const dataDir = path.join(projectRoot, 'frontend', 'data');
 const distDir = path.join(projectRoot, 'frontend', 'dist');
 const assetsDir = path.join(distDir, 'assets');
+let atomicWriteSequence = 0;
 
 // Match the production bundle default so dev builds surface compatibility issues early.
 const DEFAULT_ESBUILD_TARGET = (process.env.ESBUILD_TARGET || 'es2017')
@@ -46,6 +47,8 @@ const entryPoints = [
     entryPath: path.join(srcDir, 'platform-map', 'main.js'),
     cssPath: path.join(srcDir, 'platform-map', 'styles.css'),
     includeLeafletCss: true,
+    includeMapboxCss: true,
+    skipLegacyDownlevel: true,
     templatePath: path.join(srcDir, 'platform-map', 'index.html'),
     outputHtml: 'platform.map.html'
   },
@@ -55,6 +58,21 @@ const entryPoints = [
     cssPath: path.join(srcDir, 'notices', 'styles.css'),
     templatePath: path.join(srcDir, 'notices', 'index.html'),
     outputHtml: 'notices.html'
+  },
+  {
+    key: 'departures',
+    entryPath: path.join(srcDir, 'departures', 'main.js'),
+    cssPath: path.join(srcDir, 'departures', 'styles.css'),
+    templatePath: path.join(srcDir, 'departures', 'index.html'),
+    outputHtml: 'departures.html',
+    assetPrefix: '../../assets/'
+  },
+  {
+    key: 'shelterDepartures',
+    entryPath: path.join(srcDir, 'shelter-departures', 'main.js'),
+    cssPath: path.join(srcDir, 'shelter-departures', 'styles.css'),
+    templatePath: path.join(srcDir, 'shelter-departures', 'index.html'),
+    outputHtml: 'shelter-departures.html'
   }
 ];
 
@@ -62,8 +80,18 @@ function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-function cleanDir(dir) {
-  fs.rmSync(dir, { recursive: true, force: true });
+function writeFileAtomic(filePath, contents) {
+  ensureDir(path.dirname(filePath));
+  const tempPath = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.${atomicWriteSequence += 1}.tmp`
+  );
+  try {
+    fs.writeFileSync(tempPath, contents);
+    fs.renameSync(tempPath, filePath);
+  } finally {
+    fs.rmSync(tempPath, { force: true });
+  }
 }
 
 function copyDataDirectory() {
@@ -154,9 +182,11 @@ async function buildJs(entry) {
   }
 
   const rawCode = Buffer.from(output.contents).toString('utf8');
-  const transformed = await downlevelJavaScript(rawCode, { filename: path.basename(entry.entryPath) });
+  const transformed = entry.skipLegacyDownlevel
+    ? rawCode
+    : await downlevelJavaScript(rawCode, { filename: path.basename(entry.entryPath) });
   const outPath = path.join(assetsDir, `${entry.key}.js`);
-  fs.writeFileSync(outPath, transformed);
+  writeFileAtomic(outPath, transformed);
 
   return `${entry.key}.js`;
 }
@@ -164,39 +194,45 @@ async function buildJs(entry) {
 function buildCss(entry) {
   const outPath = path.join(assetsDir, `${entry.key}.css`);
   const appCss = fs.readFileSync(entry.cssPath);
-  const buffer = entry.includeLeafletCss
-    ? Buffer.concat([
+  const buffers = [];
+  if (entry.includeLeafletCss) {
+    buffers.push(
       fs.readFileSync(path.join(projectRoot, 'node_modules', 'leaflet', 'dist', 'leaflet.css')),
-      Buffer.from('\n'),
-      appCss,
-    ])
-    : appCss;
-  fs.writeFileSync(outPath, buffer);
+      Buffer.from('\n')
+    );
+  }
+  if (entry.includeMapboxCss) {
+    buffers.push(
+      fs.readFileSync(path.join(projectRoot, 'node_modules', 'mapbox-gl', 'dist', 'mapbox-gl.css')),
+      Buffer.from('\n')
+    );
+  }
+  buffers.push(appCss);
+  const buffer = Buffer.concat(buffers);
+  writeFileAtomic(outPath, buffer);
   return `${entry.key}.css`;
 }
 
 function writeHtml(entry, assetMap) {
   const template = fs.readFileSync(entry.templatePath, 'utf8');
+  const assetPrefix = entry.assetPrefix || './assets/';
   const html = template
-    .replace(/%APP_JS%/g, `./assets/${assetMap.js}?v=${Date.now()}`)
-    .replace(/%APP_CSS%/g, `./assets/${assetMap.css}?v=${Date.now()}`)
+    .replace(/%APP_JS%/g, `${assetPrefix}${assetMap.js}?v=${Date.now()}`)
+    .replace(/%APP_CSS%/g, `${assetPrefix}${assetMap.css}?v=${Date.now()}`)
     .replace(/%BUILD_ID%/g, new Date().toISOString());
-  fs.writeFileSync(path.join(distDir, entry.outputHtml), html);
+  writeFileAtomic(path.join(distDir, entry.outputHtml), html);
 }
 
 function writeManifest(entryAssets) {
   const manifestPath = path.join(distDir, 'manifest.json');
-  fs.writeFileSync(manifestPath, JSON.stringify({
+  writeFileAtomic(manifestPath, JSON.stringify({
     generatedAt: new Date().toISOString(),
     mode: 'watch',
     entries: entryAssets
   }, null, 2));
 }
 
-async function buildFrontend({ clean } = { clean: false }) {
-  if (clean) {
-    cleanDir(distDir);
-  }
+async function buildFrontend() {
   ensureDir(distDir);
   ensureDir(assetsDir);
 
@@ -225,9 +261,14 @@ async function buildFrontend({ clean } = { clean: false }) {
 }
 
 async function main() {
-  console.log('[watch] Performing initial frontend build…');
-  await buildFrontend({ clean: true });
-  console.log('[watch] Frontend build ready. Watching for changes.');
+  if (process.env.SKIP_INITIAL_BUILD === '1') {
+    console.log('[watch] Using the frontend build prepared by the development launcher.');
+  } else {
+    console.log('[watch] Performing initial frontend build…');
+    await buildFrontend();
+    console.log('[watch] Frontend build ready.');
+  }
+  console.log('[watch] Watching for changes.');
 
   let building = false;
   let rebuildQueued = false;

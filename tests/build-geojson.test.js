@@ -105,9 +105,11 @@ test('build-geojson emits routes and stops artefacts', async () => {
     const routesPath = path.join(cacheDir, 'routes.geojson');
     const stopsPath = path.join(cacheDir, 'stops.geojson');
     const metadataPath = path.join(cacheDir, 'barrie-transit.json');
+    const departuresPath = path.join(cacheDir, 'barrie-departures.json');
     expect(fs.existsSync(routesPath)).toBe(true);
     expect(fs.existsSync(stopsPath)).toBe(true);
     expect(fs.existsSync(metadataPath)).toBe(true);
+    expect(fs.existsSync(departuresPath)).toBe(true);
 
     const routes = JSON.parse(fs.readFileSync(routesPath, 'utf8'));
     expect(routes.type).toBe('FeatureCollection');
@@ -124,7 +126,9 @@ test('build-geojson emits routes and stops artefacts', async () => {
     const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
     expect(metadata.terminal_stop_ids).toEqual(['14', '9006']);
     expect(metadata.terminal_stops).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: '14', name: 'Essa at Gowan', platform_code: '14' }),
+      expect.objectContaining({
+        id: '14', name: 'Essa at Gowan', platform_code: '14', lat: 44.373522, lon: -79.691152,
+      }),
     ]));
     expect(metadata.trips['trip-12b'].terminal_stops).toEqual([
       {
@@ -155,6 +159,18 @@ test('build-geojson emits routes and stops artefacts', async () => {
     expect(metadata.terminal_approach_fallbacks['1|0|1001']).toBeUndefined();
     expect(metadata.service_calendars.weekday.monday).toBe(true);
     expect(metadata.service_exceptions['20260803'].weekday).toBe(2);
+
+    const departures = JSON.parse(fs.readFileSync(departuresPath, 'utf8'));
+    expect(departures.stops['1001']).toMatchObject({
+      id: '1001', code: '1001', name: 'Terminal',
+    });
+    expect(departures.stop_ids_by_code['1001']).toBe('1001');
+    expect(departures.trips['trip-1']).toMatchObject({
+      route_id: '1', service_id: 'weekday', direction_id: '0', headsign: 'Downtown',
+    });
+    expect(departures.departures_by_stop['1001'][0]).toEqual([
+      'trip-1', '12:00:00', 1, null,
+    ]);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     fs.rmSync(cacheDir, { recursive: true, force: true });

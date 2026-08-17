@@ -15,6 +15,7 @@
     "express": "^4.22.2",
     "gtfs-realtime-bindings": "^2.2.0",
     "leaflet": "^1.9.4",
+    "mapbox-gl": "^3.25.0",
     "node-fetch": "2.7.0",
     "nodemailer": "^9.0.3",
     "pdf-to-img": "^6.2.0",
@@ -22,8 +23,9 @@
   },
   "scripts": {
     "build": "npm run build:frontend && npm run build:data",
-    "build:data": "node scripts/build-geojson.js && node scripts/build-ontario-northland.js && node scripts/build-go-transit.js",
+    "build:data": "node scripts/build-geojson.js && node scripts/build-ontario-northland.js && node scripts/build-simcoe-linx.js && node scripts/build-go-transit.js",
     "build:northland": "node scripts/build-ontario-northland.js",
+    "build:simcoe": "node scripts/build-simcoe-linx.js",
     "build:go": "node scripts/build-go-transit.js",
     "build:frontend": "node scripts/build-frontend.js",
     "watch:frontend": "node scripts/watch-frontend.js",

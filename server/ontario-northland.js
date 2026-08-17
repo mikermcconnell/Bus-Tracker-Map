@@ -3,7 +3,7 @@ const path = require('path');
 const fetch = require('node-fetch');
 const GtfsRealtimeBindings = require('gtfs-realtime-bindings');
 const { fetchVehicles } = require('./vehicles');
-const { enrichTerminalProgress } = require('./terminal-progress');
+const { enrichTerminalProgressWithFallback } = require('./terminal-progress');
 
 const DEFAULT_STATIC_URL = 'https://ontarionorthland.tmix.se/gtfs/gtfs.zip';
 const DEFAULT_VEHICLES_URL = 'https://ontarionorthland.tmix.se/gtfs-realtime/vehicleupdates.pb';
@@ -157,7 +157,7 @@ function qualifyVehicle(vehicle, metadata, tripUpdates) {
   const terminalUpdate = vehicle.trip_id && tripUpdates && tripUpdates[vehicle.trip_id] || null;
   const rawVehicleId = String(vehicle.id || vehicle.trip_id || `route-${sourceRouteId}`);
 
-  return enrichTerminalProgress({
+  return enrichTerminalProgressWithFallback({
     ...vehicle,
     id: `ontario-northland:${rawVehicleId}`,
     route_id: agency.map_route_id || 'ONTC',
@@ -184,6 +184,8 @@ function qualifyVehicle(vehicle, metadata, tripUpdates) {
           }]
         : []
     ),
+    terminalApproachFallbacks: metadata.terminal_approach_fallbacks,
+    terminalApproachFallbackStatuses: ['departed', 'not_serving', 'unknown'],
   });
 }
 

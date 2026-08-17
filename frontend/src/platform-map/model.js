@@ -28,6 +28,9 @@ export const ROUTE_COLORS = Object.freeze({
   ONTC: '#00214D',
   'GO-BUS': '#007A33',
   'GO-TRAIN': '#007A33',
+  'LINX-1': '#FF7733',
+  'LINX-2': '#006747',
+  'LINX-3': '#339966',
 });
 
 function referenceImageRect() {
@@ -175,13 +178,17 @@ export function getVehicleLabel(vehicle) {
     const label = String(vehicle.route_label || '').replace(/^GO\s*/i, '').trim();
     return label ? `GO ${label}` : 'GO BUS';
   }
+  if (vehicle.agency_id === 'simcoe-linx') {
+    const label = String(vehicle.source_route_id || vehicle.route_label || '').replace(/^LINX\s*/i, '').trim();
+    return label ? `LINX ${label}` : 'LINX';
+  }
   return String(vehicle.route_label || vehicle.route_id || '?');
 }
 
 export function isTerminalDisplayVehicle(vehicle) {
   if (!vehicle || !projectVehicleToImage(vehicle.lat, vehicle.lon)) return false;
   const status = String(vehicle.terminal_progress_status || '').toLowerCase();
-  return status !== 'not_serving';
+  return status !== 'not_serving' && status !== 'departed';
 }
 
 export function groupPlatformAssignments(assignments) {

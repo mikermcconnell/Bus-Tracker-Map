@@ -27,19 +27,21 @@ function createStaticZip() {
     'stops.txt': [
       'stop_id,stop_name,stop_lat,stop_lon',
       '315,BARRIE ALLANDALE TERMINAL,44.3741,-79.6902',
+      '100,TORONTO COACH TERMINAL,43.656,-79.384',
       '900,NORTH BAY,46.3,-79.4',
       ''
     ],
     'stop_times.txt': [
       'trip_id,arrival_time,departure_time,stop_id,stop_sequence',
+      'trip-barrie,10:00:00,10:05:00,100,1',
       'trip-barrie,12:00:00,12:05:00,315,2',
       'trip-other,13:00:00,13:05:00,900,2',
       ''
     ],
     'trips.txt': [
-      'route_id,service_id,trip_id,trip_headsign,shape_id',
-      '101,weekday,trip-barrie,NORTH BAY,shape-barrie',
-      '301,weekday,trip-other,TIMMINS,shape-other',
+      'route_id,service_id,trip_id,trip_headsign,direction_id,shape_id',
+      '101,weekday,trip-barrie,NORTH BAY,0,shape-barrie',
+      '301,weekday,trip-other,TIMMINS,0,shape-other',
       ''
     ],
     'shapes.txt': [
@@ -84,6 +86,9 @@ describe('Ontario Northland integration', () => {
 
     expect(result.metadata.barrie_route_ids).toEqual(['101']);
     expect(result.metadata.barrie_stop_ids).toEqual(['315']);
+    expect(result.metadata.barrie_stops).toEqual([
+      expect.objectContaining({ id: '315', lat: 44.3741, lon: -79.6902 }),
+    ]);
     expect(result.metadata.trips['trip-barrie'].headsign).toBe('NORTH BAY');
     expect(result.metadata.trips['trip-barrie'].service_id).toBe('weekday');
     expect(result.metadata.service_calendars.weekday.friday).toBe(true);
@@ -96,6 +101,10 @@ describe('Ontario Northland integration', () => {
         departure_time: '12:05:00',
       },
     ]);
+    expect(result.metadata.terminal_approach_fallbacks['101|0|100']).toMatchObject({
+      terminal_stop_ids: ['315'],
+      candidate_trip_count: 1,
+    });
     expect(result.routes.features.length).toBeGreaterThan(0);
     expect(result.routes.features[0].properties).toMatchObject({
       route_id: 'ONTC',
@@ -136,6 +145,34 @@ describe('Ontario Northland integration', () => {
       agency_name: 'Ontario Northland',
       terminal_stop_id: '315',
       terminal_delay_seconds: 60,
+    });
+  });
+
+  test('uses a safe route-direction-stop fallback when a realtime trip id is newer than static metadata', () => {
+    const metadata = buildArtifactsFromZip(createStaticZip(), {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'LineString', coordinates: [[-79.72, 44.35], [-79.66, 44.41]] },
+      }],
+    }).metadata;
+
+    const vehicle = qualifyVehicle({
+      id: 'coach-new-trip',
+      route_id: '101',
+      trip_id: 'new-realtime-trip-id',
+      direction_id: 0,
+      stop_id: '100',
+      current_stop_sequence: 1,
+      lat: 44.2,
+      lon: -79.5,
+    }, metadata, {});
+
+    expect(vehicle).toMatchObject({
+      terminal_progress_status: 'approaching',
+      terminal_stop_id: '315',
+      terminal_progress_source: 'route_direction_stop_fallback',
     });
   });
 

@@ -12,8 +12,9 @@ A single-page Leaflet app that shows Barrie Transit routes and live vehicle posi
    - Keep `GTFS_STATIC_URL=https://www.myridebarrie.ca/gtfs/google_transit.zip`.
    - Set `GTFS_RT_VEHICLES_URL` to your exact Vehicle Positions protobuf URL (for example `https://www.myridebarrie.ca/gtfs/GTFS_VehiclePositions.pb`).
    - Keep the four `ONTARIO_NORTHLAND_*` feed URLs from `.env.example`; set `ONTARIO_NORTHLAND_ENABLED=false` only if that source must be disabled.
+   - Keep the five `SIMCOE_LINX_*` settings from `.env.example`; LINX vehicle positions come from a shared Ontario feed and are matched to the Simcoe schedule by exact trip ID.
    - Set `METROLINX_API_KEY` to the server-side Metrolinx Open Data API key and leave `GO_TRANSIT_ENABLED=true`.
-   - Set `MAPBOX_ACCESS_TOKEN`, `MAPBOX_USERNAME`, and `MAPBOX_STYLE_ID` to use the custom TV basemap. When they are omitted or Mapbox tiles fail, the map falls back to OpenStreetMap. See `mapbox/README.md` for style publishing and token restrictions.
+   - Set `MAPBOX_ACCESS_TOKEN`, `MAPBOX_USERNAME`, and `MAPBOX_STYLE_ID` to use the custom main-map TV basemap. Set `PLATFORM_MAPBOX_STYLE_ID` when the platform display uses a separate Mapbox GL style, including a Mapbox Standard-import style. Missing settings, tile failures, or unsupported WebGL fall back to OpenStreetMap. See `mapbox/README.md` for style publishing and token restrictions.
    - Leave `POLL_MS=10000` unless you need a different polling interval.
    - Optional: set `BASE_PATH` if the app is hosted from a subdirectory (for example `/transit`).
    - Optional: set `ALLOWED_ORIGINS` (comma separated) to explicitly allow trusted cross-origin clients; otherwise the API is same-origin only.
@@ -30,9 +31,9 @@ npm install
 ```bash
 npm run build
 ```
-This bundles the frontend into `frontend/dist/` (hashed assets for long-lived caching), refreshes Barrie GTFS GeoJSON, creates a compact Ontario Northland layer containing only the routes that serve Barrie, and creates GO bus/train layers containing only trips serving Allandale stops `08049` and `AD`.
+This bundles the frontend into `frontend/dist/` (hashed assets for long-lived caching), refreshes Barrie GTFS GeoJSON, creates compact Ontario Northland and Simcoe LINX layers containing only routes that serve Barrie, and creates GO bus/train layers containing only trips serving Allandale stops `08049` and `AD`.
 
-> Tip: Run `npm run build:northland` to refresh only Ontario Northland data, `npm run build:go` to refresh only GO Allandale data, or `npm run build:frontend` to rebuild the SPA bundle by itself.
+> Tip: Run `npm run build:northland` to refresh only Ontario Northland data, `npm run build:simcoe` to refresh only Simcoe LINX data, `npm run build:go` to refresh only GO Allandale data, or `npm run build:frontend` to rebuild the SPA bundle by itself.
 
 ## 4. Start the server
 ```bash
@@ -59,6 +60,12 @@ Open [http://localhost:3000](http://localhost:3000) in a browser (or on the Smar
 - Ontario Northland service alerts are intentionally neither requested nor published; this map is focused on route and live-vehicle tracking.
 
 The terminal-focused displays are available at `/platform.map` and `/batt.map`. Both consume the same merged, freshness-checked vehicle endpoint and show Ontario Northland and GO vehicles when they enter the calibrated Allandale platform area. The platform display reads `/api/terminal-layout`, overlays current GTFS-derived bay assignments, keeps live markers aligned at 16:9 and 4:3, and marks Platform 14 as having no scheduled service when it is absent from the current Barrie feed.
+
+## Departure displays
+
+The **next bus display** for a Barrie bus shelter is available at `/departures?stop=2`. The `stop` query accepts any current Barrie GTFS stop code or stop ID, shows the stop name in the header, and combines scheduled GTFS with Trip Updates when realtime data is available. Its primary target is a 320 x 80 screen: a compact 20-pixel header and three 20-pixel departure rows. It refreshes and advances through additional departures every 10 seconds.
+
+The Allandale platform-specific departure display remains available at `/departures/platform.aspx?stop=9002`.
 
 ### Metrolinx data notice
 

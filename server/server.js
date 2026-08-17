@@ -4,6 +4,7 @@ const fs = require('fs');
 const express = require('express');
 require('dotenv').config();
 const {
+  fetchTripUpdates,
   fetchVehicles,
   fetchTerminalTripUpdates,
   selectTerminalTripUpdate,
@@ -18,6 +19,12 @@ const {
   DEFAULT_API_BASE: DEFAULT_METROLINX_API_BASE,
   fetchGoTransitRealtime,
 } = require('./go-transit');
+const {
+  DEFAULT_VEHICLES_URL: DEFAULT_SIMCOE_LINX_VEHICLES_URL,
+  DEFAULT_TRIP_UPDATES_URL: DEFAULT_SIMCOE_LINX_TRIP_UPDATES_URL,
+  DEFAULT_ALERTS_URL: DEFAULT_SIMCOE_LINX_ALERTS_URL,
+  fetchSimcoeLinxRealtime,
+} = require('./simcoe-linx');
 const { assessVehicleFeedFreshness } = require('../shared/feed-freshness');
 const { buildServiceStatus } = require('./service-status');
 const { noticeService } = require('./notices');
@@ -26,6 +33,14 @@ const {
   loadTerminalMetadata,
 } = require('./terminal-progress');
 const { buildTerminalLayout } = require('./terminal-layout');
+const { buildPlatformDepartures, buildTerminalDepartures, parsePlatformStopCode } = require('./departures');
+const {
+  buildShelterDepartures,
+  loadShelterDepartureMetadata,
+  parseShelterGroupQuery,
+  parseShelterStopQuery,
+  resolveShelterLocation,
+} = require('./shelter-departures');
 
 function normalizeBasePath(input) {
   if (!input) return '/';
@@ -157,6 +172,15 @@ const ONTARIO_NORTHLAND_TRIP_UPDATES_URL =
   process.env.ONTARIO_NORTHLAND_GTFS_RT_TRIP_UPDATES_URL || DEFAULT_ONTARIO_NORTHLAND_TRIP_UPDATES_URL;
 const ONTARIO_NORTHLAND_ALERTS_URL =
   process.env.ONTARIO_NORTHLAND_GTFS_RT_ALERTS_URL || DEFAULT_ONTARIO_NORTHLAND_ALERTS_URL;
+const SIMCOE_LINX_ENABLED = !/^(?:0|false|no|off)$/i.test(
+  String(process.env.SIMCOE_LINX_ENABLED || 'true').trim()
+);
+const SIMCOE_LINX_RT_URL =
+  process.env.SIMCOE_LINX_GTFS_RT_VEHICLES_URL || DEFAULT_SIMCOE_LINX_VEHICLES_URL;
+const SIMCOE_LINX_TRIP_UPDATES_URL =
+  process.env.SIMCOE_LINX_GTFS_RT_TRIP_UPDATES_URL || DEFAULT_SIMCOE_LINX_TRIP_UPDATES_URL;
+const SIMCOE_LINX_ALERTS_URL =
+  process.env.SIMCOE_LINX_GTFS_RT_ALERTS_URL || DEFAULT_SIMCOE_LINX_ALERTS_URL;
 const METROLINX_API_KEY = String(process.env.METROLINX_API_KEY || '').trim();
 const GO_TRANSIT_PROXY_URL = String(process.env.GO_TRANSIT_PROXY_URL || '').trim();
 const GO_TRANSIT_ENABLED = Boolean(METROLINX_API_KEY || GO_TRANSIT_PROXY_URL) && !/^(?:0|false|no|off)$/i.test(
@@ -172,6 +196,8 @@ const CACHE_DIR = path.resolve(process.env.CACHE_DIR || path.join(__dirname, '..
 const barrieTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'barrie-transit.json');
 const northlandTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'ontario-northland.json');
 const goTransitTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'go-transit.json');
+const simcoeLinxTerminalMetadata = loadTerminalMetadata(CACHE_DIR, 'simcoe-linx.json');
+const barrieShelterMetadata = loadShelterDepartureMetadata(CACHE_DIR);
 const hashedAssetPattern = /\.[0-9a-f]{10}\.(?:js|css)$/;
 const allowedOrigins = parseAllowedOrigins(process.env.ALLOWED_ORIGINS);
 const corsMiddleware = createCorsMiddleware(allowedOrigins);
@@ -218,6 +244,22 @@ function buildBasemapConfig(styleId = MAPBOX_STYLE_ID) {
   };
 }
 
+function buildPlatformBasemapConfig() {
+  const mapboxConfigured = Boolean(
+    MAPBOX_ACCESS_TOKEN && MAPBOX_USERNAME && PLATFORM_MAPBOX_STYLE_ID
+  );
+  if (!mapboxConfigured) return buildBasemapConfig('');
+
+  return {
+    provider: 'mapbox-gl',
+    style_url: `mapbox://styles/${MAPBOX_USERNAME}/${PLATFORM_MAPBOX_STYLE_ID}`,
+    access_token: MAPBOX_ACCESS_TOKEN,
+    attribution: MAPBOX_ATTRIBUTION,
+    fallback_url: OSM_TILE_URL,
+    fallback_attribution: OSM_ATTRIBUTION,
+  };
+}
+
 if (allowedOrigins.size) {
   console.log('API CORS allowed for origins:', Array.from(allowedOrigins).join(', '));
 } else {
@@ -252,6 +294,7 @@ function sendMergedRoutes(res) {
   const barriePath = path.join(CACHE_DIR, 'routes.geojson');
   const northlandPath = path.join(CACHE_DIR, 'ontario-northland-routes.geojson');
   const goTransitPath = path.join(CACHE_DIR, 'go-transit-routes.geojson');
+  const simcoeLinxPath = path.join(CACHE_DIR, 'simcoe-linx-routes.geojson');
   const barrie = readFeatureCollection(barriePath);
   if (!barrie) {
     res.status(404).json({ error: 'routes.geojson not built yet' });
@@ -263,12 +306,16 @@ function sendMergedRoutes(res) {
   const goTransit = GO_TRANSIT_ENABLED
     ? readFeatureCollection(goTransitPath)
     : null;
+  const simcoeLinx = SIMCOE_LINX_ENABLED
+    ? readFeatureCollection(simcoeLinxPath)
+    : null;
   res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=60');
   res.json({
     type: 'FeatureCollection',
     features: barrie.features
       .concat(northland ? northland.features : [])
-      .concat(goTransit ? goTransit.features : []),
+      .concat(goTransit ? goTransit.features : [])
+      .concat(simcoeLinx ? simcoeLinx.features : []),
   });
 }
 
@@ -282,6 +329,7 @@ function addBarrieAgencyMetadata(payload, tripUpdates = {}) {
       const terminalUpdate = selectTerminalTripUpdate(vehicle, tripUpdates);
       return enrichTerminalProgressWithFallback({
         ...vehicle,
+        shape_id: trip.shape_id || null,
         trip_headsign: trip.headsign || null,
         agency_id: 'barrie-transit',
         agency_name: 'Barrie Transit',
@@ -349,11 +397,19 @@ async function getCombinedVehiclePayload() {
     apiBase: METROLINX_API_BASE,
     cacheDir: CACHE_DIR,
   });
+  const simcoeLinxPromise = fetchSimcoeLinxRealtime({
+    enabled: SIMCOE_LINX_ENABLED,
+    cacheDir: CACHE_DIR,
+    vehiclesUrl: SIMCOE_LINX_RT_URL,
+    tripUpdatesUrl: SIMCOE_LINX_TRIP_UPDATES_URL,
+    alertsUrl: SIMCOE_LINX_ALERTS_URL,
+  });
 
-  const [barrieResult, northlandResult, goTransitResult] = await Promise.allSettled([
+  const [barrieResult, northlandResult, goTransitResult, simcoeLinxResult] = await Promise.allSettled([
     barriePromise,
     northlandPromise,
     goTransitPromise,
+    simcoeLinxPromise,
   ]);
 
   const barriePayload = barrieResult.status === 'fulfilled'
@@ -381,6 +437,15 @@ async function getCombinedVehiclePayload() {
       vehicles: [],
       fetch_error: true,
     };
+  const simcoeLinxPayload = simcoeLinxResult.status === 'fulfilled'
+    ? simcoeLinxResult.value
+    : {
+      generated_at: Date.now(),
+      feed_timestamp: null,
+      vehicles: [],
+      alerts: [],
+      fetch_error: true,
+    };
 
   if (barrieResult.status === 'rejected') {
     console.error('[barrie-transit] Vehicle feed unavailable:', barrieResult.reason && barrieResult.reason.message || barrieResult.reason);
@@ -390,6 +455,9 @@ async function getCombinedVehiclePayload() {
   }
   if (goTransitResult.status === 'rejected') {
     console.error('[go-transit] Vehicle feed unavailable:', goTransitResult.reason && goTransitResult.reason.message || goTransitResult.reason);
+  }
+  if (simcoeLinxResult.status === 'rejected') {
+    console.error('[simcoe-linx] Vehicle feed unavailable:', simcoeLinxResult.reason && simcoeLinxResult.reason.message || simcoeLinxResult.reason);
   }
 
   const barrieFreshness = assessVehicleFeedFreshness(barriePayload, {
@@ -408,6 +476,11 @@ async function getCombinedVehiclePayload() {
     offlineAfterMs: FEED_OFFLINE_AFTER_MS,
     preferFeedTimestamp: true,
   });
+  const simcoeLinxFreshness = assessVehicleFeedFreshness(simcoeLinxPayload, {
+    configured: SIMCOE_LINX_ENABLED,
+    delayedAfterMs: FEED_DELAYED_AFTER_MS,
+    offlineAfterMs: FEED_OFFLINE_AFTER_MS,
+  });
 
   const data = {
     generated_at: Date.now(),
@@ -415,11 +488,13 @@ async function getCombinedVehiclePayload() {
       barriePayload.feed_timestamp,
       northlandPayload.feed_timestamp,
       goTransitPayload.feed_timestamp,
+      simcoeLinxPayload.feed_timestamp,
     ]),
     vehicles: (barriePayload.vehicles || [])
       .concat(northlandPayload.vehicles || [])
-      .concat(goTransitPayload.vehicles || []),
-    alerts: northlandPayload.alerts || [],
+      .concat(goTransitPayload.vehicles || [])
+      .concat(simcoeLinxPayload.vehicles || []),
+    alerts: (northlandPayload.alerts || []).concat(simcoeLinxPayload.alerts || []),
     sources: {
       barrie_transit: {
         agency_name: 'Barrie Transit',
@@ -436,18 +511,46 @@ async function getCombinedVehiclePayload() {
         vehicle_count: (goTransitPayload.vehicles || []).length,
         ...goTransitFreshness,
       },
+      simcoe_linx: {
+        agency_name: 'Simcoe County LINX',
+        vehicle_count: (simcoeLinxPayload.vehicles || []).length,
+        ...simcoeLinxFreshness,
+      },
     },
   };
   const freshness = assessVehicleFeedFreshness(data, {
-    configured: Boolean(RT_URL) || ONTARIO_NORTHLAND_ENABLED || GO_TRANSIT_ENABLED,
+    configured: Boolean(RT_URL) || ONTARIO_NORTHLAND_ENABLED || GO_TRANSIT_ENABLED || SIMCOE_LINX_ENABLED,
     delayedAfterMs: FEED_DELAYED_AFTER_MS,
     offlineAfterMs: FEED_OFFLINE_AFTER_MS,
   });
-  return { ...data, ...freshness };
+  const terminalLayout = buildTerminalLayout({
+    barrie: barrieTerminalMetadata,
+    ontarioNorthland: northlandTerminalMetadata,
+    goTransit: goTransitTerminalMetadata,
+    simcoeLinx: simcoeLinxTerminalMetadata,
+  });
+  return {
+    ...data,
+    ...freshness,
+    terminal_departures: buildTerminalDepartures({
+      layout: terminalLayout,
+      vehiclePayload: data,
+    }),
+  };
 }
 
 const router = express.Router();
 const apiRouter = express.Router();
+
+// Keep this before express.static: its extension fallback would otherwise map
+// `/departures` to the legacy platform file named departures.html.
+router.get('/departures', (req, res, next) => {
+  const departuresPath = path.join(FRONTEND_DIR, 'shelter-departures.html');
+  if (!fs.existsSync(departuresPath)) return next();
+  res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self';");
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(departuresPath);
+});
 
 router.use(express.static(FRONTEND_DIR, {
   extensions: ['html'],
@@ -479,7 +582,7 @@ apiRouter.get('/stops.geojson', (req, res) => {
 
 apiRouter.get('/config', (req, res) => {
   const basemap = buildBasemapConfig();
-  const platformBasemap = buildBasemapConfig(PLATFORM_MAPBOX_STYLE_ID);
+  const platformBasemap = buildPlatformBasemapConfig();
   res.json({
     poll_ms: POLL_MS,
     feed_delayed_after_ms: Number.isFinite(FEED_DELAYED_AFTER_MS) && FEED_DELAYED_AFTER_MS > 0
@@ -493,11 +596,12 @@ apiRouter.get('/config', (req, res) => {
     platform_basemap: platformBasemap,
     // Keep the original field during the client migration.
     tiles: basemap.url,
-    rt_feed_configured: Boolean(RT_URL) || ONTARIO_NORTHLAND_ENABLED || GO_TRANSIT_ENABLED,
+    rt_feed_configured: Boolean(RT_URL) || ONTARIO_NORTHLAND_ENABLED || GO_TRANSIT_ENABLED || SIMCOE_LINX_ENABLED,
     transit_sources: {
       barrie_transit: Boolean(RT_URL),
       ontario_northland: ONTARIO_NORTHLAND_ENABLED,
       go_transit: GO_TRANSIT_ENABLED,
+      simcoe_linx: SIMCOE_LINX_ENABLED,
     },
   });
 });
@@ -508,7 +612,80 @@ apiRouter.get('/terminal-layout', (req, res) => {
     barrie: barrieTerminalMetadata,
     ontarioNorthland: northlandTerminalMetadata,
     goTransit: goTransitTerminalMetadata,
+    simcoeLinx: simcoeLinxTerminalMetadata,
   }));
+});
+
+apiRouter.get('/departures', async (req, res) => {
+  const stopCode = req.query && req.query.stop;
+  const groupId = req.query && req.query.group;
+  if (String(req.query && req.query.view || '').toLowerCase() === 'platform') {
+    if (!parsePlatformStopCode(stopCode)) {
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.status(400).json({
+        error: 'INVALID_STOP_CODE',
+        message: 'Use a terminal stop code from 9001 to 9014.',
+      });
+    }
+    const layout = buildTerminalLayout({
+      barrie: barrieTerminalMetadata,
+      ontarioNorthland: northlandTerminalMetadata,
+      goTransit: goTransitTerminalMetadata,
+      simcoeLinx: simcoeLinxTerminalMetadata,
+    });
+    let vehiclePayload;
+    try {
+      vehiclePayload = await getCombinedVehiclePayload();
+    } catch (err) {
+      console.error('[platform-departures] Realtime data unavailable:', err && err.message || err);
+      vehiclePayload = { vehicles: [], sources: {} };
+    }
+    const payload = buildPlatformDepartures({ stopCode, layout, vehiclePayload });
+    res.setHeader('Cache-Control', 'public, max-age=5');
+    return res.json(payload);
+  }
+
+  if (!parseShelterStopQuery(stopCode) && !parseShelterGroupQuery(groupId)) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(400).json({
+      error: 'STOP_REQUIRED',
+      message: 'Add a Barrie Transit stop using ?stop= or a named location using ?group=.',
+    });
+  }
+  if (!resolveShelterLocation(barrieShelterMetadata, { stopQuery: stopCode, groupQuery: groupId })) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(404).json({
+      error: groupId ? 'GROUP_NOT_FOUND' : 'STOP_NOT_FOUND',
+      message: groupId
+        ? `Barrie Transit departure group ${String(groupId)} was not found.`
+        : `Barrie Transit stop ${String(stopCode)} was not found.`,
+    });
+  }
+
+  let tripUpdates = {};
+  let feedTimestamp = null;
+  let realtimeStatus = 'scheduled';
+  if (RT_URL && RT_TRIP_UPDATES_URL) {
+    try {
+      const realtime = await fetchTripUpdates(RT_TRIP_UPDATES_URL);
+      tripUpdates = realtime.trip_updates || {};
+      feedTimestamp = realtime.feed_timestamp || null;
+      realtimeStatus = 'live';
+    } catch (err) {
+      console.error('[shelter-departures] Realtime data unavailable:', err && err.message || err);
+      realtimeStatus = 'unavailable';
+    }
+  }
+  const payload = buildShelterDepartures({
+    metadata: barrieShelterMetadata,
+    stopQuery: stopCode,
+    groupQuery: groupId,
+    tripUpdates,
+    feedTimestamp,
+    realtimeStatus,
+  });
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json(payload);
 });
 
 apiRouter.get('/service-status', (req, res) => {
@@ -606,6 +783,14 @@ router.get('/platform.map', (req, res, next) => {
   if (!fs.existsSync(platformPath)) return next();
   res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
   res.sendFile(platformPath);
+});
+
+router.get('/departures/platform.aspx', (req, res, next) => {
+  const departuresPath = path.join(FRONTEND_DIR, 'departures.html');
+  if (!fs.existsSync(departuresPath)) return next();
+  res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self';");
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(departuresPath);
 });
 
 router.get('/notices', (req, res, next) => {

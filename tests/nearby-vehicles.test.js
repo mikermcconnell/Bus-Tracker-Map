@@ -101,7 +101,7 @@ describe('nearest BATT vehicle selection', () => {
     expect(selected[0].distanceMeters).toBeCloseTo(0, 3);
   });
 
-  test('puts terminal buses first, then sorts each status by its next event', () => {
+  test('puts terminal and nearby buses first, then sorts remaining approaches by next event', () => {
     const now = Date.parse('2026-08-04T15:00:00Z');
     const vehicles = [
       {
@@ -136,10 +136,75 @@ describe('nearest BATT vehicle selection', () => {
     expect(selectNearestVehicles(vehicles, { nowMs: now }).map((entry) => entry.vehicle.id))
       .toEqual([
         'terminal-next-departure',
+        'unknown-time',
         'far-first-arrival',
-        'near-later-arrival',
-        'unknown-time'
+        'near-later-arrival'
       ]);
+  });
+
+  test.each([
+    ['GO 68', 'go-transit'],
+    ['Ontario Northland 101', 'ontario-northland'],
+  ])('keeps nearby %s without an arrival prediction on the five-row board', (_, agencyId) => {
+    const now = Date.parse('2026-08-06T17:26:00Z');
+    const timedBarrieBuses = Array.from({ length: 5 }, (_, index) => ({
+      id: `barrie-${index + 1}`,
+      agency_id: 'barrie-transit',
+      terminal_progress_status: 'approaching',
+      terminal_arrival_time: now / 1000 + (index + 3) * 60,
+      lat: BATT_COORDS.lat + 0.008 + index * 0.004,
+      lon: BATT_COORDS.lon
+    }));
+    const regionalVehicle = {
+      id: `${agencyId}-approaching`,
+      agency_id: agencyId,
+      terminal_progress_status: 'approaching',
+      terminal_arrival_time: null,
+      terminal_departure_time: now / 1000 + 7 * 60,
+      lat: BATT_COORDS.lat + 0.0027,
+      lon: BATT_COORDS.lon
+    };
+
+    const selected = selectNearestVehicles([...timedBarrieBuses, regionalVehicle], {
+      limit: 5,
+      nowMs: now
+    });
+
+    expect(selected.map((entry) => entry.vehicle.id)).toEqual([
+      `${agencyId}-approaching`,
+      'barrie-1',
+      'barrie-2',
+      'barrie-3',
+      'barrie-4'
+    ]);
+  });
+
+  test('excludes a delayed agency from the live terminal board without hiding live agencies', () => {
+    const vehicles = [
+      {
+        id: 'live-barrie',
+        agency_id: 'barrie-transit',
+        terminal_progress_status: 'approaching',
+        lat: BATT_COORDS.lat + 0.003,
+        lon: BATT_COORDS.lon,
+      },
+      {
+        id: 'delayed-northland',
+        agency_id: 'ontario-northland',
+        terminal_progress_status: 'approaching',
+        lat: BATT_COORDS.lat + 0.001,
+        lon: BATT_COORDS.lon,
+      },
+    ];
+
+    const selected = selectNearestVehicles(vehicles, {
+      sources: {
+        barrie_transit: { feed_status: 'live' },
+        ontario_northland: { feed_status: 'delayed' },
+      },
+    });
+
+    expect(selected.map((entry) => entry.vehicle.id)).toEqual(['live-barrie']);
   });
 
   test('sorts a physically near approaching bus as arriving now', () => {

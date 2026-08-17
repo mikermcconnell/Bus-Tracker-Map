@@ -269,7 +269,7 @@ function enrichTerminalProgress(vehicle, options = {}) {
 
 function getTerminalApproachFallback(vehicle, fallbacks) {
   if (!vehicle || !fallbacks || typeof fallbacks !== 'object') return null;
-  const routeId = String(vehicle.route_id || '').trim();
+  const routeId = String(vehicle.source_route_id || vehicle.route_id || '').trim();
   const stopId = String(vehicle.stop_id || '').trim();
   const directionId = finiteSequence(vehicle.direction_id);
   if (!routeId || !stopId || directionId === null) return null;
@@ -278,10 +278,10 @@ function getTerminalApproachFallback(vehicle, fallbacks) {
 
 function enrichTerminalProgressWithFallback(vehicle, options = {}) {
   const enriched = enrichTerminalProgress(vehicle, options);
-  if (
-    enriched.terminal_progress_status !== TERMINAL_PROGRESS.NOT_SERVING &&
-    enriched.terminal_progress_status !== TERMINAL_PROGRESS.UNKNOWN
-  ) {
+  const fallbackStatuses = Array.isArray(options.terminalApproachFallbackStatuses)
+    ? options.terminalApproachFallbackStatuses.map(String)
+    : [TERMINAL_PROGRESS.NOT_SERVING, TERMINAL_PROGRESS.UNKNOWN];
+  if (!fallbackStatuses.includes(enriched.terminal_progress_status)) {
     return enriched;
   }
 

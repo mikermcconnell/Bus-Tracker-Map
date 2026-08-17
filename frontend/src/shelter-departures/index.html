@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Barrie Transit Departures</title>
+  <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,viewport-fit=cover">
+  <link rel="stylesheet" href="%APP_CSS%">
+  <meta name="app-build-id" content="%BUILD_ID%">
+</head>
+<body>
+  <main class="shelter-screen">
+    <header class="shelter-header">
+      <div class="shelter-header__identity">
+        <strong>DEPARTURES</strong>
+        <span id="shelter-stop">STOP --</span>
+        <span id="shelter-page">Page 1 of 1</span>
+      </div>
+      <time id="shelter-clock">--:--</time>
+    </header>
+    <table class="shelter-board" aria-label="Upcoming Barrie Transit departures">
+      <thead class="visually-hidden">
+        <tr><th>Route and destination</th><th>Arrival</th></tr>
+      </thead>
+      <tbody id="shelter-rows" aria-live="polite">
+        <tr class="shelter-row shelter-row--message">
+          <td colspan="2">Loading departures&hellip;</td>
+        </tr>
+      </tbody>
+    </table>
+    <p id="shelter-status" class="shelter-status" role="status" aria-live="polite" hidden></p>
+  </main>
+  <script src="%APP_JS%"></script>
+</body>
+</html>

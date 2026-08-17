@@ -19,6 +19,7 @@ const srcDir = path.join(projectRoot, 'frontend', 'src');
 const dataDir = path.join(projectRoot, 'frontend', 'data');
 const distDir = path.join(projectRoot, 'frontend', 'dist');
 const assetsDir = path.join(distDir, 'assets');
+let atomicWriteSequence = 0;
 
 // Bundle at a modern target for speed, then downlevel with Babel for legacy screens.
 const DEFAULT_ESBUILD_TARGET = (process.env.ESBUILD_TARGET || 'es2017')
@@ -48,6 +49,8 @@ const entryPoints = [
     entryPath: path.join(srcDir, 'platform-map', 'main.js'),
     cssPath: path.join(srcDir, 'platform-map', 'styles.css'),
     includeLeafletCss: true,
+    includeMapboxCss: true,
+    skipLegacyDownlevel: true,
     templatePath: path.join(srcDir, 'platform-map', 'index.html'),
     outputHtml: 'platform.map.html'
   },
@@ -57,6 +60,21 @@ const entryPoints = [
     cssPath: path.join(srcDir, 'notices', 'styles.css'),
     templatePath: path.join(srcDir, 'notices', 'index.html'),
     outputHtml: 'notices.html'
+  },
+  {
+    key: 'departures',
+    entryPath: path.join(srcDir, 'departures', 'main.js'),
+    cssPath: path.join(srcDir, 'departures', 'styles.css'),
+    templatePath: path.join(srcDir, 'departures', 'index.html'),
+    outputHtml: 'departures.html',
+    assetPrefix: '../../assets/'
+  },
+  {
+    key: 'shelterDepartures',
+    entryPath: path.join(srcDir, 'shelter-departures', 'main.js'),
+    cssPath: path.join(srcDir, 'shelter-departures', 'styles.css'),
+    templatePath: path.join(srcDir, 'shelter-departures', 'index.html'),
+    outputHtml: 'shelter-departures.html'
   }
 ];
 
@@ -64,8 +82,18 @@ function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-function cleanDir(dir) {
-  fs.rmSync(dir, { recursive: true, force: true });
+function writeFileAtomic(filePath, contents) {
+  ensureDir(path.dirname(filePath));
+  const tempPath = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.${atomicWriteSequence += 1}.tmp`
+  );
+  try {
+    fs.writeFileSync(tempPath, contents);
+    fs.renameSync(tempPath, filePath);
+  } finally {
+    fs.rmSync(tempPath, { force: true });
+  }
 }
 
 function contentHash(buffer) {
@@ -166,51 +194,79 @@ async function buildJs(entry) {
   }
 
   const rawCode = Buffer.from(output.contents).toString('utf8');
-  const transformed = await downlevelJavaScript(rawCode, { filename: path.basename(entry.entryPath) });
+  // Mapbox GL embeds a Web Worker bundle that must not be rewritten by Babel.
+  // Its WebGL-capable target browsers already support this modern output.
+  const transformed = entry.skipLegacyDownlevel
+    ? rawCode
+    : await downlevelJavaScript(rawCode, { filename: path.basename(entry.entryPath) });
   const buffer = Buffer.from(transformed, 'utf8');
   const hash = contentHash(buffer);
   const fileName = `${entry.key}.${hash}.js`;
   const filePath = path.join(assetsDir, fileName);
-  fs.writeFileSync(filePath, buffer);
+  writeFileAtomic(filePath, buffer);
   return fileName;
 }
 
 function buildCss(entry) {
   const appCss = fs.readFileSync(entry.cssPath);
-  const buffer = entry.includeLeafletCss
-    ? Buffer.concat([
+  const buffers = [];
+  if (entry.includeLeafletCss) {
+    buffers.push(
       fs.readFileSync(path.join(projectRoot, 'node_modules', 'leaflet', 'dist', 'leaflet.css')),
-      Buffer.from('\n'),
-      appCss,
-    ])
-    : appCss;
+      Buffer.from('\n')
+    );
+  }
+  if (entry.includeMapboxCss) {
+    buffers.push(
+      fs.readFileSync(path.join(projectRoot, 'node_modules', 'mapbox-gl', 'dist', 'mapbox-gl.css')),
+      Buffer.from('\n')
+    );
+  }
+  buffers.push(appCss);
+  const buffer = Buffer.concat(buffers);
   const hash = contentHash(buffer);
   const fileName = `${entry.key}.${hash}.css`;
   const filePath = path.join(assetsDir, fileName);
-  fs.writeFileSync(filePath, buffer);
+  writeFileAtomic(filePath, buffer);
   return fileName;
 }
 
 function writeHtml(entry, assetMap) {
   const template = fs.readFileSync(entry.templatePath, 'utf8');
+  const assetPrefix = entry.assetPrefix || './assets/';
   const html = template
-    .replace(/%APP_JS%/g, `./assets/${assetMap.js}`)
-    .replace(/%APP_CSS%/g, `./assets/${assetMap.css}`)
+    .replace(/%APP_JS%/g, `${assetPrefix}${assetMap.js}`)
+    .replace(/%APP_CSS%/g, `${assetPrefix}${assetMap.css}`)
     .replace(/%BUILD_ID%/g, new Date().toISOString());
-  fs.writeFileSync(path.join(distDir, entry.outputHtml), html);
+  writeFileAtomic(path.join(distDir, entry.outputHtml), html);
 }
 
 function writeManifest(entryAssets) {
   const manifestPath = path.join(distDir, 'manifest.json');
-  fs.writeFileSync(manifestPath, JSON.stringify({
+  writeFileAtomic(manifestPath, JSON.stringify({
     generatedAt: new Date().toISOString(),
     entries: entryAssets,
   }, null, 2));
 }
 
+function pruneStaleBundles(entryAssets) {
+  if (!fs.existsSync(assetsDir)) return;
+  const activeBundles = new Set();
+  Object.values(entryAssets).forEach((assets) => {
+    activeBundles.add(assets.js);
+    activeBundles.add(assets.css);
+  });
+  const bundleKeys = entryPoints.map((entry) => entry.key).join('|');
+  const bundlePattern = new RegExp(`^(?:${bundleKeys})(?:\\.[a-f0-9]{10})?\\.(?:js|css)$`);
+  for (const fileName of fs.readdirSync(assetsDir)) {
+    if (bundlePattern.test(fileName) && !activeBundles.has(fileName)) {
+      fs.rmSync(path.join(assetsDir, fileName), { force: true });
+    }
+  }
+}
+
 async function main() {
   ensureDir(projectRoot);
-  cleanDir(distDir);
   ensureDir(distDir);
   ensureDir(assetsDir);
 
@@ -235,6 +291,7 @@ async function main() {
   copyLeafletAssets();
 
   writeManifest(entryAssets);
+  pruneStaleBundles(entryAssets);
   console.log('Frontend build complete:', entryAssets);
 }
 

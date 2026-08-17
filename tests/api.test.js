@@ -32,6 +32,7 @@ describe('API smoke tests', () => {
     process.env.CACHE_DIR = cacheDir;
     process.env.GTFS_RT_VEHICLES_URL = '';
     process.env.ONTARIO_NORTHLAND_ENABLED = 'false';
+    process.env.SIMCOE_LINX_ENABLED = 'false';
     process.env.GO_TRANSIT_ENABLED = 'false';
     process.env.METROLINX_API_KEY = '';
     process.env.MAPBOX_ACCESS_TOKEN = '';
@@ -79,6 +80,7 @@ describe('API smoke tests', () => {
     delete process.env.CACHE_DIR;
     delete process.env.GTFS_RT_VEHICLES_URL;
     delete process.env.ONTARIO_NORTHLAND_ENABLED;
+    delete process.env.SIMCOE_LINX_ENABLED;
     delete process.env.GO_TRANSIT_ENABLED;
     delete process.env.METROLINX_API_KEY;
     delete process.env.MAPBOX_ACCESS_TOKEN;
@@ -169,6 +171,23 @@ describe('API smoke tests', () => {
     expect(res.body.tiles).toBe(res.body.basemap.url);
   });
 
+  test('merges Simcoe LINX Barrie route segments when enabled', async () => {
+    writeJson(path.join(cacheDir, 'simcoe-linx-routes.geojson'), {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: [[-79.70, 44.37], [-79.68, 44.41]] },
+        properties: { route_id: 'LINX-2', route_short_name: 'LINX 2', agency_id: 'simcoe-linx' }
+      }]
+    });
+    const app = await initApp({ SIMCOE_LINX_ENABLED: 'true' });
+    const routesRes = await request(app).get('/api/routes.geojson');
+
+    expect(routesRes.status).toBe(200);
+    expect(routesRes.body.features.map((feature) => feature.properties.route_id))
+      .toEqual(['1', 'LINX-2']);
+  });
+
   test('returns a 512-pixel Mapbox TV basemap when all settings are configured', async () => {
     const app = await initApp({
       MAPBOX_ACCESS_TOKEN: 'pk.test-token',
@@ -202,12 +221,11 @@ describe('API smoke tests', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.platform_basemap).toMatchObject({
-      provider: 'mapbox',
-      tile_size: 512,
-      zoom_offset: -1,
+      provider: 'mapbox-gl',
+      style_url: 'mapbox://styles/barrie maps/platform/style-v2',
+      access_token: 'pk.test-token',
     });
-    expect(res.body.platform_basemap.url)
-      .toContain('/barrie%20maps/platform%2Fstyle-v2/tiles/512/{z}/{x}/{y}');
+    expect(res.body.platform_basemap.fallback_url).toContain('tile.openstreetmap.org');
     expect(res.body.basemap.url)
       .toContain('/barrie%20maps/tv%2Fstyle-v1/tiles/512/{z}/{x}/{y}');
   });
@@ -263,6 +281,137 @@ describe('API smoke tests', () => {
       expect.objectContaining({ platform: '13', route_id: '12A', destination: 'Georgian Mall' }),
       expect.objectContaining({ platform: '14', stop_id: '14', route_id: '12B', destination: 'Barrie South GO' })
     ]);
+  });
+
+  test('serves a departure-sign payload for a terminal stop code', async () => {
+    writeJson(path.join(cacheDir, 'barrie-transit.json'), {
+      generated_at: '2026-08-11T18:42:08.922Z',
+      source_url: 'https://example.test/google_transit.zip',
+      terminal_stop_ids: ['9003'],
+      terminal_stops: [{ id: '9003', platform_code: '3' }],
+      trips: {
+        route8: {
+          route_id: '8A',
+          headsign: 'RVH/YONGE to Park Place',
+          terminal_stops: [{ stop_id: '9003', stop_sequence: 10 }]
+        }
+      }
+    });
+    const app = await initApp();
+    const res = await request(app).get('/api/departures?view=platform&stop=9003');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toContain('max-age=5');
+    expect(res.body).toMatchObject({
+      stop_code: '9003',
+      platform: '3',
+      platform_display: '03',
+      status: 'ok',
+    });
+    expect(res.body.departures).toEqual([
+      expect.objectContaining({
+        agency_id: 'barrie-transit',
+        route_id: '8A',
+        destination: 'Yonge Southbound',
+        departure_source: null,
+      })
+    ]);
+  });
+
+  test('rejects invalid departure stop codes and keeps unused platforms valid', async () => {
+    const app = await initApp();
+    const invalid = await request(app).get('/api/departures?view=platform&stop=9999');
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.error).toBe('INVALID_STOP_CODE');
+
+    const empty = await request(app).get('/api/departures?view=platform&stop=9009');
+    expect(empty.status).toBe(200);
+    expect(empty.body).toMatchObject({
+      stop_code: '9009',
+      platform: '9',
+      status: 'no_departures',
+      departures: [],
+    });
+  });
+
+  test('serves all-stop Barrie shelter departures by stop code', async () => {
+    writeJson(path.join(cacheDir, 'barrie-departures.json'), {
+      time_zone: 'America/Toronto',
+      service_calendars: {
+        daily: {
+          start_date: '20200101', end_date: '20991231',
+          sunday: true, monday: true, tuesday: true, wednesday: true,
+          thursday: true, friday: true, saturday: true,
+        },
+      },
+      service_exceptions: {},
+      stops: {
+        '1': { id: '1', code: '1', name: 'Downtown Hub' },
+        '2': { id: '2', code: '2', name: 'Downtown Hub' },
+      },
+      stop_ids_by_code: { '1': '1', '2': '2' },
+      routes: { '100': { short_name: '100', long_name: 'Red Express' } },
+      trips: {
+        'trip-100': {
+          route_id: '100', service_id: 'daily', direction_id: '0',
+          headsign: 'Red Express to Downtown Barrie Terminal',
+        },
+        'trip-100-stop-1': {
+          route_id: '100', service_id: 'daily', direction_id: '0',
+          headsign: 'Red Express to Downtown Barrie Terminal',
+        },
+      },
+      departures_by_stop: {
+        '1': [['trip-100-stop-1', '23:58:00', 1, null]],
+        '2': [['trip-100', '23:59:00', 1, null]],
+      },
+    });
+    const app = await initApp();
+    const res = await request(app).get('/api/departures?stop=2');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.body).toMatchObject({
+      realtime_status: 'scheduled',
+      stop: { id: '2', code: '2', name: 'Downtown Hub' },
+      status: 'ok',
+    });
+    expect(res.body.departures[0]).toMatchObject({
+      route_label: '100',
+      destination: 'RED',
+      source: 'scheduled',
+    });
+
+    const group = await request(app).get('/api/departures?group=downtown-barrie');
+    expect(group.status).toBe(200);
+    expect(group.body.stop).toMatchObject({
+      id: 'downtown-barrie',
+      name: 'Downtown Barrie',
+      is_group: true,
+      stop_codes: ['1', '2'],
+    });
+    expect(new Set(group.body.departures.map((departure) => departure.stop_code)))
+      .toEqual(new Set(['1', '2']));
+  });
+
+  test('validates missing and unknown Barrie shelter stops', async () => {
+    writeJson(path.join(cacheDir, 'barrie-departures.json'), {
+      stops: { '2': { id: '2', code: '2', name: 'Downtown Hub' } },
+      stop_ids_by_code: { '2': '2' },
+      routes: {}, trips: {}, departures_by_stop: {},
+    });
+    const app = await initApp();
+    const missing = await request(app).get('/api/departures');
+    expect(missing.status).toBe(400);
+    expect(missing.body.error).toBe('STOP_REQUIRED');
+
+    const unknown = await request(app).get('/api/departures?stop=9999');
+    expect(unknown.status).toBe(404);
+    expect(unknown.body.error).toBe('STOP_NOT_FOUND');
+
+    const unknownGroup = await request(app).get('/api/departures?group=unknown-terminal');
+    expect(unknownGroup.status).toBe(404);
+    expect(unknownGroup.body.error).toBe('GROUP_NOT_FOUND');
   });
 
   test('returns configured feed freshness thresholds to the browser', async () => {

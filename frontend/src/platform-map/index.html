@@ -49,10 +49,26 @@
             <section id="map-platform-layer" class="map-platform-layer" aria-label="Platform locations and scheduled routes"></section>
             <div id="bus-layer" class="bus-layer" aria-label="Live vehicles"></div>
           </div>
+          <section id="map-label-layer" class="map-label-layer" aria-label="Platform labels">
+            <div id="map-label-rail-top" class="map-label-rail map-label-rail--top"></div>
+            <div id="map-label-rail-bottom" class="map-label-rail map-label-rail--bottom"></div>
+            <div id="map-label-rail-right" class="map-label-rail map-label-rail--right"></div>
+          </section>
         </div>
         <aside class="platform-directory" aria-labelledby="platform-directory-title">
           <header class="platform-directory__header">
-            <h2 id="platform-directory-title">Departures by platform</h2>
+            <div class="platform-directory__heading">
+              <h2 id="platform-directory-title">Departures by platform</h2>
+              <p id="departure-page-label">P1–P6</p>
+            </div>
+            <div class="departure-page-indicator" aria-label="Departure page 1 of 2">
+              <span class="departure-page-indicator__dot" data-page="0" aria-hidden="true"></span>
+              <span class="departure-page-indicator__dot" data-page="1" aria-hidden="true"></span>
+              <span class="departure-page-indicator__timing">
+                <strong id="departure-page-count">1 / 2</strong>
+                <span id="departure-page-countdown">Next page in 15s</span>
+              </span>
+            </div>
           </header>
           <section id="assignment-layer" class="assignment-layer" aria-label="Scheduled platform assignments"></section>
         </aside>

@@ -7,6 +7,7 @@ const AdmZip = require('adm-zip');
 const { parse } = require('csv-parse/sync');
 const bboxClip = require('@turf/bbox-clip').default;
 const { buildServiceCalendarMetadata } = require('../shared/gtfs-service-calendar');
+const { buildTerminalApproachFallbacks } = require('../shared/terminal-approach-fallbacks');
 require('dotenv').config();
 
 const DEFAULT_STATIC_URL = 'https://ontarionorthland.tmix.se/gtfs/gtfs.zip';
@@ -112,6 +113,11 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
       departure_time: stopTime.departure_time || stopTime.arrival_time || null,
     });
   });
+  const terminalApproachFallbacks = buildTerminalApproachFallbacks(
+    barrieTrips,
+    stopTimes,
+    barrieStopIds
+  );
 
   const primaryAgency = agencies[0] || {};
   const agency = {
@@ -205,7 +211,14 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
       source_url: process.env.ONTARIO_NORTHLAND_GTFS_STATIC_URL || DEFAULT_STATIC_URL,
       agency,
       barrie_stop_ids: Array.from(barrieStopIds).sort(),
+      barrie_stops: barrieStops.map((stop) => ({
+        id: String(stop.stop_id),
+        name: stop.stop_name || null,
+        lat: Number(stop.stop_lat),
+        lon: Number(stop.stop_lon),
+      })),
       barrie_route_ids: Array.from(barrieRouteIds).sort(),
+      terminal_approach_fallbacks: terminalApproachFallbacks,
       ...serviceCalendarMetadata,
       routes: routeMetadata,
       trips: tripMetadata,

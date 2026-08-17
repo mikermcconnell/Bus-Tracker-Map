@@ -4,6 +4,8 @@ const GtfsRealtimeBindings = require('gtfs-realtime-bindings');
 
 const LOG_LEVEL = (process.env.LOG_LEVEL || '').toLowerCase();
 const verboseGtfsLogging = LOG_LEVEL === 'debug' || LOG_LEVEL === 'trace';
+const TRIP_UPDATE_CACHE_TTL_MS = 5_000;
+const tripUpdateCache = new Map();
 
 function readFeedTimestamp(value) {
   if (!value) return null;
@@ -11,36 +13,95 @@ function readFeedTimestamp(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-function parseTerminalTripUpdates(feed, terminalStopIds) {
-  const terminalIds = new Set((terminalStopIds || []).map(String));
+function readFeedNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value.toNumber ? value.toNumber() : value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function parseTripUpdates(feed) {
   const updates = {};
 
   (feed && Array.isArray(feed.entity) ? feed.entity : []).forEach((entity) => {
     const tripUpdate = entity && entity.tripUpdate;
-    const tripId = tripUpdate && tripUpdate.trip && tripUpdate.trip.tripId;
+    const tripDescriptor = tripUpdate && tripUpdate.trip;
+    const tripId = tripDescriptor && tripDescriptor.tripId;
     if (!tripId) return;
 
-    const terminalUpdates = (tripUpdate.stopTimeUpdate || [])
-      .filter((stopUpdate) => (
-        stopUpdate && terminalIds.has(String(stopUpdate.stopId || ''))
-      ))
-      .map((stopUpdate) => {
-        const arrivalEvent = stopUpdate.arrival || stopUpdate.departure || null;
-        const departureEvent = stopUpdate.departure || stopUpdate.arrival || null;
+    updates[String(tripId)] = {
+      trip_id: String(tripId),
+      route_id: tripDescriptor.routeId ? String(tripDescriptor.routeId) : null,
+      start_date: tripDescriptor.startDate ? String(tripDescriptor.startDate) : null,
+      schedule_relationship: readFeedNumber(tripDescriptor.scheduleRelationship),
+      stop_time_updates: (tripUpdate.stopTimeUpdate || []).map((stopUpdate) => {
+        const arrivalEvent = stopUpdate.arrival || null;
+        const departureEvent = stopUpdate.departure || null;
         return {
           stop_id: String(stopUpdate.stopId || ''),
-          stop_sequence: Number.isFinite(Number(stopUpdate.stopSequence))
-            ? Number(stopUpdate.stopSequence)
-            : null,
+          stop_sequence: readFeedNumber(stopUpdate.stopSequence),
+          schedule_relationship: readFeedNumber(stopUpdate.scheduleRelationship),
           arrival_time: readFeedTimestamp(arrivalEvent && arrivalEvent.time),
+          arrival_delay: readFeedNumber(arrivalEvent && arrivalEvent.delay),
           departure_time: readFeedTimestamp(departureEvent && departureEvent.time),
+          departure_delay: readFeedNumber(departureEvent && departureEvent.delay),
         };
-      });
-
-    if (terminalUpdates.length) updates[String(tripId)] = terminalUpdates;
+      }).filter((stopUpdate) => stopUpdate.stop_id),
+    };
   });
 
   return updates;
+}
+
+function parseTerminalTripUpdates(feed, terminalStopIds) {
+  const terminalIds = new Set((terminalStopIds || []).map(String));
+  const updates = {};
+
+  Object.entries(parseTripUpdates(feed)).forEach(([tripId, tripUpdate]) => {
+    const terminalUpdates = tripUpdate.stop_time_updates
+      .filter((stopUpdate) => terminalIds.has(stopUpdate.stop_id))
+      .map((stopUpdate) => ({
+        stop_id: stopUpdate.stop_id,
+        stop_sequence: stopUpdate.stop_sequence,
+        arrival_time: stopUpdate.arrival_time || stopUpdate.departure_time,
+        departure_time: stopUpdate.departure_time || stopUpdate.arrival_time,
+      }));
+    if (terminalUpdates.length) updates[tripId] = terminalUpdates;
+  });
+
+  return updates;
+}
+
+async function fetchTripUpdates(rtUrl, { cacheTtlMs = TRIP_UPDATE_CACHE_TTL_MS } = {}) {
+  if (!rtUrl) return { feed_timestamp: null, trip_updates: {} };
+  const now = Date.now();
+  const cached = tripUpdateCache.get(rtUrl);
+  if (cached && cached.value && cached.expires_at > now) return cached.value;
+  if (cached && cached.in_flight) return cached.in_flight;
+
+  const inFlight = (async () => {
+    const res = await fetch(rtUrl, { timeout: 10_000 });
+    if (!res.ok) throw new Error('GTFS-RT trip updates fetch failed: ' + res.status);
+    const buffer = await res.buffer();
+    const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buffer);
+    return {
+      feed_timestamp: readFeedTimestamp(feed.header && feed.header.timestamp),
+      trip_updates: parseTripUpdates(feed),
+    };
+  })();
+
+  tripUpdateCache.set(rtUrl, { in_flight: inFlight, expires_at: 0, value: null });
+  try {
+    const value = await inFlight;
+    tripUpdateCache.set(rtUrl, {
+      in_flight: null,
+      expires_at: Date.now() + Math.max(0, Number(cacheTtlMs) || 0),
+      value,
+    });
+    return value;
+  } catch (err) {
+    tripUpdateCache.delete(rtUrl);
+    throw err;
+  }
 }
 
 function selectTerminalTripUpdate(vehicle, tripUpdates) {
@@ -65,14 +126,23 @@ function selectTerminalTripUpdate(vehicle, tripUpdates) {
 }
 
 async function fetchTerminalTripUpdates(rtUrl, terminalStopIds) {
-  if (!rtUrl) return { feed_timestamp: null, trip_updates: {} };
-  const res = await fetch(rtUrl, { timeout: 10_000 });
-  if (!res.ok) throw new Error('GTFS-RT trip updates fetch failed: ' + res.status);
-  const buffer = await res.buffer();
-  const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buffer);
+  const result = await fetchTripUpdates(rtUrl);
+  const terminalIds = new Set((terminalStopIds || []).map(String));
+  const tripUpdates = {};
+  Object.entries(result.trip_updates || {}).forEach(([tripId, tripUpdate]) => {
+    const rows = (tripUpdate.stop_time_updates || [])
+      .filter((stopUpdate) => terminalIds.has(stopUpdate.stop_id))
+      .map((stopUpdate) => ({
+        stop_id: stopUpdate.stop_id,
+        stop_sequence: stopUpdate.stop_sequence,
+        arrival_time: stopUpdate.arrival_time || stopUpdate.departure_time,
+        departure_time: stopUpdate.departure_time || stopUpdate.arrival_time,
+      }));
+    if (rows.length) tripUpdates[tripId] = rows;
+  });
   return {
-    feed_timestamp: readFeedTimestamp(feed.header && feed.header.timestamp),
-    trip_updates: parseTerminalTripUpdates(feed, terminalStopIds),
+    feed_timestamp: result.feed_timestamp,
+    trip_updates: tripUpdates,
   };
 }
 
@@ -191,9 +261,11 @@ async function fetchVehicles(rtUrl) {
 }
 
 module.exports = {
+  fetchTripUpdates,
   fetchVehicles,
   fetchGtfsRtFeedMeta,
   fetchTerminalTripUpdates,
+  parseTripUpdates,
   parseTerminalTripUpdates,
   selectTerminalTripUpdate,
 };
