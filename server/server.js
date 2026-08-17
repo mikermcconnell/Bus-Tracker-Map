@@ -33,6 +33,10 @@ const {
 } = require('./terminal-progress');
 const { buildTerminalLayout } = require('./terminal-layout');
 const { createDeparturesService } = require('./departures');
+const {
+  buildPlatformDeparturePayload,
+  parsePlatformStopCode,
+} = require('./platform-departures');
 
 function normalizeBasePath(input) {
   if (!input) return '/';
@@ -750,6 +754,26 @@ apiRouter.get('/terminal-layout', (req, res) => {
 });
 
 apiRouter.get('/departures', async (req, res) => {
+  if (String(req.query && req.query.view || '').toLowerCase() === 'platform') {
+    const stopCode = req.query && req.query.stop;
+    if (!parsePlatformStopCode(stopCode)) {
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.status(400).json({
+        error: 'INVALID_STOP_CODE',
+        message: 'Use a terminal stop code from 9001 to 9014.',
+      });
+    }
+    try {
+      const terminalPayload = await getDepartures({ limit: 30, board: 'allandale' });
+      const data = buildPlatformDeparturePayload({ stopCode, terminalPayload });
+      res.setHeader('Cache-Control', 'public, max-age=5, stale-while-revalidate=5');
+      return res.json(data);
+    } catch (err) {
+      console.error('[platform-departures] Unable to build platform sign:', err.message || err);
+      return res.status(Number(err.statusCode) || 502).json({ error: 'DEPARTURES_UNAVAILABLE' });
+    }
+  }
+
   const rawLimit = req.query && req.query.limit;
   if (rawLimit !== undefined && !/^\d+$/.test(String(rawLimit))) {
     return res.status(400).json({ error: 'INVALID_LIMIT' });
@@ -871,6 +895,14 @@ router.get('/notices', (req, res, next) => {
   res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';");
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(noticesPath);
+});
+
+router.get('/departures/platform.aspx', (req, res, next) => {
+  const departuresPath = path.join(FRONTEND_DIR, 'platform-departures.html');
+  if (!fs.existsSync(departuresPath)) return next();
+  res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self';");
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(departuresPath);
 });
 
 router.get('/departures', (req, res, next) => {
