@@ -1,6 +1,11 @@
 const REFRESH_INTERVAL_MS = 10_000;
+const REQUEST_TIMEOUT_MS = 15_000;
+const CACHE_MAX_AGE_MS = 30 * 60 * 1000;
+const CACHE_KEY_PREFIX = 'platform-departures:v1:';
 const API_PATH = '/api/departures';
 const ASSET_PATH = '../../assets/';
+
+let renderedPayloadSignature = '';
 
 const AGENCY_BRANDING = Object.freeze({
   'barrie-transit': Object.freeze({
@@ -59,6 +64,64 @@ function parseStopCode(value) {
 function clearChildren(element) {
   while (element.firstChild) {
     element.removeChild(element.firstChild);
+  }
+}
+
+function visibleDepartures(payload) {
+  const departures = Array.isArray(payload && payload.departures) ? payload.departures : [];
+  const compactSign = window.innerWidth <= 360 && window.innerHeight <= 100;
+  return compactSign ? departures.slice(0, 1) : departures;
+}
+
+function departurePayloadSignature(payload) {
+  const rows = visibleDepartures(payload);
+  const signatureRows = [];
+  for (let index = 0; index < rows.length; index += 1) {
+    const departure = rows[index] || {};
+    signatureRows.push([
+      departure.agency_id || '',
+      departure.agency_name || '',
+      departure.route_id || '',
+      departure.route_label || '',
+      departure.destination || '',
+      departure.departure_time || '',
+      departure.departure_source || 'scheduled',
+    ]);
+  }
+  return JSON.stringify([
+    String(payload && payload.platform_display || '--'),
+    signatureRows,
+  ]);
+}
+
+function cacheKey(stopCode) {
+  return `${CACHE_KEY_PREFIX}${stopCode}`;
+}
+
+function readCachedDepartures(stopCode, nowMs = Date.now()) {
+  try {
+    const stored = window.localStorage.getItem(cacheKey(stopCode));
+    if (!stored) return null;
+    const record = JSON.parse(stored);
+    const savedAt = Number(record && record.saved_at);
+    const payload = record && record.payload;
+    if (!Number.isFinite(savedAt) || nowMs - savedAt > CACHE_MAX_AGE_MS) return null;
+    if (!payload || String(payload.stop_code || '') !== String(stopCode)) return null;
+    if (!Array.isArray(payload.departures)) return null;
+    return payload;
+  } catch (err) {
+    return null;
+  }
+}
+
+function writeCachedDepartures(stopCode, payload) {
+  try {
+    window.localStorage.setItem(cacheKey(stopCode), JSON.stringify({
+      saved_at: Date.now(),
+      payload,
+    }));
+  } catch (err) {
+    // Storage can be unavailable in private or restricted embedded browsers.
   }
 }
 
@@ -180,19 +243,20 @@ function renderEmpty(platformDisplay, message, detail) {
 
 function renderDepartures(payload) {
   const rows = document.getElementById('departure-rows');
-  const departures = Array.isArray(payload && payload.departures) ? payload.departures : [];
-  const compactSign = window.innerWidth <= 360 && window.innerHeight <= 100;
-  const visibleDepartures = compactSign ? departures.slice(0, 1) : departures;
+  const departures = visibleDepartures(payload);
   const platformDisplay = String(payload && payload.platform_display || '--');
-  if (!visibleDepartures.length) {
+  const signature = departurePayloadSignature(payload);
+  if (signature === renderedPayloadSignature) return false;
+  if (!departures.length) {
     renderEmpty(platformDisplay, 'No departures scheduled', 'Please check again shortly');
-    return;
+    renderedPayloadSignature = signature;
+    return true;
   }
   clearChildren(rows);
-  visibleDepartures.forEach((departure, index) => {
+  departures.forEach((departure, index) => {
     const routeRow = document.createElement('tr');
     if (index === 0) {
-      routeRow.appendChild(createPlatformCell(platformDisplay, visibleDepartures.length * 2));
+      routeRow.appendChild(createPlatformCell(platformDisplay, departures.length * 2));
     }
     routeRow.appendChild(createAgencyCell(departure));
     routeRow.appendChild(createCell('td', 'route-cell', routeDescription(departure)));
@@ -210,6 +274,8 @@ function renderDepartures(payload) {
     rows.appendChild(routeRow);
     rows.appendChild(detailRow);
   });
+  renderedPayloadSignature = signature;
+  return true;
 }
 
 function refreshCountdowns() {
@@ -242,7 +308,7 @@ function requestJsonWithXhr(url) {
     const request = new XMLHttpRequest();
     request.open('GET', url, true);
     request.setRequestHeader('Accept', 'application/json');
-    request.timeout = 15_000;
+    request.timeout = REQUEST_TIMEOUT_MS;
     request.onreadystatechange = () => {
       if (request.readyState !== 4) return;
       if (request.status < 200 || request.status >= 300) {
@@ -278,6 +344,7 @@ async function loadDepartures(stopCode) {
     `${API_PATH}?view=platform&stop=${encodeURIComponent(stopCode)}`
   );
   renderDepartures(payload);
+  writeCachedDepartures(stopCode, payload);
   setStatus('');
   return true;
 }
@@ -295,7 +362,10 @@ function startDepartureScreen() {
   }
 
   document.title = `Platform ${parsedStop.display} Departures`;
-  let hasRenderedData = false;
+  const cachedPayload = readCachedDepartures(parsedStop.stopCode);
+  let hasRenderedData = Boolean(cachedPayload);
+  if (cachedPayload) renderDepartures(cachedPayload);
+
   async function refresh() {
     try {
       hasRenderedData = await loadDepartures(parsedStop.stopCode);
@@ -304,10 +374,11 @@ function startDepartureScreen() {
         renderEmpty(parsedStop.display, 'Departures unavailable', 'Retrying automatically');
       }
       setStatus('Departure data is temporarily unavailable. Retrying automatically.');
+    } finally {
+      window.setTimeout(refresh, REFRESH_INTERVAL_MS);
     }
   }
   refresh();
-  window.setInterval(refresh, REFRESH_INTERVAL_MS);
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
@@ -316,7 +387,10 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
 
 export {
   formatDepartureText,
+  departurePayloadSignature,
   parseStopCode,
+  readCachedDepartures,
   readQueryParameter,
   routeDescription,
+  writeCachedDepartures,
 };
