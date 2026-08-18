@@ -1,10 +1,14 @@
 import AdmZip from 'adm-zip';
 import { describe, expect, test, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   buildArtifactsFromZip,
 } from '../scripts/build-go-transit.js';
 import {
   fetchGoTransitRealtime,
+  loadMetadata,
   parseVehicleFeed,
   resetGoTransitCache,
 } from '../server/go-transit.js';
@@ -73,6 +77,25 @@ function createStaticZip() {
 }
 
 describe('GO Transit Allandale integration', () => {
+  test('reuses unchanged static metadata and reloads it after a file change', () => {
+    const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'go-metadata-'));
+    const metadataPath = path.join(cacheDir, 'go-transit.json');
+    try {
+      fs.writeFileSync(metadataPath, JSON.stringify({ routes: { one: {} } }));
+      resetGoTransitCache();
+      const first = loadMetadata(cacheDir);
+      expect(loadMetadata(cacheDir)).toBe(first);
+
+      fs.writeFileSync(metadataPath, JSON.stringify({ routes: { one: {}, two: {} } }));
+      const changed = loadMetadata(cacheDir);
+      expect(changed).not.toBe(first);
+      expect(Object.keys(changed.routes)).toEqual(['one', 'two']);
+    } finally {
+      resetGoTransitCache();
+      fs.rmSync(cacheDir, { recursive: true, force: true });
+    }
+  });
+
   test('can use a server-side proxy when the Metrolinx key is unavailable locally', async () => {
     resetGoTransitCache();
     const fetchImpl = async () => ({

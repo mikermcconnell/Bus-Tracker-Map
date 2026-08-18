@@ -110,8 +110,7 @@ export function createDataClient(options = {}) {
     },
 
     fetchRoutes() {
-      const cacheBust = Date.now().toString(36);
-      return fetchJson(resolveUrl(`/api/routes.geojson?cb=${cacheBust}`), { cache: 'no-store' });
+      return fetchJson(resolveUrl('/api/routes.geojson'));
     },
 
     fetchStops() {
@@ -120,27 +119,21 @@ export function createDataClient(options = {}) {
 
     fetchServiceStatus(date) {
       const suffix = date ? `?date=${encodeURIComponent(date)}` : '';
-      return fetchJson(resolveUrl(`/api/service-status${suffix}`), { cache: 'no-store' });
+      return fetchJson(resolveUrl(`/api/service-status${suffix}`));
     },
 
     fetchTerminalLayout() {
-      const cacheBust = Date.now().toString(36);
-      return fetchJson(resolveUrl(`/api/terminal-layout?cb=${cacheBust}`), { cache: 'no-store' });
+      return fetchJson(resolveUrl('/api/terminal-layout'));
     },
 
     fetchDepartures(limit = 12, options = {}) {
-      const cacheBust = Date.now().toString(36);
       const { board, ...fetchOptions } = options;
       const boardQuery = board ? `&board=${encodeURIComponent(board)}` : '';
-      return fetchJson(resolveUrl(`/api/departures?limit=${encodeURIComponent(limit)}${boardQuery}&cb=${cacheBust}`), {
-        ...fetchOptions,
-        cache: 'no-store',
-      });
+      return fetchJson(resolveUrl(`/api/departures?limit=${encodeURIComponent(limit)}${boardQuery}`), fetchOptions);
     },
 
     fetchVehicles() {
-      const cacheBust = Date.now().toString(36);
-      return fetchJson(resolveUrl(`/api/vehicles.json?cb=${cacheBust}`), { cache: 'no-store' });
+      return fetchJson(resolveUrl('/api/vehicles.json'));
     },
 
     fetchMajorRoads() {

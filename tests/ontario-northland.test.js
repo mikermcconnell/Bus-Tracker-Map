@@ -1,13 +1,18 @@
 import { describe, expect, test } from 'vitest';
 import AdmZip from 'adm-zip';
 import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   buildArtifactsFromZip,
 } from '../scripts/build-ontario-northland.js';
 import {
+  loadMetadata,
   parseAlerts,
   parseTripUpdates,
   qualifyVehicle,
+  resetOntarioNorthlandCache,
 } from '../server/ontario-northland.js';
 
 function createStaticZip() {
@@ -70,6 +75,25 @@ function createStaticZip() {
 }
 
 describe('Ontario Northland integration', () => {
+  test('reuses unchanged static metadata and reloads it after a file change', () => {
+    const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ontario-metadata-'));
+    const metadataPath = path.join(cacheDir, 'ontario-northland.json');
+    try {
+      fs.writeFileSync(metadataPath, JSON.stringify({ barrie_route_ids: ['101'] }));
+      resetOntarioNorthlandCache();
+      const first = loadMetadata(cacheDir);
+      expect(loadMetadata(cacheDir)).toBe(first);
+
+      fs.writeFileSync(metadataPath, JSON.stringify({ barrie_route_ids: ['101', '102'] }));
+      const changed = loadMetadata(cacheDir);
+      expect(changed).not.toBe(first);
+      expect(changed.barrie_route_ids).toEqual(['101', '102']);
+    } finally {
+      resetOntarioNorthlandCache();
+      fs.rmSync(cacheDir, { recursive: true, force: true });
+    }
+  });
+
   test('static build keeps only routes serving Barrie and namespaces the map layer', () => {
     const barrieRoutes = {
       type: 'FeatureCollection',

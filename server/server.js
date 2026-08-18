@@ -199,6 +199,8 @@ const METROLINX_API_BASE =
   process.env.METROLINX_API_BASE || DEFAULT_METROLINX_API_BASE;
 const FEED_DELAYED_AFTER_MS = Number(process.env.FEED_DELAYED_AFTER_MIN || 2) * 60 * 1000;
 const FEED_OFFLINE_AFTER_MS = Number(process.env.FEED_STALE_AFTER_MIN || 15) * 60 * 1000;
+const REALTIME_CDN_MAX_AGE_SECONDS = 3;
+const REALTIME_CDN_STALE_SECONDS = 2;
 const BASE_PATH = normalizeBasePath(process.env.BASE_PATH);
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend', 'dist');
 const CACHE_DIR = path.resolve(process.env.CACHE_DIR || path.join(__dirname, '..', 'cache'));
@@ -304,6 +306,16 @@ function sendCachedJson(res, filePath, maxAgeSeconds) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
+}
+
+function setRealtimeCacheHeaders(res) {
+  // Browsers always revalidate, while Vercel can share a just-produced snapshot
+  // among displays in the same region without materially changing freshness.
+  res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+  res.setHeader(
+    'Vercel-CDN-Cache-Control',
+    `public, max-age=${REALTIME_CDN_MAX_AGE_SECONDS}, stale-while-revalidate=${REALTIME_CDN_STALE_SECONDS}`
+  );
 }
 
 function readFeatureCollection(filePath) {
@@ -422,7 +434,7 @@ function maxTimestamp(values) {
   return valid.length ? Math.max(...valid) : null;
 }
 
-async function getCombinedVehiclePayload() {
+async function buildCombinedVehiclePayload() {
   const barriePromise = RT_URL
     ? fetchBarrieRealtime()
     : Promise.resolve({
@@ -572,6 +584,21 @@ async function getCombinedVehiclePayload() {
     offlineAfterMs: FEED_OFFLINE_AFTER_MS,
   });
   return { ...data, ...freshness };
+}
+
+let combinedVehiclePayloadPromise = null;
+
+function getCombinedVehiclePayload() {
+  // Fluid Compute can run concurrent requests in one instance. Reuse the same
+  // in-progress aggregation so aligned map and departure polls do not download
+  // and decode every upstream feed twice. The result is not retained after the
+  // request finishes, so the next 10-second vehicle poll still fetches fresh data.
+  if (combinedVehiclePayloadPromise) return combinedVehiclePayloadPromise;
+  const inFlight = buildCombinedVehiclePayload().finally(() => {
+    if (combinedVehiclePayloadPromise === inFlight) combinedVehiclePayloadPromise = null;
+  });
+  combinedVehiclePayloadPromise = inFlight;
+  return inFlight;
 }
 
 async function getSimcoeRegionVehiclePayload() {
@@ -760,7 +787,7 @@ apiRouter.get('/simcoe/stops.geojson', (req, res) => {
 apiRouter.get('/simcoe/vehicles.json', async (req, res) => {
   try {
     const data = await getSimcoeRegionVehiclePayload();
-    res.setHeader('Cache-Control', 'public, max-age=5');
+    setRealtimeCacheHeaders(res);
     res.json(data);
   } catch (error) {
     res.status(Number(error.statusCode) || 502).json({
@@ -934,8 +961,7 @@ apiRouter.get('/notices/pages/:documentId/:page.jpg', async (req, res) => {
 apiRouter.get('/vehicles.json', async (req, res) => {
   try {
     const data = await getCombinedVehiclePayload();
-    // allow short caching to reduce load; front end also polls every 10s
-    res.setHeader('Cache-Control', 'public, max-age=5');
+    setRealtimeCacheHeaders(res);
     res.json(data);
   } catch (e) {
     res.status(502).json({

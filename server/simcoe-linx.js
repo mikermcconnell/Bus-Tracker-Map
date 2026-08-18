@@ -13,9 +13,16 @@ const DEFAULT_VEHICLES_URL = 'https://metrolinx.tmix.se/gtfs-realtime-belleville
 const DEFAULT_TRIP_UPDATES_URL = 'http://metrolinx.tmix.se/gtfs-realtime-simcoe/tripupdates.pb';
 const DEFAULT_ALERTS_URL = 'http://metrolinx.tmix.se/gtfs-realtime-simcoe/alerts.pb';
 const REALTIME_CACHE_MS = 5_000;
+const AUXILIARY_REALTIME_CACHE_MS = 15_000;
 
 const realtimeCaches = new Map();
 const rawRealtimeCaches = new Map();
+const metadataCache = new Map();
+
+function fileVersion(filePath) {
+  const stat = fs.statSync(filePath);
+  return `${stat.size}:${stat.mtimeMs}`;
+}
 
 function readLong(value) {
   if (value === null || value === undefined) return null;
@@ -36,12 +43,16 @@ function readTranslation(value) {
 function loadMetadata(cacheDir, metadataFile = 'simcoe-linx.json') {
   const metadataPath = path.join(cacheDir, metadataFile);
   try {
+    const version = fileVersion(metadataPath);
+    const cached = metadataCache.get(metadataPath);
+    if (cached && cached.version === version) return cached.value;
     const parsed = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
     if (
       parsed && parsed.trips && Object.keys(parsed.trips).length &&
       parsed.routes && Object.keys(parsed.routes).length &&
       (Array.isArray(parsed.barrie_route_ids) || Array.isArray(parsed.route_ids))
     ) {
+      metadataCache.set(metadataPath, { version, value: parsed });
       return parsed;
     }
     throw new Error('metadata contains no usable LINX routes or trips');
@@ -68,35 +79,41 @@ async function fetchFeed(url) {
   return GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buffer);
 }
 
+async function fetchAuxiliaryFeed(url) {
+  const now = Date.now();
+  const cached = rawRealtimeCaches.get(url);
+  if (cached && now - cached.cachedAt < AUXILIARY_REALTIME_CACHE_MS) return cached.promise;
+  const promise = fetchFeed(url);
+  rawRealtimeCaches.set(url, { cachedAt: now, promise });
+  try {
+    const value = await promise;
+    const current = rawRealtimeCaches.get(url);
+    if (current && current.promise === promise) current.cachedAt = Date.now();
+    return value;
+  } catch (error) {
+    rawRealtimeCaches.delete(url);
+    throw error;
+  }
+}
+
 async function fetchRawRealtime(options) {
   const vehiclesUrl = options.vehiclesUrl || DEFAULT_VEHICLES_URL;
   const tripUpdatesUrl = options.tripUpdatesUrl || DEFAULT_TRIP_UPDATES_URL;
   const alertsUrl = options.alertsUrl || DEFAULT_ALERTS_URL;
   const alertsEnabled = options.alertsEnabled !== false;
-  const cacheKey = `${vehiclesUrl}|${tripUpdatesUrl}|${alertsEnabled ? alertsUrl : ''}`;
-  const now = Date.now();
-  const cached = rawRealtimeCaches.get(cacheKey);
-  if (cached && now - cached.cachedAt < REALTIME_CACHE_MS) return cached.promise;
-  const promise = Promise.all([
+  return Promise.all([
     fetchVehicles(vehiclesUrl),
-    fetchFeed(tripUpdatesUrl).catch((err) => {
+    fetchAuxiliaryFeed(tripUpdatesUrl).catch((err) => {
       console.warn('[simcoe-linx] Trip updates unavailable:', err.message || err);
       return null;
     }),
     alertsEnabled
-      ? fetchFeed(alertsUrl).catch((err) => {
+      ? fetchAuxiliaryFeed(alertsUrl).catch((err) => {
           console.warn('[simcoe-linx] Alerts unavailable:', err.message || err);
           return null;
         })
       : Promise.resolve(null),
   ]);
-  rawRealtimeCaches.set(cacheKey, { cachedAt: now, promise });
-  try {
-    return await promise;
-  } catch (error) {
-    rawRealtimeCaches.delete(cacheKey);
-    throw error;
-  }
 }
 
 function parseTripUpdates(feed, terminalStopIds, validTripIds) {
@@ -246,6 +263,7 @@ async function fetchSimcoeLinxRealtime(options = {}) {
 function resetSimcoeLinxCache() {
   realtimeCaches.clear();
   rawRealtimeCaches.clear();
+  metadataCache.clear();
 }
 
 module.exports = {

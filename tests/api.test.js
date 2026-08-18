@@ -360,6 +360,10 @@ describe('API smoke tests', () => {
     const app = await initApp();
     const res = await request(app).get('/api/vehicles.json');
     expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('public, max-age=0, must-revalidate');
+    expect(res.headers['vercel-cdn-cache-control']).toBe(
+      'public, max-age=3, stale-while-revalidate=2'
+    );
     expect(res.body).toMatchObject({
       vehicles: [],
       feed_status: 'offline',

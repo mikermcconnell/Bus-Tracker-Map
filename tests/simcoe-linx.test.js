@@ -1,9 +1,16 @@
 import { describe, expect, test } from 'vitest';
 import AdmZip from 'adm-zip';
 import GtfsRealtimeBindings from 'gtfs-realtime-bindings';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { buildArtifactsFromZip } from '../scripts/build-simcoe-linx.js';
-import { loadMetadata, parseTripUpdates, qualifyVehicle } from '../server/simcoe-linx.js';
+import {
+  loadMetadata,
+  parseTripUpdates,
+  qualifyVehicle,
+  resetSimcoeLinxCache,
+} from '../server/simcoe-linx.js';
 
 function createStaticZip() {
   const zip = new AdmZip();
@@ -73,6 +80,30 @@ function barrieBounds() {
 }
 
 describe('Simcoe LINX integration', () => {
+  test('reuses unchanged static metadata and reloads it after a file change', () => {
+    const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'linx-metadata-'));
+    const metadataPath = path.join(cacheDir, 'simcoe-linx.json');
+    const makeMetadata = (routeIds) => ({
+      trips: { trip: { route_id: routeIds[0] } },
+      routes: { [routeIds[0]]: { short_name: routeIds[0] } },
+      barrie_route_ids: routeIds,
+    });
+    try {
+      fs.writeFileSync(metadataPath, JSON.stringify(makeMetadata(['2'])));
+      resetSimcoeLinxCache();
+      const first = loadMetadata(cacheDir);
+      expect(loadMetadata(cacheDir)).toBe(first);
+
+      fs.writeFileSync(metadataPath, JSON.stringify(makeMetadata(['2', '6'])));
+      const changed = loadMetadata(cacheDir);
+      expect(changed).not.toBe(first);
+      expect(changed.barrie_route_ids).toEqual(['2', '6']);
+    } finally {
+      resetSimcoeLinxCache();
+      fs.rmSync(cacheDir, { recursive: true, force: true });
+    }
+  });
+
   test('keeps Barrie-serving routes without inventing a GTFS platform code', () => {
     const result = buildArtifactsFromZip(createStaticZip(), barrieBounds());
 

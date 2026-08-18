@@ -15,18 +15,30 @@ const PROXY_FAILURE_REASONS = new Set([
 const realtimeCaches = new Map();
 const lastSuccessfulRealtimeByKey = new Map();
 const rawRealtimeCaches = new Map();
+const metadataCache = new Map();
+
+function fileVersion(filePath) {
+  if (!fs.existsSync(filePath)) return 'missing';
+  const stat = fs.statSync(filePath);
+  return `${stat.size}:${stat.mtimeMs}`;
+}
 
 function loadMetadata(cacheDir, metadataFile = 'go-transit.json', routesFile = 'go-transit-routes.geojson') {
   const metadataPath = path.join(cacheDir, metadataFile);
   if (!fs.existsSync(metadataPath)) {
     throw new Error('GO Transit static metadata is not built');
   }
-  const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
   const routesPath = path.join(cacheDir, routesFile);
+  const version = `${fileVersion(metadataPath)}|${fileVersion(routesPath)}`;
+  const cacheKey = `${metadataPath}|${routesPath}`;
+  const cached = metadataCache.get(cacheKey);
+  if (cached && cached.version === version) return cached.value;
+  const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
   if (fs.existsSync(routesPath)) {
     const routes = JSON.parse(fs.readFileSync(routesPath, 'utf8'));
     metadata.shape_coordinates = buildShapeCoordinateIndex(routes);
   }
+  metadataCache.set(cacheKey, { version, value: metadata });
   return metadata;
 }
 
@@ -373,6 +385,7 @@ function resetGoTransitCache() {
   realtimeCaches.clear();
   lastSuccessfulRealtimeByKey.clear();
   rawRealtimeCaches.clear();
+  metadataCache.clear();
 }
 
 module.exports = {

@@ -4,6 +4,9 @@ const GtfsRealtimeBindings = require('gtfs-realtime-bindings');
 
 const LOG_LEVEL = (process.env.LOG_LEVEL || '').toLowerCase();
 const verboseGtfsLogging = LOG_LEVEL === 'debug' || LOG_LEVEL === 'trace';
+const AUXILIARY_REALTIME_CACHE_MS = 15_000;
+const terminalTripUpdateCaches = new Map();
+const vehicleFetchPromises = new Map();
 
 function readFeedTimestamp(value) {
   if (!value) return null;
@@ -66,14 +69,35 @@ function selectTerminalTripUpdate(vehicle, tripUpdates) {
 
 async function fetchTerminalTripUpdates(rtUrl, terminalStopIds) {
   if (!rtUrl) return { feed_timestamp: null, trip_updates: {} };
-  const res = await fetch(rtUrl, { timeout: 10_000 });
-  if (!res.ok) throw new Error('GTFS-RT trip updates fetch failed: ' + res.status);
-  const buffer = await res.buffer();
-  const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buffer);
-  return {
-    feed_timestamp: readFeedTimestamp(feed.header && feed.header.timestamp),
-    trip_updates: parseTerminalTripUpdates(feed, terminalStopIds),
-  };
+  const stopKey = (terminalStopIds || []).map(String).sort().join(',');
+  const cacheKey = `${rtUrl}|${stopKey}`;
+  const now = Date.now();
+  const cached = terminalTripUpdateCaches.get(cacheKey);
+  if (cached && now - cached.cachedAt < AUXILIARY_REALTIME_CACHE_MS) return cached.promise;
+  const promise = (async () => {
+    const res = await fetch(rtUrl, { timeout: 10_000 });
+    if (!res.ok) throw new Error('GTFS-RT trip updates fetch failed: ' + res.status);
+    const buffer = await res.buffer();
+    const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buffer);
+    return {
+      feed_timestamp: readFeedTimestamp(feed.header && feed.header.timestamp),
+      trip_updates: parseTerminalTripUpdates(feed, terminalStopIds),
+    };
+  })();
+  terminalTripUpdateCaches.set(cacheKey, { cachedAt: now, promise });
+  try {
+    const value = await promise;
+    const current = terminalTripUpdateCaches.get(cacheKey);
+    if (current && current.promise === promise) current.cachedAt = Date.now();
+    return value;
+  } catch (error) {
+    terminalTripUpdateCaches.delete(cacheKey);
+    throw error;
+  }
+}
+
+function resetTerminalTripUpdatesCache() {
+  terminalTripUpdateCaches.clear();
 }
 
 async function fetchGtfsRtFeedMeta(rtUrl) {
@@ -118,7 +142,7 @@ async function fetchGtfsRtFeedMeta(rtUrl) {
   }
 }
 
-async function fetchVehicles(rtUrl) {
+async function fetchVehiclesUncached(rtUrl) {
   if (!rtUrl) {
     if (verboseGtfsLogging) {
       console.debug('[gtfs-rt] GTFS_RT_VEHICLES_URL not configured; returning empty vehicles list.');
@@ -190,10 +214,22 @@ async function fetchVehicles(rtUrl) {
   }
 }
 
+function fetchVehicles(rtUrl) {
+  if (!rtUrl) return fetchVehiclesUncached(rtUrl);
+  const existing = vehicleFetchPromises.get(rtUrl);
+  if (existing) return existing;
+  const inFlight = fetchVehiclesUncached(rtUrl).finally(() => {
+    if (vehicleFetchPromises.get(rtUrl) === inFlight) vehicleFetchPromises.delete(rtUrl);
+  });
+  vehicleFetchPromises.set(rtUrl, inFlight);
+  return inFlight;
+}
+
 module.exports = {
   fetchVehicles,
   fetchGtfsRtFeedMeta,
   fetchTerminalTripUpdates,
   parseTerminalTripUpdates,
+  resetTerminalTripUpdatesCache,
   selectTerminalTripUpdate,
 };

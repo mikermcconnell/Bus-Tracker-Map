@@ -8,8 +8,7 @@ describe('frontend data client route loading', () => {
     vi.unstubAllGlobals();
   });
 
-  test('bypasses a previously cached route collection', async () => {
-    vi.spyOn(Date, 'now').mockReturnValue(123);
+  test('uses a stable route URL so Vercel can share the response', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ type: 'FeatureCollection', features: [] })
@@ -19,8 +18,8 @@ describe('frontend data client route loading', () => {
     await createDataClient().fetchRoutes();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/routes.geojson?cb=3f',
-      { cache: 'no-store' }
+      '/api/routes.geojson',
+      {}
     );
   });
 
@@ -35,8 +34,8 @@ describe('frontend data client route loading', () => {
     await rejection;
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/api\/departures\?limit=11&cb=/),
-      expect.objectContaining({ cache: 'no-store' })
+      '/api/departures?limit=11',
+      expect.objectContaining({ signal: expect.anything() })
     );
     vi.useRealTimers();
   });
@@ -51,8 +50,8 @@ describe('frontend data client route loading', () => {
     await createDataClient().fetchDepartures(11, { board: 'downtown' });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/api\/departures\?limit=11&board=downtown&cb=/),
-      expect.objectContaining({ cache: 'no-store' })
+      '/api/departures?limit=11&board=downtown',
+      {}
     );
   });
 
@@ -66,9 +65,21 @@ describe('frontend data client route loading', () => {
     await createDataClient().fetchDepartures(30, { board: 'allandale' });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/api\/departures\?limit=30&board=allandale&cb=/),
-      expect.objectContaining({ cache: 'no-store' })
+      '/api/departures?limit=30&board=allandale',
+      {}
     );
+  });
+
+  test('uses a stable realtime URL without disabling the shared CDN cache', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ vehicles: [] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createDataClient().fetchVehicles();
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/vehicles.json', {});
   });
 
 });

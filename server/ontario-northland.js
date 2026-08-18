@@ -10,8 +10,16 @@ const DEFAULT_VEHICLES_URL = 'https://ontarionorthland.tmix.se/gtfs-realtime/veh
 const DEFAULT_TRIP_UPDATES_URL = 'https://ontarionorthland.tmix.se/gtfs-realtime/tripupdates.pb';
 const DEFAULT_ALERTS_URL = 'https://ontarionorthland.tmix.se/gtfs-realtime/alerts.pb';
 const REALTIME_CACHE_MS = 5_000;
+const AUXILIARY_REALTIME_CACHE_MS = 15_000;
 
 let realtimeCache = null;
+const metadataCache = new Map();
+const auxiliaryFeedCaches = new Map();
+
+function fileVersion(filePath) {
+  const stat = fs.statSync(filePath);
+  return `${stat.size}:${stat.mtimeMs}`;
+}
 
 function readLong(value) {
   if (value === null || value === undefined) return null;
@@ -33,8 +41,12 @@ function readTranslation(value) {
 function loadMetadata(cacheDir) {
   const metadataPath = path.join(cacheDir, 'ontario-northland.json');
   try {
+    const version = fileVersion(metadataPath);
+    const cached = metadataCache.get(metadataPath);
+    if (cached && cached.version === version) return cached.value;
     const parsed = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
     if (parsed && Array.isArray(parsed.barrie_route_ids)) {
+      metadataCache.set(metadataPath, { version, value: parsed });
       return parsed;
     }
   } catch (err) {
@@ -73,6 +85,23 @@ async function fetchFeed(url) {
     feed: GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(buffer),
     headers: response.headers,
   };
+}
+
+async function fetchAuxiliaryFeed(url) {
+  const now = Date.now();
+  const cached = auxiliaryFeedCaches.get(url);
+  if (cached && now - cached.cachedAt < AUXILIARY_REALTIME_CACHE_MS) return cached.promise;
+  const promise = fetchFeed(url);
+  auxiliaryFeedCaches.set(url, { cachedAt: now, promise });
+  try {
+    const value = await promise;
+    const current = auxiliaryFeedCaches.get(url);
+    if (current && current.promise === promise) current.cachedAt = Date.now();
+    return value;
+  } catch (error) {
+    auxiliaryFeedCaches.delete(url);
+    throw error;
+  }
 }
 
 function parseTripUpdates(feed, terminalStopIds) {
@@ -215,12 +244,12 @@ async function fetchOntarioNorthlandRealtime(options = {}) {
 
   const [vehiclePayload, tripResult, alertsResult] = await Promise.all([
     fetchVehicles(vehiclesUrl),
-    fetchFeed(tripUpdatesUrl).catch((err) => {
+    fetchAuxiliaryFeed(tripUpdatesUrl).catch((err) => {
       console.warn('[ontario-northland] Trip updates unavailable:', err.message || err);
       return null;
     }),
     alertsEnabled
-      ? fetchFeed(alertsUrl).catch((err) => {
+      ? fetchAuxiliaryFeed(alertsUrl).catch((err) => {
           console.warn('[ontario-northland] Alerts unavailable:', err.message || err);
           return null;
         })
@@ -249,6 +278,8 @@ async function fetchOntarioNorthlandRealtime(options = {}) {
 
 function resetOntarioNorthlandCache() {
   realtimeCache = null;
+  metadataCache.clear();
+  auxiliaryFeedCaches.clear();
 }
 
 module.exports = {

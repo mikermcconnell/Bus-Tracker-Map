@@ -69,8 +69,7 @@ async function initialize() {
 }
 
 async function fetchJson(url) {
-  const separator = url.includes('?') ? '&' : '?';
-  const response = await fetch(`${url}${separator}cb=${Date.now()}`, { cache: 'no-store' });
+  const response = await fetch(url);
   if (!response.ok) throw new Error(`${url} returned ${response.status}`);
   return response.json();
 }
