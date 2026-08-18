@@ -93,6 +93,54 @@ test('platform sign renders without newer browser convenience APIs', async ({ pa
   await expect(page.locator('.departure-cell')).toContainText(/Departing in 5[34] min/);
 });
 
+test('platform sign keeps the current board mounted across polls and restores it after a reload', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  let requestCount = 0;
+  let apiAvailable = true;
+  await page.setViewportSize({ width: 320, height: 80 });
+  await page.route('**/api/departures?*', (route) => {
+    requestCount += 1;
+    if (!apiAvailable) return route.abort();
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        stop_code: '9002',
+        platform: '2',
+        platform_display: '02',
+        generated_at: Date.now(),
+        status: 'ok',
+        departures: [{
+          agency_id: 'simcoe-linx',
+          agency_name: 'Simcoe County LINX',
+          route_id: 'LINX-2',
+          route_label: '2',
+          destination: 'Wasaga Beach 45th St',
+          departure_time: nowSeconds + 54 * 60,
+          departure_source: 'realtime',
+          display_source: 'live',
+          progress_status: 'approaching',
+        }],
+      }),
+    });
+  });
+
+  await page.goto('/departures/platform.aspx?stop=9002');
+  await expect(page.locator('.route-cell')).toHaveText('2 - Wasaga Beach 45th St');
+  const originalRouteCell = await page.locator('.route-cell').elementHandle();
+  const originalLogo = await page.locator('.agency-logo').elementHandle();
+
+  await expect.poll(() => requestCount, { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
+  expect(await page.evaluate((node) => node === globalThis.document.querySelector('.route-cell'), originalRouteCell)).toBe(true);
+  expect(await page.evaluate((node) => node === globalThis.document.querySelector('.agency-logo'), originalLogo)).toBe(true);
+
+  apiAvailable = false;
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.route-cell')).toHaveText('2 - Wasaga Beach 45th St');
+  await expect(page.locator('.route-cell')).not.toHaveText('Departure information');
+  await expect(page.locator('#departure-status')).toContainText('temporarily unavailable');
+});
+
 test('valid empty and invalid platform URLs show clear states', async ({ page }) => {
   await page.route('**/api/departures?*', (route) => route.fulfill({
     status: 200,
