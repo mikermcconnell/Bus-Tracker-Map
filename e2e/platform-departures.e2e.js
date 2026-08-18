@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const sharp = require('sharp');
 
 test('legacy platform URL renders a responsive LINX departure sign', async ({ page }) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
@@ -217,6 +218,17 @@ test('departure sign fits a 320 by 80 platform display without clipping', async 
   expect(layout.routeBottom).toBeLessThanOrEqual(80);
   expect(layout.departureBottom).toBeLessThanOrEqual(80);
   expect(layout.logoBottom).toBeLessThanOrEqual(80);
+
+  const agencyBounds = await page.locator('.agency-cell').boundingBox();
+  const screenshot = await page.screenshot();
+  const { data: pixels, info } = await sharp(screenshot)
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const sampleX = Math.floor(agencyBounds.x + agencyBounds.width / 2);
+  const sampleY = info.height - 1;
+  const pixelOffset = (sampleY * info.width + sampleX) * info.channels;
+  expect(Array.from(pixels.subarray(pixelOffset, pixelOffset + 3))).toEqual([255, 255, 255]);
 
   if (process.env.CAPTURE_DEPARTURES_320 === '1') {
     await page.screenshot({ path: 'tmp/departures-320x80.png' });
