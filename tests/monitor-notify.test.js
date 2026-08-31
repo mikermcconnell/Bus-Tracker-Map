@@ -9,6 +9,7 @@ const {
   buildSystemMessage,
   buildGtfsStaticChangeMessage,
   buildGtfsIntegritySubject,
+  buildAllandaleDisplaySubject,
   buildEmailVolumeMessage,
   buildHealthCheckSubject,
   buildHealthCheckMessage,
@@ -165,6 +166,19 @@ describe('buildSystemSubject', () => {
     })).toBe(
       'Barrie Transit GPS Alert | POSSIBLE_SERVICE_CALENDAR_MISMATCH | Expected service may not match holiday or special-day service'
     );
+  });
+
+  test('uses a dedicated Allandale display subject', () => {
+    expect(buildAllandaleDisplaySubject(
+      'ALLANDALE_LIVE_DATA_UNAVAILABLE',
+      'Barrie live data unavailable'
+    )).toBe(
+      'Barrie Transit Allandale Display Alert | ALLANDALE_LIVE_DATA_UNAVAILABLE | Barrie live data unavailable'
+    );
+    expect(buildSystemSubject({
+      kind: 'allandale_live_data_recovered',
+      code: 'ALLANDALE_LIVE_DATA_RECOVERED',
+    })).toContain('Barrie live data restored');
   });
 });
 
@@ -354,6 +368,58 @@ describe('buildPlainText', () => {
 });
 
 describe('buildSystemMessage', () => {
+  test('explains an Allandale exact-trip linkage failure', () => {
+    const { subject, text, html } = buildSystemMessage({
+      kind: 'allandale_live_data_unavailable',
+      code: 'ALLANDALE_LIVE_DATA_UNAVAILABLE',
+      checkedAt: new Date('2026-08-31T16:00:00Z'),
+      firstDetectedAt: new Date('2026-08-31T15:00:00Z'),
+      durationMinutes: 60,
+      displayUrl: 'https://bus-tracker-map.vercel.app/departures',
+      boardUrl: 'https://bus-tracker-map.vercel.app/api/departures?board=allandale&limit=30',
+      sourceStatus: 'live',
+      sourceReason: 'fresh_feed',
+      sourceTimestamp: 1788191994,
+      departureCount: 7,
+      liveCount: 0,
+      exactCount: 0,
+      fallbackCount: 7,
+      estimatedCount: 7,
+      scheduledCount: 0,
+      tripPairs: ['static-1 -> realtime-1'],
+      details: 'Seven Barrie departures are shown, but none have an exact live trip match.',
+    });
+
+    expect(subject).toBe(
+      'Barrie Transit Allandale Display Alert | ALLANDALE_LIVE_DATA_UNAVAILABLE | Barrie live data unavailable'
+    );
+    expect(text).toContain('Duration: 60 minutes');
+    expect(text).toContain('Exact / LIVE matches: 0');
+    expect(text).toContain('Example trip ID mismatches: static-1 -> realtime-1');
+    expect(html).toContain('ALLANDALE DEPARTURE DISPLAY ALERT');
+  });
+
+  test('confirms Allandale live-data recovery', () => {
+    const { subject, text } = buildSystemMessage({
+      kind: 'allandale_live_data_recovered',
+      code: 'ALLANDALE_LIVE_DATA_RECOVERED',
+      checkedAt: new Date('2026-08-31T17:00:00Z'),
+      firstDetectedAt: new Date('2026-08-31T15:00:00Z'),
+      alertedAt: new Date('2026-08-31T16:00:00Z'),
+      displayUrl: 'https://bus-tracker-map.vercel.app/departures',
+      sourceStatus: 'live',
+      sourceReason: 'fresh_feed',
+      departureCount: 6,
+      liveCount: 4,
+      exactCount: 4,
+      details: 'Four of six Barrie departures have an exact live trip match.',
+    });
+
+    expect(subject).toContain('ALLANDALE_LIVE_DATA_RECOVERED');
+    expect(text).toContain('Summary: Barrie departures have exact live trip matches again.');
+    expect(text).toContain('Exact / LIVE matches: 4');
+  });
+
   test('includes GPS Alert text in system subjects', () => {
     const { subject, text } = buildSystemMessage({
       kind: 'vehicle_feed_stale',
