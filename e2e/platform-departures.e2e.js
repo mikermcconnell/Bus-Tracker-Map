@@ -142,6 +142,60 @@ test('platform sign keeps the current board mounted across polls and restores it
   await expect(page.locator('#departure-status')).toContainText('temporarily unavailable');
 });
 
+test('platform sign does not rewrite unchanged clock and countdown text every second', async ({ page }) => {
+  const fixedNow = new Date('2026-08-31T12:46:20-04:00').getTime();
+  await page.setViewportSize({ width: 320, height: 80 });
+  await page.addInitScript(({ nowMs }) => {
+    const NativeDate = Date;
+    globalThis.Date = class extends NativeDate {
+      constructor(...args) {
+        super(...(args.length ? args : [nowMs]));
+      }
+
+      static now() {
+        return nowMs;
+      }
+    };
+  }, { nowMs: fixedNow });
+  await page.route('**/api/departures?*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      stop_code: '9002',
+      platform: '2',
+      platform_display: '02',
+      generated_at: fixedNow,
+      status: 'ok',
+      departures: [{
+        agency_id: 'simcoe-linx',
+        agency_name: 'Simcoe County LINX',
+        route_id: 'LINX-2',
+        route_label: '2',
+        destination: 'Wasaga Beach 45th St',
+        departure_time: Math.floor(fixedNow / 1000) + 44 * 60,
+        departure_source: 'realtime',
+      }],
+    }),
+  }));
+
+  await page.goto('/departures/platform.aspx?stop=9002');
+  await expect(page.locator('.departure-cell')).toHaveText('Departing in 44 min');
+  await page.evaluate(() => {
+    globalThis.__platformTextNodes = {
+      clock: globalThis.document.querySelector('#departure-clock').firstChild,
+      countdown: globalThis.document.querySelector('.departure-cell').firstChild,
+    };
+  });
+
+  await page.waitForTimeout(1_200);
+
+  const textNodesWerePreserved = await page.evaluate(() => (
+    globalThis.__platformTextNodes.clock === globalThis.document.querySelector('#departure-clock').firstChild
+      && globalThis.__platformTextNodes.countdown === globalThis.document.querySelector('.departure-cell').firstChild
+  ));
+  expect(textNodesWerePreserved).toBe(true);
+});
+
 test('valid empty and invalid platform URLs show clear states', async ({ page }) => {
   await page.route('**/api/departures?*', (route) => route.fulfill({
     status: 200,

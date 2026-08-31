@@ -278,22 +278,31 @@ function renderDepartures(payload) {
   return true;
 }
 
-function refreshCountdowns() {
+function setTextIfChanged(element, nextText) {
+  const value = String(nextText);
+  if (element.textContent === value) return false;
+  element.textContent = value;
+  return true;
+}
+
+function refreshCountdowns(nowMs = Date.now()) {
   const cells = document.querySelectorAll('[data-departure-time]');
   for (let index = 0; index < cells.length; index += 1) {
     const cell = cells[index];
-    cell.textContent = formatDepartureText(cell.dataset.departureTime);
+    setTextIfChanged(cell, formatDepartureText(cell.dataset.departureTime, nowMs));
   }
 }
 
-function updateClock() {
+function updateClock(now = new Date()) {
   const clock = document.getElementById('departure-clock');
   if (clock) {
-    const now = new Date();
-    clock.dateTime = now.toISOString();
-    clock.textContent = formatTorontoTime(now);
+    const clockText = formatTorontoTime(now);
+    if (clock.textContent !== clockText) {
+      clock.dateTime = now.toISOString();
+      clock.textContent = clockText;
+    }
   }
-  refreshCountdowns();
+  refreshCountdowns(now.getTime());
 }
 
 function setStatus(message) {
