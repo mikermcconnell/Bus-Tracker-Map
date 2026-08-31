@@ -175,6 +175,12 @@ function buildGtfsIntegritySubject(code, summary) {
   return `Barrie Transit GTFS Integrity Alert | ${normalizedCode} | ${summary}`;
 }
 
+function buildAllandaleDisplaySubject(code, summary) {
+  const normalizedCode = code || 'ALLANDALE_DISPLAY_NOTICE';
+  if (!summary) return `Barrie Transit Allandale Display Alert | ${normalizedCode}`;
+  return `Barrie Transit Allandale Display Alert | ${normalizedCode} | ${summary}`;
+}
+
 function appendHolidayToSubject(subject, payload) {
   const holidayLabel = payload && payload.serviceContext && payload.serviceContext.holidayLabel;
   return holidayLabel ? `${subject} | ${holidayLabel}` : subject;
@@ -240,6 +246,18 @@ function buildSystemSubject(payload) {
       subject = buildTaggedSubject(
         payload.code || 'GTFS_SCHEDULE_DATE_NOT_COVERED',
         'Published schedule does not cover today'
+      );
+      break;
+    case 'allandale_live_data_unavailable':
+      subject = buildAllandaleDisplaySubject(
+        payload.code || 'ALLANDALE_LIVE_DATA_UNAVAILABLE',
+        'Barrie live data unavailable'
+      );
+      break;
+    case 'allandale_live_data_recovered':
+      subject = buildAllandaleDisplaySubject(
+        payload.code || 'ALLANDALE_LIVE_DATA_RECOVERED',
+        'Barrie live data restored'
       );
       break;
     case 'gtfs_integrity':
@@ -427,6 +445,49 @@ function buildSystemDescriptor(payload) {
           ['Operational impact', 'Expected bus counts cannot be trusted, so GPS missing-bus alerts are paused for this check.'],
           ['Recommended action', 'Publish or load a current GTFS static feed that covers today, then confirm the expected bus count before relying on GPS alerts.'],
           ['More details', payload.details || 'â€”'],
+        ],
+      };
+    case 'allandale_live_data_unavailable':
+      return {
+        banner: '#7F1D1D',
+        title: 'ALLANDALE DEPARTURE DISPLAY ALERT',
+        rows: [
+          ['Alert ID', payload.code || 'ALLANDALE_LIVE_DATA_UNAVAILABLE'],
+          ['First detected', formatAlertTimestamp(payload.firstDetectedAt)],
+          ['Confirmed at', checkedAt],
+          ['Duration', formatMinutes(payload.durationMinutes)],
+          ['Summary', 'Upcoming Barrie departures cannot be shown with exact live trip data.'],
+          ['Public display', payload.displayUrl || 'unknown'],
+          ['Departures API', payload.boardUrl || 'unknown'],
+          ['Realtime source', `${payload.sourceStatus || 'unknown'} (${payload.sourceReason || 'unknown'})`],
+          ['Realtime source time', formatIsoTimestamp(payload.sourceTimestamp)],
+          ['Barrie departures', String(payload.departureCount ?? 'unknown')],
+          ['Exact / LIVE matches', String(payload.exactCount ?? payload.liveCount ?? 'unknown')],
+          ['Fallback matches', String(payload.fallbackCount ?? 'unknown')],
+          ['Estimated rows', String(payload.estimatedCount ?? 'unknown')],
+          ['Scheduled rows', String(payload.scheduledCount ?? 'unknown')],
+          ['Example trip ID mismatches', Array.isArray(payload.tripPairs) && payload.tripPairs.length ? payload.tripPairs.join(' | ') : 'none available'],
+          ['Operational impact', 'The Allandale display falls back to published schedule times instead of showing LIVE Barrie predictions.'],
+          ['Recommended action', 'Compare the current GTFS Schedule trip IDs with Trip Updates and Vehicle Positions, then correct the upstream publication timing or identifier synchronization.'],
+          ['More details', payload.details || '—'],
+        ],
+      };
+    case 'allandale_live_data_recovered':
+      return {
+        banner: '#166534',
+        title: 'ALLANDALE DEPARTURE DISPLAY RECOVERED',
+        rows: [
+          ['Alert ID', payload.code || 'ALLANDALE_LIVE_DATA_RECOVERED'],
+          ['Recovered at', checkedAt],
+          ['Original failure detected', formatAlertTimestamp(payload.firstDetectedAt)],
+          ['Original alert sent', formatAlertTimestamp(payload.alertedAt)],
+          ['Summary', 'Barrie departures have exact live trip matches again.'],
+          ['Public display', payload.displayUrl || 'unknown'],
+          ['Realtime source', `${payload.sourceStatus || 'unknown'} (${payload.sourceReason || 'unknown'})`],
+          ['Barrie departures', String(payload.departureCount ?? 'unknown')],
+          ['Exact / LIVE matches', String(payload.exactCount ?? payload.liveCount ?? 'unknown')],
+          ['Operational impact', 'The Allandale display can show LIVE Barrie predictions again.'],
+          ['More details', payload.details || '—'],
         ],
       };
     case 'runtime_failure':
@@ -896,6 +957,7 @@ module.exports = {
   buildTaggedSubject,
   buildMonitorSubject,
   buildGtfsIntegritySubject,
+  buildAllandaleDisplaySubject,
   formatAlertTimestamp,
   formatIsoTimestamp,
   escapeHtml,

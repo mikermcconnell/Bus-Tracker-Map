@@ -14,6 +14,14 @@ const {
 } = require('./notify');
 const { checkGtfsStaticChange, saveGtfsStaticState } = require('./gtfs-static-change');
 const { normalizeRouteId } = require('./routes');
+const {
+  advanceState: advanceAllandaleLiveState,
+  endpointFailure: allandaleEndpointFailure,
+  evaluatePayload: evaluateAllandalePayload,
+  fetchPayload: fetchAllandalePayload,
+  loadState: loadAllandaleLiveState,
+  saveState: saveAllandaleLiveState,
+} = require('./allandale-live');
 
 const GTFS_STATIC_URL = process.env.GTFS_STATIC_URL;
 const GTFS_RT_VEHICLES_URL = process.env.GTFS_RT_VEHICLES_URL;
@@ -43,12 +51,18 @@ const POSSIBLE_SERVICE_MISMATCH_MIN_RATIO = Math.max(
 const SMTP_FORCE_IPV4 = /^(1|true|yes|on)$/i.test(String(process.env.SMTP_FORCE_IPV4 || 'true').trim());
 const TEST_ALERT_EVERY_RUN = /^(1|true|yes|on)$/i.test(String(process.env.TEST_ALERT_EVERY_RUN || '').trim());
 const HEARTBEAT_URL = process.env.HEARTBEAT_URL;
+const ALLANDALE_DEPARTURES_URL = process.env.ALLANDALE_DEPARTURES_URL ||
+  'https://bus-tracker-map.vercel.app/api/departures?board=allandale&limit=30';
+const ALLANDALE_LIVE_ALERT_AFTER_MIN = parseInt(process.env.ALLANDALE_LIVE_ALERT_AFTER_MIN || '60', 10);
+const ALLANDALE_LIVE_MIN_DEPARTURES = parseInt(process.env.ALLANDALE_LIVE_MIN_DEPARTURES || '2', 10);
+const ALLANDALE_LIVE_RECOVERY_CHECKS = parseInt(process.env.ALLANDALE_LIVE_RECOVERY_CHECKS || '2', 10);
 
 const CACHE_DIR = path.join(__dirname, 'cache');
 const STATE_FILE = path.join(CACHE_DIR, 'state.json');
 const HEARTBEAT_FILE = path.join(CACHE_DIR, 'heartbeat.json');
 const ISSUE_STATE_FILE = path.join(CACHE_DIR, 'issue-state.json');
 const GTFS_STATIC_STATE_FILE = path.join(CACHE_DIR, 'gtfs-static-state.json');
+const ALLANDALE_LIVE_STATE_FILE = path.join(CACHE_DIR, 'allandale-live-state.json');
 
 function writeJsonFile(filePath, data) {
   const dir = path.dirname(filePath);
@@ -477,6 +491,86 @@ async function triggerIssueAlert(emailConfig, issueState, activeIssueCodes, payl
   return true;
 }
 
+async function checkAllandaleLiveData(emailConfig, checkedAt, serviceContext, fetchImpl = fetch) {
+  let evaluation;
+  try {
+    const payload = await fetchAllandalePayload(ALLANDALE_DEPARTURES_URL, fetchImpl);
+    evaluation = evaluateAllandalePayload(payload, {
+      minDepartures: ALLANDALE_LIVE_MIN_DEPARTURES,
+    });
+  } catch (err) {
+    evaluation = allandaleEndpointFailure(err);
+  }
+
+  const current = loadAllandaleLiveState(ALLANDALE_LIVE_STATE_FILE);
+  const transition = advanceAllandaleLiveState(current, evaluation, checkedAt, {
+    alertAfterMinutes: ALLANDALE_LIVE_ALERT_AFTER_MIN,
+    recoveryChecks: ALLANDALE_LIVE_RECOVERY_CHECKS,
+  });
+
+  if (!transition.action) {
+    saveAllandaleLiveState(ALLANDALE_LIVE_STATE_FILE, transition.state);
+    return { evaluation, state: transition.state, action: null };
+  }
+
+  const action = transition.action;
+  const common = {
+    checkedAt,
+    serviceContext,
+    boardUrl: ALLANDALE_DEPARTURES_URL,
+    displayUrl: ALLANDALE_DEPARTURES_URL.replace(/\/api\/departures(?:\?.*)?$/i, '/departures'),
+    firstDetectedAt: action.firstDetectedAt,
+    alertedAt: action.alertedAt,
+    sourceStatus: action.evaluation.sourceStatus,
+    sourceReason: action.evaluation.sourceReason,
+    sourceTimestamp: action.evaluation.sourceTimestamp,
+    departureCount: action.evaluation.counts.departures,
+    liveCount: action.evaluation.counts.live,
+    exactCount: action.evaluation.counts.exact,
+    fallbackCount: action.evaluation.counts.fallback,
+    estimatedCount: action.evaluation.counts.estimated,
+    scheduledCount: action.evaluation.counts.scheduled,
+    tripPairs: action.evaluation.tripPairs,
+    details: action.evaluation.details,
+  };
+
+  try {
+    if (action.kind === 'alert') {
+      await sendSystemAlert(emailConfig, {
+        ...common,
+        kind: 'allandale_live_data_unavailable',
+        code: 'ALLANDALE_LIVE_DATA_UNAVAILABLE',
+        severity: 'Critical',
+        durationMinutes: action.durationMinutes,
+      });
+    } else {
+      await sendSystemAlert(emailConfig, {
+        ...common,
+        kind: 'allandale_live_data_recovered',
+        code: 'ALLANDALE_LIVE_DATA_RECOVERED',
+        severity: 'Info',
+      });
+    }
+    saveAllandaleLiveState(ALLANDALE_LIVE_STATE_FILE, transition.state);
+  } catch (err) {
+    if (action.kind === 'alert') {
+      saveAllandaleLiveState(ALLANDALE_LIVE_STATE_FILE, {
+        ...transition.state,
+        status: 'pending',
+        alertedAt: null,
+      });
+    } else {
+      saveAllandaleLiveState(ALLANDALE_LIVE_STATE_FILE, {
+        ...current,
+        recoveryChecks: 0,
+      });
+    }
+    throw err;
+  }
+
+  return { evaluation, state: transition.state, action: action.kind };
+}
+
 async function sendRecoveryAlerts(emailConfig, issueState, activeIssueCodes, checkedAt) {
   const active = issueState.active || {};
   const codes = Object.keys(active);
@@ -637,6 +731,19 @@ async function main() {
       saveIssueState(issueState);
       await saveSuccessHeartbeat(emailConfig);
       process.exit(0);
+    }
+
+    try {
+      const allandaleResult = await checkAllandaleLiveData(emailConfig, now, serviceContext);
+      console.log(
+        '[monitor] Allandale live data: %s (%s); state: %s%s',
+        allandaleResult.evaluation.status,
+        allandaleResult.evaluation.reason,
+        allandaleResult.state.status,
+        allandaleResult.action ? `; email: ${allandaleResult.action}` : ''
+      );
+    } catch (err) {
+      console.warn('[monitor] Allandale live-data email failed:', formatErrorText(err));
     }
 
     console.log('[monitor] Expected: %d buses across %d routes', expected.totalExpected, expected.byRoute.size);
@@ -861,4 +968,5 @@ module.exports = {
   getPossibleServiceMismatchContext,
   buildRouteReport,
   getWatchdogAlertDetails,
+  checkAllandaleLiveData,
 };
