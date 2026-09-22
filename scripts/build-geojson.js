@@ -149,7 +149,7 @@ function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
 
     const zip = new AdmZip(buffer);
     const getText = (name) => {
-      const entry = zip.getEntry(name);
+      const entry = zip.getEntry(name) || zip.getEntry(`google_transit/${name}`);
       if (!entry) return null;
       return zip.readAsText(entry);
     };

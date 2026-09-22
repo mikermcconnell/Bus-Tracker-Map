@@ -20,7 +20,7 @@ const GO_ALLANDALE_STOP_IDS = new Set(['08049', 'AD']);
 const REGION_PADDING_DEGREES = 0.015;
 
 function readCsv(zip, name) {
-  const entry = zip.getEntry(name);
+  const entry = zip.getEntry(name) || zip.getEntry(`google_transit/${name}`);
   if (!entry) throw new Error(`${name} missing from GTFS feed`);
   return parse(zip.readAsText(entry), {
     columns: true,
