@@ -12,6 +12,37 @@ require('dotenv').config();
 
 const DEFAULT_STATIC_URL = 'https://ontarionorthland.tmix.se/gtfs/gtfs.zip';
 
+// Sparse feed shapes can connect distant stops directly through the city.
+// Leave a gap rather than invent a road alignment across missing geometry.
+function splitUnsupportedConnections(geometry) {
+  const lines = geometry.type === 'LineString' ? [geometry.coordinates] : geometry.coordinates;
+  const sections = [];
+  for (const line of lines) {
+    let section = [];
+    for (const point of line) {
+      const previous = section[section.length - 1];
+      if (previous) {
+        const radians = Math.PI / 180;
+        const dLat = (point[1] - previous[1]) * radians;
+        const dLon = (point[0] - previous[0]) * radians;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(previous[1] * radians) *
+          Math.cos(point[1] * radians) * Math.sin(dLon / 2) ** 2;
+        const distanceKm = 6371 * 2 * Math.asin(Math.sqrt(Math.min(1, a)));
+        if (distanceKm > 5) {
+          if (section.length > 1) sections.push(section);
+          section = [];
+        }
+      }
+      section.push(point);
+    }
+    if (section.length > 1) sections.push(section);
+  }
+  if (!sections.length) return null;
+  return sections.length === 1
+    ? { type: 'LineString', coordinates: sections[0] }
+    : { type: 'MultiLineString', coordinates: sections };
+}
+
 function readCsv(zip, name, options = {}) {
   const entry = zip.getEntry(name);
   if (!entry) {
@@ -198,6 +229,8 @@ function buildArtifactsFromZip(zipBuffer, barrieRoutesGeojson) {
       return;
     }
     if (!clipped || !clipped.geometry || !clipped.geometry.coordinates.length) return;
+    clipped.geometry = splitUnsupportedConnections(clipped.geometry);
+    if (!clipped.geometry) return;
 
     const trip = barrieTrips.find((entry) => String(entry.shape_id) === shapeId);
     clipped.properties = {
@@ -277,6 +310,7 @@ if (require.main === module) {
 
 module.exports = {
   DEFAULT_STATIC_URL,
+  splitUnsupportedConnections,
   getFeatureCollectionBounds,
   buildArtifactsFromZip,
   buildOntarioNorthlandArtifacts,
