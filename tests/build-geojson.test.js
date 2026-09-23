@@ -44,6 +44,7 @@ function createGtfsZipBuffer() {
     '1,1,Downtown Hub,44.3878,-79.6903,0,,',
     '2,2,Downtown Hub,44.3877,-79.6902,0,,',
     '14,14,Essa at Gowan,44.373522,-79.691152,0,,',
+    ',,Barrie Allandale Transit Terminal,44.3740,-79.6902,1,,',
     'BATT,BATT,Barrie Allandale Transit Terminal,44.3740,-79.6902,1,,',
     '9006,9006,Barrie Allandale Transit Terminal Platform 6,44.3742,-79.6897,0,BATT,6',
     ''
