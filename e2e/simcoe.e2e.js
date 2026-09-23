@@ -13,7 +13,7 @@ test('regional map loads, focuses a route, and reveals live service status', asy
   });
   const now = Math.floor(Date.now() / 1000);
   await page.route('**/region-tile/**', (route) => route.fulfill({ status: 200, contentType: 'image/png', body: transparentTile }));
-  await page.route('**/api/simcoe/config?*', (route) => route.fulfill({
+  await page.route('**/api/simcoe/config*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
@@ -25,7 +25,7 @@ test('regional map loads, focuses a route, and reveals live service status', asy
       basemap: { url: '/region-tile/{z}/{x}/{y}.png', tile_size: 256, zoom_offset: 0, max_zoom: 19 },
     }),
   }));
-  await page.route('**/api/simcoe/routes.geojson?*', (route) => route.fulfill({
+  await page.route('**/api/simcoe/routes.geojson*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({ type: 'FeatureCollection', features: [
@@ -35,7 +35,7 @@ test('regional map loads, focuses a route, and reveals live service status', asy
       { type: 'Feature', properties: { agency_id: 'barrie-transit', agency_name: 'Barrie Transit', route_id: '8A', route_short_name: '8A', route_long_name: 'RVH / Yonge', route_color: '#A6192E' }, geometry: { type: 'LineString', coordinates: [[-79.72, 44.35], [-79.67, 44.42]] } },
     ] }),
   }));
-  await page.route('**/api/simcoe/stops.geojson?*', (route) => route.fulfill({
+  await page.route('**/api/simcoe/stops.geojson*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({ type: 'FeatureCollection', features: [{
@@ -44,7 +44,7 @@ test('regional map loads, focuses a route, and reveals live service status', asy
       geometry: { type: 'Point', coordinates: [-80.18, 44.5] },
     }] }),
   }));
-  await page.route('**/api/simcoe/vehicles.json?*', (route) => route.fulfill({
+  await page.route('**/api/simcoe/vehicles.json*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({

@@ -83,7 +83,7 @@ test('main map clears last-known vehicles when polling fails', async ({ page }) 
       }),
     });
   });
-  await page.route('**/api/vehicles.json?*', async (route) => {
+  await page.route('**/api/vehicles.json*', async (route) => {
     if (failVehiclePolls) {
       await route.abort('failed');
       return;
@@ -267,7 +267,7 @@ test('route lines explain themselves and emphasize the exact approaching trip sh
       ],
     }),
   }));
-  await page.route('**/api/vehicles.json?*', (route) => route.fulfill({
+  await page.route('**/api/vehicles.json*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
@@ -359,7 +359,7 @@ test('terminal board shows a GO train departure countdown at Allandale', async (
       }],
     }),
   }));
-  await page.route('**/api/vehicles.json?*', (route) => route.fulfill({
+  await page.route('**/api/vehicles.json*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
@@ -438,7 +438,7 @@ test('terminal board ignores viewport and route-layer visibility but excludes de
     contentType: 'application/json',
     body: JSON.stringify({ type: 'FeatureCollection', features: [] }),
   }));
-  await page.route('**/api/vehicles.json?*', (route) => route.fulfill({
+  await page.route('**/api/vehicles.json*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({

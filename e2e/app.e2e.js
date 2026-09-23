@@ -60,7 +60,7 @@ test('main map clears last-known vehicles when polling fails', async ({ page }) 
       }),
     });
   });
-  await page.route('**/api/vehicles.json?*', async (route) => {
+  await page.route('**/api/vehicles.json*', async (route) => {
     if (failVehiclePolls) {
       await route.abort('failed');
       return;
@@ -364,7 +364,7 @@ test('platform map renders current assignments and updates markers in place', as
       base_path: '/',
     }),
   }));
-  await page.route('**/api/routes.geojson?*', (route) => route.fulfill({
+  await page.route('**/api/routes.geojson*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
@@ -380,7 +380,7 @@ test('platform map renders current assignments and updates markers in place', as
       }],
     }),
   }));
-  await page.route('**/api/terminal-layout?*', (route) => route.fulfill({
+  await page.route('**/api/terminal-layout*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
@@ -497,7 +497,7 @@ test('platform map renders current assignments and updates markers in place', as
       },
     }),
   }));
-  await page.route('**/api/vehicles.json?*', (route) => {
+  await page.route('**/api/vehicles.json*', (route) => {
     vehiclePoll += 1;
     const lat = 44.373837 + Math.min(vehiclePoll - 1, 10) * 0.000005;
     return route.fulfill({
@@ -698,7 +698,7 @@ test('platform marker disappears once its vehicle has departed', async ({ page }
       base_path: '/',
     }),
   }));
-  await page.route('**/api/vehicles.json?*', (route) => {
+  await page.route('**/api/vehicles.json*', (route) => {
     polls += 1;
     return route.fulfill({
       status: 200,
@@ -746,7 +746,7 @@ test('platform marker disappears once its vehicle has departed', async ({ page }
 test('platform map calibration stays inside the image at a 4:3 viewport', async ({ page }) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   await page.setViewportSize({ width: 1280, height: 960 });
-  await page.route('**/api/vehicles.json?*', (route) => route.fulfill({
+  await page.route('**/api/vehicles.json*', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
@@ -798,7 +798,7 @@ test('platform map hides vehicle icons when the live feed goes offline', async (
       base_path: '/',
     }),
   }));
-  await page.route('**/api/vehicles.json?*', (route) => {
+  await page.route('**/api/vehicles.json*', (route) => {
     pollCount += 1;
     const offline = pollCount > 1;
     return route.fulfill({
