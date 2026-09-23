@@ -314,15 +314,17 @@ function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
     const terminalStationIds = new Set(
       stopsRows
         .filter((stop) => (
+          String(stop.stop_id || '').trim() !== '' &&
           String(stop.location_type || '') === '1' &&
           /Barrie Allandale Transit Terminal/i.test(String(stop.stop_name || ''))
         ))
-        .map((stop) => String(stop.stop_id))
+        .map((stop) => String(stop.stop_id).trim())
     );
     const terminalStops = stopsRows.filter((stop) => (
       String(stop.location_type || '0') === '0' &&
       (
-        terminalStationIds.has(String(stop.parent_station || '')) ||
+        (String(stop.parent_station || '').trim() !== '' &&
+          terminalStationIds.has(String(stop.parent_station).trim())) ||
         /Barrie Allandale Transit Terminal Platform/i.test(String(stop.stop_name || '')) ||
         Object.hasOwn(ADDITIONAL_TERMINAL_STOP_PLATFORMS, String(stop.stop_id || ''))
       )
