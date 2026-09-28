@@ -62,6 +62,13 @@ const entryPoints = [
     outputHtml: 'notices.html'
   },
   {
+    key: 'trainingVideos',
+    entryPath: path.join(srcDir, 'training-videos', 'main.js'),
+    cssPath: path.join(srcDir, 'training-videos', 'styles.css'),
+    templatePath: path.join(srcDir, 'training-videos', 'index.html'),
+    outputHtml: 'training-videos.html'
+  },
+  {
     key: 'departures',
     entryPath: path.join(srcDir, 'departures', 'main.js'),
     cssPath: path.join(srcDir, 'departures', 'styles.css'),

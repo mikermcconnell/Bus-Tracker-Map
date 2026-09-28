@@ -692,11 +692,14 @@ async function getSimcoeRegionVehiclePayload() {
 
 const router = express.Router();
 const apiRouter = express.Router();
+const TRAINING_CSP = "default-src 'self'; style-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com; img-src 'self' data: https://i.ytimg.com; connect-src 'self' https://www.youtube.com;";
 
 router.use(express.static(FRONTEND_DIR, {
   extensions: ['html'],
   setHeaders(res, servedPath) {
-    if (path.basename(servedPath) === 'notices.html') {
+    if (path.basename(servedPath) === 'training-videos.html') {
+      res.setHeader('Content-Security-Policy', TRAINING_CSP);
+    } else if (path.basename(servedPath) === 'notices.html') {
       res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';");
     } else {
       res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
@@ -1018,6 +1021,14 @@ router.get('/notices', (req, res, next) => {
   res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';");
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(noticesPath);
+});
+
+router.get(['/videos', '/training-videos'], (req, res, next) => {
+  const trainingPath = path.join(FRONTEND_DIR, 'training-videos.html');
+  if (!fs.existsSync(trainingPath)) return next();
+  res.setHeader('Content-Security-Policy', TRAINING_CSP);
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(trainingPath);
 });
 
 router.get('/departures/platform.aspx', (req, res, next) => {

@@ -97,6 +97,14 @@ Open [http://localhost:3000/notices](http://localhost:3000/notices) locally or `
 
 For the terminal TV, disable its sleep/screensaver setting and bookmark the production `/notices` address. Some built-in TV browsers cannot reopen a page automatically or permanently hide their toolbar; use a kiosk-capable external player if the on-device test shows either limitation.
 
+## Waiting-area travel tips TV display
+
+Open [http://localhost:3000/videos](http://localhost:3000/videos) locally or `/videos` on the production site. `/training-videos` remains an alternate address. The page plays public Barrie Transit YouTube videos on repeat with a separate large caption panel and a right-side list of the current and upcoming videos, using the dark styling of the service notices display. The right panel counts down the current video's remaining seconds until the next video starts; the countdown pauses and follows seeks. Playback starts muted. If the TV browser blocks autoplay, press OK on its remote to start it. Keep the TV itself muted as well.
+
+The initial rotation contains [How to Wait for and Board a Bus](https://www.youtube.com/watch?v=RU5GO8qtHUE) and [How to Pay Your Fare](https://www.youtube.com/watch?v=Rdip0McYaHM), captioned from the timestamped transcripts supplied for this screen. To rotate more videos, create a public YouTube playlist and put its ID in `frontend/src/training-videos/videos.js`. Add each video's public ID, title, and approved timestamped caption cues to `VIDEOS` and redeploy the site. The page follows playlist order and skips any video without approved caption cues in the catalogue. It checks for playlist updates after about 30 minutes at a video boundary. If no captioned videos are available, the screen shows a holding message until the catalogue is updated. If YouTube cannot load, it retries automatically.
+
+Before installing the screen, check the production page on the actual TV browser: video embed, muted autoplay or remote start, caption timing and reading size, continuous playback, and full-screen display. The embedded player hides its playback controls, but YouTube may still display its title or channel information at startup or when paused. The browser may also show its own YouTube captions if that viewer preference is enabled; turn those off on the TV so the page's large captions are the only set shown.
+
 ## Useful scripts
 - `npm run build` - bundle the frontend and rebuild GeoJSON caches.
 - `npm run build:data` - regenerate the cached GeoJSON from the latest GTFS ZIP.
