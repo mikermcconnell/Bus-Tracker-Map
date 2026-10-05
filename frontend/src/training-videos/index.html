@@ -10,51 +10,34 @@
 </head>
 <body>
   <main class="training-screen">
-    <div class="training-content">
-      <section class="training-stage" aria-label="Barrie Transit travel tip video">
-        <div class="training-player-wrap">
-          <div id="training-player"></div>
-          <div id="training-holding" class="training-holding" role="status">
-            <h1 id="training-holding-title">Loading travel tips</h1>
-            <p id="training-holding-message">Please wait while the video loads.</p>
-            <button id="training-start" class="training-start" type="button" hidden>Start videos</button>
-          </div>
-        </div>
-      </section>
+    <header class="training-header">
+      <img class="training-logo" src="./assets/agency-barrie-transit.png" alt="Barrie Transit">
+      <span class="training-website">MyRideBarrie.ca</span>
+    </header>
 
-      <aside class="training-playlist" aria-label="Travel tip video playlist">
-        <header class="training-playlist-header">
-          <div class="training-playlist-heading">
-            <span class="training-playlist-eyebrow">Now showing</span>
-            <h2>Travel tips</h2>
-            <p id="training-playlist-count">Loading videos</p>
-          </div>
-          <div class="training-playlist-clock" role="timer" aria-label="Time until next video" aria-live="off">
-            <strong id="training-countdown-value">--</strong>
-            <span id="training-countdown-label">SEC LEFT</span>
-          </div>
-        </header>
-        <div class="training-playlist-body">
-          <section aria-labelledby="training-now-heading">
-            <h3 id="training-now-heading">Playing now</h3>
-            <ol id="training-now-list" class="training-video-list"></ol>
-          </section>
-          <section aria-labelledby="training-up-next-heading">
-            <h3 id="training-up-next-heading">Up next</h3>
-            <ol id="training-up-next-list" class="training-video-list"></ol>
-            <p id="training-up-next-more" class="training-up-next-more" hidden></p>
-          </section>
+    <section class="training-stage" aria-label="Barrie Transit travel tip video">
+      <div class="training-player-wrap">
+        <div id="training-player"></div>
+        <div id="training-holding" class="training-holding" role="status">
+          <h1 id="training-holding-title">Loading travel tips</h1>
+          <p id="training-holding-message">Please wait while the video loads.</p>
+          <button id="training-start" class="training-start" type="button" hidden>Start videos</button>
         </div>
-      </aside>
+      </div>
+    </section>
+
+    <div class="training-progress" aria-hidden="true">
+      <div id="training-progress-bar" class="training-progress-bar"></div>
+    </div>
+
+    <div class="training-info">
+      <h2 id="training-title" class="training-title">How to Wait for and Board a Bus</h2>
+      <p id="training-up-next" class="training-up-next" hidden></p>
     </div>
 
     <section class="training-captions" aria-label="Large video captions">
-      <p id="training-caption" class="training-caption">Captions will appear when the video begins.</p>
+      <p id="training-caption" class="training-caption"></p>
     </section>
-
-    <footer class="training-footer">
-      <span id="training-title">How to Wait for and Board a Bus</span>
-    </footer>
   </main>
   <script src="%APP_JS%"></script>
 </body>

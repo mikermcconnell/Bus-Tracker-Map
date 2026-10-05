@@ -185,6 +185,17 @@ function copySharedAssets() {
   }
 }
 
+function copyTrainingVideoMedia() {
+  const mediaSource = path.join(srcDir, 'training-videos', 'media');
+  if (!fs.existsSync(mediaSource)) return;
+  const mediaDest = path.join(distDir, 'training-videos', 'media');
+  ensureDir(mediaDest);
+  for (const entry of fs.readdirSync(mediaSource)) {
+    if (!entry.endsWith('.mp4')) continue;
+    fs.copyFileSync(path.join(mediaSource, entry), path.join(mediaDest, entry));
+  }
+}
+
 function copyLeafletAssets() {
   const leafletImagesDir = path.join(leafletDir, 'dist', 'images');
   if (!fs.existsSync(leafletImagesDir)) {
@@ -291,6 +302,7 @@ async function main() {
   copyPlatformMapAssets();
   copySharedAssets();
   copyLeafletAssets();
+  copyTrainingVideoMedia();
 
   writeManifest(entryAssets);
   console.log('Frontend build complete:', entryAssets);
