@@ -69,6 +69,12 @@ function createGtfsZipBuffer() {
     ''
   ].join('\n'), 'utf8'));
 
+  zip.addFile('feed_info.txt', Buffer.from([
+    'feed_publisher_name,feed_publisher_url,feed_lang,feed_start_date,feed_end_date,feed_version',
+    'Barrie Transit,https://www.barrie.ca,en,20260701,20260831,20260701',
+    ''
+  ].join('\n'), 'utf8'));
+
   zip.addFile('calendar_dates.txt', Buffer.from([
     'service_id,date,exception_type',
     'weekday,20260803,2',
@@ -176,6 +182,29 @@ test('build-geojson emits routes and stops artefacts', async () => {
     expect(metadata.terminal_approach_fallbacks['1|0|1001']).toBeUndefined();
     expect(metadata.service_calendars.weekday.monday).toBe(true);
     expect(metadata.service_exceptions['20260803'].weekday).toBe(2);
+
+    const departuresPath = path.join(cacheDir, 'barrie-departures.json');
+    expect(fs.existsSync(departuresPath)).toBe(true);
+    const departures = JSON.parse(fs.readFileSync(departuresPath, 'utf8'));
+    expect(departures.generated_at).toBe(metadata.generated_at);
+    expect(departures.feed_info).toEqual({
+      feed_version: '20260701',
+      feed_start_date: '20260701',
+      feed_end_date: '20260831',
+    });
+    expect(departures.stop_ids_by_code['1']).toBe('1');
+    expect(departures.stops.BATT).toBeUndefined();
+    expect(departures.departures_by_stop['1']).toEqual([
+      ['trip-1', '12:02:00', 2, null],
+    ]);
+    expect(departures.trips['trip-1']).toEqual({
+      route_id: '1',
+      service_id: 'weekday',
+      direction_id: '0',
+      headsign: 'Downtown',
+    });
+    expect(departures.routes['12B'].short_name).toBe('12B');
+    expect(departures.service_calendars.weekday.monday).toBe(true);
   } finally {
     await new Promise((resolve) => server.close(resolve));
     fs.rmSync(cacheDir, { recursive: true, force: true });
