@@ -1,5 +1,3 @@
-import L from 'leaflet';
-import mapboxgl from 'mapbox-gl';
 import { createDataClient } from '../data/client.js';
 import { BATT_COORDS, getTerminalListStatus } from '../map/nearby-vehicles.js';
 import { clusterVehicles, distanceBetweenMeters } from '../map/vehicle-groups.js';
@@ -17,8 +15,20 @@ import {
   isTerminalDisplayVehicle,
   normalizeDepartureBoard,
   normalizeBearing,
+  projectToBasemap,
   projectVehicleToImage,
+  basemapPixel,
+  snapToTrack,
+  trackPoint,
 } from './model.js';
+import {
+  GO_TRAIN_CAR_GAP_METRES,
+  GO_TRAIN_CONSIST,
+  describeGoTrain,
+  drawGoTrain,
+  isGoTrain,
+} from './go-train.js';
+import BASEMAP_CALIBRATION from './basemap-calibration.json';
 import {
   fetchText,
   isNewBuild,
@@ -27,6 +37,7 @@ import {
 } from './kiosk.js';
 
 const { assessVehicleFeedFreshness, selectVehiclesForDisplay } = feedFreshness;
+const SVG_NS = 'http://www.w3.org/2000/svg';
 const DEFAULT_POLL_MS = 10000;
 const LIVE_TRACKING_UNAVAILABLE_MESSAGE = 'Live bus tracking is unavailable. Times may not reflect delays.';
 const REQUEST_TIMEOUT_MS = 8000;
@@ -41,10 +52,6 @@ const NO_DATA_RELOAD_MS = 10 * 60 * 1000;
 const CLUSTER_DISTANCE_METERS = 8;
 const APPROACHING_WINDOW_MS = 5 * 60 * 1000;
 const APPROACHING_DISTANCE_METERS = 500;
-const PLATFORM_MAP_CENTER = Object.freeze([44.373974, -79.689423]);
-const PLATFORM_MAP_ZOOM = 18.1;
-const PLATFORM_MAPBOX_ZOOM = PLATFORM_MAP_ZOOM - 1;
-const PLATFORM_BASEMAP_LOAD_TIMEOUT_MS = 15000;
 const AGENCY_BRANDING = Object.freeze({
   'barrie-transit': Object.freeze({
     id: 'barrie-transit',
@@ -126,11 +133,26 @@ const PICKUP_DROPOFF_POINTER_COORDINATES = Object.freeze({
   lat: 44.373639,
   lon: -79.687411,
 });
-// Center of the terminal building footprint identified on the display map.
-const TERMINAL_BUILDING_COORDINATES = Object.freeze({
-  lat: 44.374119,
-  lon: -79.690116,
-});
+// Terminal building footprint (OpenStreetMap way 1427393969, as used by the Barrie Simulator).
+const TERMINAL_BUILDING_FOOTPRINT = Object.freeze([
+  [44.374292, -79.690245], [44.374213, -79.690261], [44.374215, -79.690301], [44.37413, -79.690318],
+  [44.374138, -79.690352], [44.373951, -79.690395], [44.373914, -79.690081], [44.374092, -79.690042],
+  [44.374104, -79.690076], [44.374266, -79.690033],
+]);
+// GO Barrie line through the terminal: the GO shape's final segment into Allandale
+// Waterfront, extended west across Essa Rd. [west end, east end].
+const GO_TRACK = Object.freeze([[44.373855, -79.6925], [44.37316, -79.6835]]);
+// Only GPS positions this close to the track count as a train on this line.
+const GO_TRACK_MAX_OFFSET_METRES = 60;
+// A stopped train sits along the GO platform with its west end just west of the P1 pointer.
+const GO_TRAIN_STOPPED_FRONT_OFFSET_METRES = -30;
+// Street names drawn on the map (the simulator renders none). [start, end] along each street.
+const MAP_STREET_LABELS = Object.freeze([
+  Object.freeze({ name: 'Tiffin St', line: [[44.374399, -79.691263], [44.374518, -79.690551]] }),
+  Object.freeze({ name: 'Essa Rd', line: [[44.373327, -79.691097], [44.373135, -79.691228]] }),
+  Object.freeze({ name: 'Lakeshore Dr', line: [[44.374865, -79.688293], [44.374611, -79.687485]] }),
+  Object.freeze({ name: 'Gowan St', line: [[44.373412, -79.688251], [44.373286, -79.687196]] }),
+]);
 const MAP_CONNECTIONS = Object.freeze([
   Object.freeze({
     platform: '9',
@@ -186,195 +208,28 @@ function createElement(tag, className, text) {
   return element;
 }
 
-function tileHasVisiblePixels(tile) {
-  try {
-    const canvas = document.createElement('canvas');
-    canvas.width = 24;
-    canvas.height = 24;
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) return true;
-    context.drawImage(tile, 0, 0, canvas.width, canvas.height);
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    for (let index = 3; index < pixels.length; index += 4) {
-      if (pixels[index] > 8) return true;
-    }
-    return false;
-  } catch (_err) {
-    // A provider without CORS-safe tiles can still be displayed; only pixel
-    // inspection is unavailable in that case.
-    return true;
+// The base map is a still image rendered from the Barrie Simulator. It needs no
+// network, WebGL or map library, so it shows immediately on the TV.
+function setupImageBasemap(container, mapPlane) {
+  if (!container || !mapPlane) return null;
+  const image = createElement('img', 'platform-basemap__image');
+  image.src = './assets/allandale-sim-basemap.webp';
+  image.alt = '';
+  image.decoding = 'async';
+  container.appendChild(image);
+  const stage = mapPlane.parentNode;
+  if (stage && !stage.querySelector('.platform-basemap__attribution')) {
+    stage.appendChild(createElement('span', 'platform-basemap__attribution', '© OpenStreetMap contributors'));
   }
-}
-
-function projectedPercent(container, point) {
-  const width = container.clientWidth;
-  const height = container.clientHeight;
-  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y) || width <= 0 || height <= 0) return null;
-  return { x: point.x / width * 100, y: point.y / height * 100 };
-}
-
-function setupLeafletBasemap(container, mapPlane, basemap, onProjectionChange) {
-  const map = L.map(container, {
-    attributionControl: true,
-    zoomControl: false,
-    dragging: false,
-    touchZoom: false,
-    scrollWheelZoom: false,
-    doubleClickZoom: false,
-    boxZoom: false,
-    keyboard: false,
-    tap: false,
-    zoomSnap: 0.1,
-    fadeAnimation: false,
-    zoomAnimation: false,
-  });
-  map.attributionControl.setPrefix(false);
-  map.setView(PLATFORM_MAP_CENTER, PLATFORM_MAP_ZOOM, { animate: false });
-
-  let activeLayer = null;
-  let tileErrors = 0;
-  let fallbackStarted = false;
-
-  function mountLayer(url, options = {}) {
-    const layer = L.tileLayer(url, {
-      tileSize: Number(options.tile_size) || 256,
-      zoomOffset: Number(options.zoom_offset) || 0,
-      maxZoom: Number(options.max_zoom) || 19,
-      opacity: Number.isFinite(Number(options.opacity)) ? Number(options.opacity) : 1,
-      attribution: options.attribution || '',
-      crossOrigin: true,
-    });
-    layer.on('tileload', (event) => {
-      if (tileHasVisiblePixels(event.tile)) {
-        mapPlane.classList.add('map-plane--live-basemap');
-        if (onProjectionChange) onProjectionChange();
-      }
-    });
-    layer.on('tileerror', () => {
-      tileErrors += 1;
-      if (fallbackStarted || tileErrors < 3 || !basemap.fallback_url) return;
-      fallbackStarted = true;
-      if (activeLayer) map.removeLayer(activeLayer);
-      activeLayer = mountLayer(basemap.fallback_url, {
-        attribution: basemap.fallback_attribution,
-      });
-    });
-    layer.addTo(map);
-    return layer;
-  }
-
-  activeLayer = mountLayer(basemap.url || basemap.fallback_url, basemap);
-  requestAnimationFrame(() => {
-    map.invalidateSize(false);
-    if (onProjectionChange) onProjectionChange();
-  });
+  mapPlane.classList.add('map-plane--live-basemap');
   return {
     project(lat, lon) {
-      return projectedPercent(container, map.latLngToContainerPoint([lat, lon]));
-    },
-    remove() { map.remove(); },
-    resize() {
-      map.invalidateSize(false);
-      if (onProjectionChange) onProjectionChange();
-    },
-  };
-}
-
-function setupPlatformBasemap(config, onProjectionChange) {
-  const container = document.getElementById('platform-basemap');
-  const mapPlane = container && container.closest('.map-plane');
-  const basemap = config && (config.platform_basemap || config.basemap);
-  if (!container || !mapPlane || !basemap) return null;
-
-  if (basemap.provider !== 'mapbox-gl') {
-    if (!basemap.url && !basemap.fallback_url) return null;
-    return setupLeafletBasemap(container, mapPlane, basemap, onProjectionChange);
-  }
-
-  let map = null;
-  let fallbackMap = null;
-  let fallbackStarted = false;
-  let styleLoaded = false;
-  let loadTimer = null;
-
-  function startFallback(reason) {
-    if (fallbackStarted || !basemap.fallback_url) return;
-    fallbackStarted = true;
-    if (loadTimer) clearTimeout(loadTimer);
-    if (reason) console.warn(`Platform Mapbox basemap unavailable (${reason}); using OpenStreetMap.`);
-    if (map) {
-      map.remove();
-      map = null;
-    }
-    while (container.firstChild) container.removeChild(container.firstChild);
-    mapPlane.classList.remove('map-plane--live-basemap');
-    fallbackMap = setupLeafletBasemap(container, mapPlane, {
-      url: basemap.fallback_url,
-      attribution: basemap.fallback_attribution,
-      tile_size: 256,
-      zoom_offset: 0,
-      max_zoom: 19,
-    }, onProjectionChange);
-  }
-
-  if (
-    !basemap.style_url || !basemap.access_token ||
-    typeof mapboxgl.supported !== 'function' ||
-    !mapboxgl.supported({ failIfMajorPerformanceCaveat: true })
-  ) {
-    startFallback('WebGL is not supported');
-    return fallbackMap;
-  }
-
-  mapboxgl.accessToken = basemap.access_token;
-  try {
-    map = new mapboxgl.Map({
-      container,
-      style: basemap.style_url,
-      center: [PLATFORM_MAP_CENTER[1], PLATFORM_MAP_CENTER[0]],
-      zoom: PLATFORM_MAPBOX_ZOOM,
-      bearing: 0,
-      pitch: 0,
-      interactive: false,
-      attributionControl: true,
-      fadeDuration: 0,
-      renderWorldCopies: false,
-    });
-  } catch (err) {
-    startFallback(err && err.message || 'Mapbox failed to start');
-    return fallbackMap;
-  }
-
-  loadTimer = setTimeout(() => startFallback('load timed out'), PLATFORM_BASEMAP_LOAD_TIMEOUT_MS);
-  map.once('load', () => {
-    styleLoaded = true;
-    if (loadTimer) clearTimeout(loadTimer);
-    mapPlane.classList.add('map-plane--live-basemap');
-    if (onProjectionChange) onProjectionChange();
-  });
-  map.on('error', (event) => {
-    const message = event && event.error && event.error.message || 'style failed to load';
-    if (!styleLoaded) startFallback(message);
-    else console.warn('Platform Mapbox resource error:', event.error || event);
-  });
-  map.getCanvas().addEventListener('webglcontextlost', () => startFallback('WebGL context was lost'), { once: true });
-  requestAnimationFrame(() => map && map.resize());
-
-  return {
-    project(lat, lon) {
-      if (fallbackMap) return fallbackMap.project(lat, lon);
-      if (!map) return null;
-      return projectedPercent(container, map.project([lon, lat]));
+      return projectToBasemap(lat, lon, BASEMAP_CALIBRATION);
     },
     remove() {
-      if (loadTimer) clearTimeout(loadTimer);
-      if (map) map.remove();
-      if (fallbackMap) fallbackMap.remove();
-    },
-    resize() {
-      if (map) map.resize();
-      if (fallbackMap) fallbackMap.resize();
-      if (onProjectionChange) onProjectionChange();
+      while (container.firstChild) container.removeChild(container.firstChild);
+      const credit = stage && stage.querySelector('.platform-basemap__attribution');
+      if (credit) credit.remove();
     },
   };
 }
@@ -414,6 +269,9 @@ function normalizeServiceNotice(message) {
 
 function terminalDisplayStatus(vehicle) {
   if (!vehicle) return '';
+  // A train is about 300 m long, so the bus geofence around the terminal says
+  // little about it. Use the train's own trip progress instead.
+  if (isGoTrain(vehicle)) return String(vehicle.terminal_progress_status || '').toLowerCase();
   const distance = distanceBetweenMeters(
     Number(vehicle.lat),
     Number(vehicle.lon),
@@ -676,6 +534,16 @@ function setupPlatformApp() {
   let projectionFrame = null;
 
   const busLayer = document.getElementById('bus-layer');
+  const goTrainLayer = document.createElementNS(SVG_NS, 'svg');
+  goTrainLayer.setAttribute('class', 'map-go-train-layer');
+  goTrainLayer.setAttribute('viewBox', `0 0 ${BASEMAP_CALIBRATION.width} ${BASEMAP_CALIBRATION.height}`);
+  goTrainLayer.setAttribute('preserveAspectRatio', 'none');
+  goTrainLayer.setAttribute('aria-hidden', 'true');
+  busLayer.parentNode.insertBefore(goTrainLayer, busLayer);
+  platformBasemap = setupImageBasemap(
+    document.getElementById('platform-basemap'),
+    document.querySelector('.map-plane')
+  );
   const statusEl = document.getElementById('platform-status');
   const connectionEl = document.getElementById('connection-status');
   const connectionLabelEl = document.getElementById('connection-label');
@@ -788,22 +656,6 @@ function setupPlatformApp() {
     positionManualPointer(card, pointerPosition);
   }
 
-  function positionMapLandmark(landmark) {
-    const position = projectCoordinate(landmark.dataset.lat, landmark.dataset.lon);
-    if (!position) return;
-    const stageRect = mapStageEl.getBoundingClientRect();
-    const planeRect = mapPlaneEl.getBoundingClientRect();
-    landmark.style.left = `${planeRect.left - stageRect.left + planeRect.width * position.x / 100}px`;
-    landmark.style.top = `${planeRect.top - stageRect.top + planeRect.height * position.y / 100}px`;
-  }
-
-  function positionMapPlaneLandmark(landmark) {
-    const position = projectCoordinate(landmark.dataset.lat, landmark.dataset.lon);
-    if (!position) return;
-    landmark.style.left = `${position.x}%`;
-    landmark.style.top = `${position.y}%`;
-  }
-
   function positionMapPlatformCard(card) {
     refreshManualPointer(card);
   }
@@ -820,10 +672,6 @@ function setupPlatformApp() {
       .forEach(positionMapConnectionCard);
     mapLabelLayerEl.querySelectorAll('.map-dropoff-card[data-manual-pointer="true"]')
       .forEach(refreshManualPointer);
-    mapLabelLayerEl.querySelectorAll('.map-terminal-building')
-      .forEach(positionMapLandmark);
-    mapPlatformLayerEl.querySelectorAll('.map-terminal-building__footprint--map')
-      .forEach(positionMapPlaneLandmark);
     if (lastPayload) renderPayload(lastPayload);
   }
 
@@ -920,7 +768,7 @@ function setupPlatformApp() {
       const badge = card.querySelector('.platform-card__state');
       if (!badge) return;
       badge.textContent = state === 'occupied'
-        ? 'At platform'
+        ? (isGoTrain(activity.vehicle) ? 'Boarding' : 'At platform')
         : state === 'approaching'
           ? 'Arriving'
           : '';
@@ -940,7 +788,7 @@ function setupPlatformApp() {
       if (anchor) anchor.dataset.liveState = state;
       if (anchorLabel) {
         const liveStateLabel = state === 'occupied'
-          ? 'At platform'
+          ? (isGoTrain(activeVehicle) ? 'Boarding' : 'At platform')
           : state === 'approaching'
             ? 'Arriving'
             : '';
@@ -1063,38 +911,69 @@ function setupPlatformApp() {
     positionMapConnectionCard(card);
   }
 
+  // "You are here": the terminal building outlined in red with a red dot; the legend explains it.
+  function renderTerminalMarker() {
+    const points = TERMINAL_BUILDING_FOOTPRINT.map(([lat, lon]) => projectCoordinate(lat, lon));
+    if (points.some((point) => !point)) return;
+    const outline = document.createElementNS(SVG_NS, 'svg');
+    outline.setAttribute('class', 'map-here__outline');
+    outline.setAttribute('viewBox', '0 0 100 100');
+    outline.setAttribute('preserveAspectRatio', 'none');
+    outline.setAttribute('aria-hidden', 'true');
+    const polygon = document.createElementNS(SVG_NS, 'polygon');
+    polygon.setAttribute('points', points.map((point) => `${point.x},${point.y}`).join(' '));
+    outline.appendChild(polygon);
+    mapPlatformLayerEl.appendChild(outline);
+    const centre = {
+      x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+      y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+    };
+    const dot = createElement('span', 'map-here__dot');
+    dot.setAttribute('role', 'img');
+    dot.setAttribute('aria-label', 'You are here: Allandale Terminal Building');
+    dot.style.left = `${centre.x}%`;
+    dot.style.top = `${centre.y}%`;
+    mapPlatformLayerEl.appendChild(dot);
+  }
+
+  function renderStreetLabels() {
+    const planeWidth = mapPlaneEl.clientWidth || BASEMAP_CALIBRATION.width;
+    const planeHeight = mapPlaneEl.clientHeight || BASEMAP_CALIBRATION.height;
+    MAP_STREET_LABELS.forEach((street) => {
+      const start = projectCoordinate(street.line[0][0], street.line[0][1]);
+      const end = projectCoordinate(street.line[1][0], street.line[1][1]);
+      if (!start || !end) return;
+      let angle = Math.atan2((end.y - start.y) * planeHeight, (end.x - start.x) * planeWidth) * 180 / Math.PI;
+      // Keep text upright.
+      if (angle > 90) angle -= 180;
+      if (angle < -90) angle += 180;
+      const label = createElement('span', 'map-street-label', street.name);
+      label.style.left = `${(start.x + end.x) / 2}%`;
+      label.style.top = `${(start.y + end.y) / 2}%`;
+      label.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+      mapPlatformLayerEl.appendChild(label);
+    });
+  }
+
+  function renderMapLegend() {
+    const legend = createElement('section', 'map-legend');
+    legend.setAttribute('aria-label', 'Map legend');
+    [['here', 'You are here'], ['train', 'GO train'], ['bus', 'Live bus']].forEach(([key, text]) => {
+      const item = createElement('span', 'map-legend__item');
+      item.appendChild(createElement('i', `map-legend__symbol map-legend__symbol--${key}`));
+      item.appendChild(createElement('span', '', text));
+      legend.appendChild(item);
+    });
+    mapLabelLayerEl.appendChild(legend);
+  }
+
   function renderMapLandmarks() {
     mapPlatformLayerEl.appendChild(createElement('span', 'map-edge-mask map-edge-mask--left'));
     MAP_CONNECTIONS.forEach(renderMapConnection);
 
-    const terminalBuilding = createElement('section', 'map-terminal-building');
-    terminalBuilding.dataset.lat = String(TERMINAL_BUILDING_COORDINATES.lat);
-    terminalBuilding.dataset.lon = String(TERMINAL_BUILDING_COORDINATES.lon);
-    terminalBuilding.setAttribute('aria-label', 'Allandale Terminal Building. You are here.');
-    const footprint = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    footprint.setAttribute('class', 'map-terminal-building__footprint map-terminal-building__footprint--map');
-    footprint.setAttribute('viewBox', '0 0 200 140');
-    footprint.setAttribute('aria-hidden', 'true');
-    footprint.dataset.lat = String(TERMINAL_BUILDING_COORDINATES.lat);
-    footprint.dataset.lon = String(TERMINAL_BUILDING_COORDINATES.lon);
-    const buildingShape = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    buildingShape.setAttribute('points', '66,10 122,19 118,96 111,107 64,98 53,57');
-    footprint.appendChild(buildingShape);
-    mapPlatformLayerEl.appendChild(footprint);
-    positionMapPlaneLandmark(footprint);
-    const callout = createElement('span', 'map-terminal-building__callout');
-    callout.appendChild(createElement(
-      'strong',
-      'map-terminal-building__name',
-      'Allandale Terminal Building'
-    ));
-    const here = createElement('span', 'map-terminal-building__here');
-    here.appendChild(createElement('span', 'map-terminal-building__pin'));
-    here.appendChild(createElement('strong', '', 'You are here'));
-    callout.appendChild(here);
-    terminalBuilding.appendChild(callout);
-    mapLabelLayerEl.appendChild(terminalBuilding);
-    positionMapLandmark(terminalBuilding);
+    renderTerminalMarker();
+    renderStreetLabels();
+    renderMapLegend();
 
     const scrub = createElement('span', 'map-landmark-scrub map-landmark-scrub--dropoff');
     mapPlatformLayerEl.appendChild(scrub);
@@ -1110,11 +989,80 @@ function setupPlatformApp() {
     refreshManualPointer(dropoff);
   }
 
+  // Where a GO train sits on the track, in metres east of the track's west end.
+  function goTrainFrontMetres(vehicle) {
+    const snapped = snapToTrack(GO_TRACK, vehicle.lat, vehicle.lon);
+    if (!snapped || snapped.offset > GO_TRACK_MAX_OFFSET_METRES) return null;
+    if (String(vehicle.terminal_progress_status || '').toLowerCase() === 'at_terminal') {
+      const platform = PLATFORM_POINTER_COORDINATES['1'];
+      const stop = snapToTrack(GO_TRACK, platform.lat, platform.lon);
+      return stop.along + GO_TRAIN_STOPPED_FRONT_OFFSET_METRES;
+    }
+    // Moving: centre the drawing on the reported position.
+    const length = GO_TRAIN_CONSIST.reduce((sum, car) => sum + car.metres + GO_TRAIN_CAR_GAP_METRES, 0);
+    return snapped.along - length / 2;
+  }
+
+  // Returns the GO trains drawn on the track, so they are not also drawn as bubbles.
+  function renderGoTrains(vehicles) {
+    goTrainLayer.textContent = '';
+    mapLabelLayerEl.querySelectorAll('.map-go-train-tag').forEach((tag) => tag.remove());
+    mapPlatformLayerEl.querySelectorAll('.map-street-label').forEach((label) => { label.style.visibility = ''; });
+    const drawn = new Set();
+    vehicles.filter(isGoTrain).forEach((vehicle) => {
+      const front = goTrainFrontMetres(vehicle);
+      if (front === null) return;
+      let cursor = front;
+      const cars = GO_TRAIN_CONSIST.map((car) => {
+        const start = basemapPixel(...trackPoint(GO_TRACK, cursor), BASEMAP_CALIBRATION);
+        const end = basemapPixel(...trackPoint(GO_TRACK, cursor + car.metres), BASEMAP_CALIBRATION);
+        cursor += car.metres + GO_TRAIN_CAR_GAP_METRES;
+        return { kind: car.kind, start, end };
+      });
+      if (cars.some((car) => !car.start || !car.end)) return;
+      drawGoTrain(goTrainLayer, cars);
+      drawn.add(vehicle);
+      const status = describeGoTrain(vehicle);
+      if (status) renderGoTrainTag(status, trackPoint(GO_TRACK, Math.max(front, 0)));
+    });
+    return drawn;
+  }
+
+  function renderGoTrainTag(status, [lat, lon]) {
+    const position = projectCoordinate(lat, lon);
+    if (!position) return;
+    const tag = createElement('section', `map-go-train-tag map-go-train-tag--${status.state}`);
+    tag.setAttribute('role', 'status');
+    tag.appendChild(createAgencyLogo(AGENCY_BRANDING['go-transit'], 'map-go-train-tag__logo'));
+    const copy = createElement('span', 'map-go-train-tag__copy');
+    copy.appendChild(createElement('strong', '', status.title));
+    if (status.detail) copy.appendChild(createElement('span', '', status.detail));
+    tag.appendChild(copy);
+    mapLabelLayerEl.appendChild(tag);
+    // Below the track, starting near the front of the train, kept inside the map.
+    const stageRect = mapStageEl.getBoundingClientRect();
+    const planeRect = mapPlaneEl.getBoundingClientRect();
+    const x = planeRect.left - stageRect.left + planeRect.width * position.x / 100;
+    const y = planeRect.top - stageRect.top + planeRect.height * position.y / 100;
+    const width = tag.offsetWidth;
+    tag.style.left = `${Math.max(12, Math.min(stageRect.width - width - 12, x - 20))}px`;
+    tag.style.top = `${y + 50}px`;
+    // A street name under the label would show as stray letters; hide it while the train is here.
+    const tagRect = tag.getBoundingClientRect();
+    mapPlatformLayerEl.querySelectorAll('.map-street-label').forEach((label) => {
+      const rect = label.getBoundingClientRect();
+      const overlaps = rect.left < tagRect.right && rect.right > tagRect.left &&
+        rect.top < tagRect.bottom && rect.bottom > tagRect.top;
+      if (overlaps) label.style.visibility = 'hidden';
+    });
+  }
+
   function renderVehicles(vehicles, terminalDepartures = null) {
     lastVisibleVehicles = Array.isArray(vehicles) ? vehicles : [];
     if (Array.isArray(terminalDepartures)) lastTerminalDepartures = terminalDepartures;
+    const drawnTrains = renderGoTrains(lastVisibleVehicles);
     const clusters = clusterVehicles(
-      lastVisibleVehicles.filter(isTerminalDisplayVehicle),
+      lastVisibleVehicles.filter((vehicle) => !drawnTrains.has(vehicle) && isTerminalDisplayVehicle(vehicle)),
       CLUSTER_DISTANCE_METERS
     );
     const seen = new Set();
@@ -1146,7 +1094,8 @@ function setupPlatformApp() {
       mapPlatformLayerEl.removeChild(mapPlatformLayerEl.firstChild);
     }
     mapLabelLayerEl.querySelectorAll('.map-platform-anchor__label').forEach((label) => label.remove());
-    mapLabelLayerEl.querySelectorAll('.map-terminal-building').forEach((landmark) => landmark.remove());
+    mapLabelLayerEl.querySelectorAll('.map-legend').forEach((legend) => legend.remove());
+    mapLabelLayerEl.querySelectorAll('.map-go-train-tag').forEach((tag) => tag.remove());
     mapLabelLayerEl.querySelectorAll('.map-dropoff-card[data-geographic-card="true"]').forEach((card) => card.remove());
     Object.values(mapLabelRails).forEach((rail) => {
       while (rail.firstChild) rail.removeChild(rail.firstChild);
@@ -1396,7 +1345,6 @@ function setupPlatformApp() {
   }
 
   const handleResize = () => {
-    if (platformBasemap) platformBasemap.resize();
     scheduleProjectionRefresh();
   };
   window.addEventListener('resize', handleResize);
@@ -1406,11 +1354,10 @@ function setupPlatformApp() {
     if (Number(config && config.poll_ms) > 0) pollMs = Number(config.poll_ms);
     if (Number(config && config.feed_delayed_after_ms) > 0) delayedAfterMs = Number(config.feed_delayed_after_ms);
     if (Number(config && config.feed_offline_after_ms) > 0) offlineAfterMs = Number(config.feed_offline_after_ms);
-    if (!platformBasemap) platformBasemap = setupPlatformBasemap(config, scheduleProjectionRefresh);
   }
 
   // After a power cut the TV can start before the network does. Keep trying
-  // so the basemap appears once the connection is back.
+  // so the feed settings are picked up once the connection is back.
   function loadConfigWithRetry(delayMs = 5000) {
     return dataClient.fetchConfig({ timeoutMs: REQUEST_TIMEOUT_MS })
       .then(applyConfig)

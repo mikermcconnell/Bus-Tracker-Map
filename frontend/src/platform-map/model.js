@@ -328,3 +328,57 @@ export function departureDisplay(timestampSeconds, nowMs = Date.now()) {
     state: 'future-day',
   };
 }
+
+// ---------- Simulator base map ----------
+
+// Ground points map onto the tilted simulator capture through a homography
+// (see scripts/capture-platform-basemap.js). Returns image pixels.
+const coordinateNumber = (value) => (value === null || value === undefined || value === '' ? NaN : Number(value));
+
+export function basemapPixel(lat, lon, calibration) {
+  const numericLat = coordinateNumber(lat);
+  const numericLon = coordinateNumber(lon);
+  if (!calibration || !Number.isFinite(numericLat) || !Number.isFinite(numericLon)) return null;
+  const h = calibration.homography;
+  const u = (numericLon - calibration.center.lon) * calibration.input_scale;
+  const v = (numericLat - calibration.center.lat) * calibration.input_scale;
+  const w = h[6] * u + h[7] * v + 1;
+  if (!Number.isFinite(w) || w === 0) return null;
+  return { x: (h[0] * u + h[1] * v + h[2]) / w, y: (h[3] * u + h[4] * v + h[5]) / w };
+}
+
+// The base map fills the map plane, so pixels convert straight to plane percent.
+export function projectToBasemap(lat, lon, calibration) {
+  const pixel = basemapPixel(lat, lon, calibration);
+  if (!pixel) return null;
+  return { x: pixel.x / calibration.width * 100, y: pixel.y / calibration.height * 100 };
+}
+
+// ---------- GO track ----------
+
+const METRES_PER_DEGREE = 111195;
+
+function trackMetres(track, lat, lon) {
+  const [west] = track;
+  const kx = Math.cos(west[0] * Math.PI / 180) * METRES_PER_DEGREE;
+  return [(lon - west[1]) * kx, (lat - west[0]) * METRES_PER_DEGREE];
+}
+
+// Distance (m) east along a straight track from its west end, and how far off the track the point is.
+export function snapToTrack(track, lat, lon) {
+  const [ex, ey] = trackMetres(track, track[1][0], track[1][1]);
+  const [px, py] = trackMetres(track, Number(lat), Number(lon));
+  const length = Math.hypot(ex, ey);
+  if (!length || !Number.isFinite(px) || !Number.isFinite(py)) return null;
+  const along = (px * ex + py * ey) / length;
+  const offset = Math.abs(px * ey - py * ex) / length;
+  return { along, offset, length };
+}
+
+// Latitude/longitude of the point `metres` east of the track's west end.
+export function trackPoint(track, metres) {
+  const [west, east] = track;
+  const { length } = snapToTrack(track, east[0], east[1]);
+  const t = metres / length;
+  return [west[0] + (east[0] - west[0]) * t, west[1] + (east[1] - west[1]) * t];
+}

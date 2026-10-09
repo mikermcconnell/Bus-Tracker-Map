@@ -924,3 +924,58 @@ test('platform map starts its clock and polling when the network is down at boot
   await expect(page.locator('.vehicle-marker')).toHaveCount(1);
   await expect.poll(() => configCalls, { timeout: 10000 }).toBeGreaterThanOrEqual(2);
 });
+
+test('platform map draws a boarding GO train on the simulator map and marks P1 boarding', async ({ page }) => {
+  const errors = captureRuntimeErrors(page);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.route('**/api/vehicles.json*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      feed_timestamp: nowSeconds,
+      vehicles: [{
+        id: 'go-transit:train-1',
+        agency_id: 'go-transit',
+        agency_name: 'GO Transit',
+        route_id: 'GO-TRAIN',
+        route_label: 'GO TRAIN',
+        route_mode: 'train',
+        trip_headsign: 'Union Station',
+        lat: 44.37352,
+        lon: -79.6878,
+        last_reported: nowSeconds,
+        terminal_progress_status: 'at_terminal',
+        terminal_stop_id: 'AD',
+        terminal_is_departure: true,
+        terminal_departure_time: nowSeconds + 600,
+      }],
+      sources: platformVehiclePayload(nowSeconds).sources,
+    }),
+  }));
+
+  await page.goto('/platform.map');
+  await expect(page.locator('.platform-basemap__image')).toHaveAttribute('src', './assets/allandale-sim-basemap.webp');
+  await expect(page.locator('.platform-basemap__attribution')).toContainText('OpenStreetMap');
+  await expect(page.locator('.map-here__dot')).toHaveCount(1);
+  await expect(page.locator('.map-legend')).toContainText('You are here');
+  await expect(page.locator('.map-go-train-layer .map-go-train')).toHaveCount(1);
+  await expect(page.locator('.map-go-train-tag')).toContainText('GO Train · Boarding');
+  await expect(page.locator('.map-go-train-tag')).toContainText('to Union Station');
+  // The train is drawn on the track, not also as a bubble marker.
+  await expect(page.locator('.vehicle-marker')).toHaveCount(0);
+  await expect(page.locator('.platform-card[data-platform="1"] .platform-card__state')).toHaveText('Boarding');
+  // The train sits inside the visible map, between the platforms and the bottom cards.
+  const placement = await page.evaluate(() => {
+    const stage = globalThis.document.querySelector('.map-stage').getBoundingClientRect();
+    const train = globalThis.document.querySelector('.map-go-train').getBoundingClientRect();
+    const tag = globalThis.document.querySelector('.map-go-train-tag').getBoundingClientRect();
+    const cards = globalThis.document.querySelector('.map-label-rail--bottom').getBoundingClientRect();
+    return {
+      trainVisible: train.left < stage.right && train.right > stage.left && train.top > stage.top && train.bottom < cards.top,
+      tagInside: tag.left >= stage.left && tag.right <= stage.right && tag.bottom <= cards.top,
+    };
+  });
+  expect(placement).toEqual({ trainVisible: true, tagInside: true });
+  expect(errors).toEqual([]);
+});
