@@ -790,6 +790,13 @@ body {
   font-size: 24px;
 }
 
+/* "TRAIN" is the longest route label; scale it with the map so it never shows "...". */
+.map-platform-card__route[data-route-id="GO-TRAIN"] {
+  padding-inline: 6px;
+  font-size: clamp(12px, 2.35cqw, 24px);
+  text-overflow: clip;
+}
+
 .map-platform-card__route--active {
   outline: 3px solid #ffd447;
   outline-offset: 1px;
