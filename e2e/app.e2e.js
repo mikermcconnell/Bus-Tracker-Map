@@ -994,7 +994,41 @@ test('platform map board rows and pointer labels fit in a shorter browser window
     labels.forEach((a, index) => labels.slice(index + 1).forEach((b) => {
       if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) overlaps += 1;
     }));
-    return { clippedRows, overlaps };
+    const headerBottom = doc.querySelector('.platform-header').getBoundingClientRect().bottom;
+    const headerTextGap = Math.min(...['.platform-header h1', '#last-updated']
+      .map((selector) => headerBottom - doc.querySelector(selector).getBoundingClientRect().bottom));
+    const liveColumns = new Set(Array.from(doc.querySelectorAll('.platform-card__service-source'))
+      .filter((badge) => badge.offsetParent).map((badge) => Math.round(badge.getBoundingClientRect().left))).size;
+    return { clippedRows, overlaps, headerClearsLine: headerTextGap >= 10, liveColumns };
   });
-  expect(fit).toEqual({ clippedRows: 0, overlaps: 0 });
+  expect(fit).toMatchObject({ clippedRows: 0, overlaps: 0, headerClearsLine: true });
+  // Zero when no trip is live at test time; otherwise every badge shares one column.
+  expect(fit.liveColumns).toBeLessThanOrEqual(1);
+});
+
+test('platform map lines up every LIVE badge in one column', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  // Live trips 1 to 55 minutes away: time widths differ, badges must not.
+  await page.route('**/api/departures?*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      departures: [['3', '8A', 60], ['4', '8B', 18 * 60], ['5', '8A', 55 * 60]].map(([platform, route, seconds]) => ({
+        platform,
+        agency_id: 'barrie-transit',
+        route_id: route,
+        route_label: route,
+        scheduled_departure_time: nowSeconds + seconds,
+        expected_departure_time: nowSeconds + seconds,
+        departure_source: 'realtime',
+        live_vehicle_id: `bus-${platform}`,
+      })),
+    }),
+  }));
+  await page.goto('/platform.map');
+  await expect(page.locator('.platform-card__service-source:visible')).toHaveCount(3);
+  const lefts = await page.locator('.platform-card__service-source:visible')
+    .evaluateAll((badges) => badges.map((badge) => Math.round(badge.getBoundingClientRect().left)));
+  expect(new Set(lefts).size).toBe(1);
 });
