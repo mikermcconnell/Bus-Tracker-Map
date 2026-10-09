@@ -570,17 +570,12 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(arrivingRow).toHaveClass(/platform-card__service--active/);
   await expect(arrivingRow.locator('.platform-card__service-countdown')).toHaveText('8 min');
   const inactiveRow = page.locator('.platform-card[data-platform="3"] .platform-card__service[data-route-id="8B"]');
-  const inactiveExpectedTime = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Toronto',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date((nowSeconds + 1500) * 1000));
   await expect(inactiveRow).not.toHaveClass(/platform-card__service--active/);
   await expect(inactiveRow.locator('.platform-card__service-countdown'))
     .toHaveText('24 min');
-  await expect(inactiveRow.locator('.platform-card__service-scheduled'))
-    .toHaveText(inactiveExpectedTime);
-  await expect(inactiveRow.locator('.platform-card__service-source')).toHaveText('Scheduled');
+  // One time per row: no secondary clock time and no "Scheduled" badge.
+  await expect(inactiveRow.locator('.platform-card__service-scheduled')).toHaveCount(0);
+  await expect(inactiveRow.locator('.platform-card__service-source')).toBeHidden();
   await expect(inactiveRow.locator('.platform-card__service-source'))
     .toHaveAttribute('data-source', 'scheduled');
   const longDwellCard = page.locator('.platform-card[data-platform="5"]');
@@ -589,7 +584,7 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(longDwellCard.locator('.platform-card__state')).toBeHidden();
   await expect(longDwellRow).not.toHaveClass(/platform-card__service--active/);
   await expect(longDwellRow.locator('.platform-card__service-countdown')).toHaveText('20 min');
-  await expect(longDwellRow.locator('.platform-card__service-source')).toHaveText('Scheduled');
+  await expect(longDwellRow.locator('.platform-card__service-source')).toBeHidden();
   await expect(page.locator('.platform-card[data-platform="7"] .platform-card__state')).toHaveText('At platform');
   const trainRouteBadge = page.locator('.platform-card[data-platform="1"] .platform-card__route');
   await expect(trainRouteBadge).toHaveText('TRAIN');
@@ -616,20 +611,23 @@ test('platform map renders current assignments and updates markers in place', as
     .toHaveAttribute('src', './assets/agency-barrie-transit.png');
   await expect(page.locator('.map-connection-card[data-platform="9"]')).toContainText('Stop 900');
   const p9Connection = page.locator('.platform-connections .platform-connection[data-platform="9"]');
-  await expect(p9Connection).toBeHidden();
-  await page.evaluate(() => globalThis.window.__platformMapApp.showDeparturePage(1));
+  // Every platform is on one board; nothing waits for a page to rotate.
   await expect(p9Connection).toBeVisible();
+  await expect(page.locator('.platform-card[data-platform="1"]')).toBeVisible();
+  await expect(page.locator('.platform-card[data-platform="13"]')).toBeVisible();
   await expect(p9Connection).toContainText('On Demand');
   await expect(p9Connection).toContainText('Stop 900');
-  await expect(page.locator('#departure-page-label')).toHaveText('P7–P9 · P12–P13 · Stop 14');
+  await expect(page.locator('.departure-page-indicator')).toHaveCount(0);
   await expect(page.locator('.platform-card[data-platform="2"]')).toContainText('Wasaga Beach');
-  await expect(page.locator('#source-statuses .source-chip')).toHaveCount(1);
-  await expect(page.locator('#source-statuses .source-chip')).toContainText('LINX');
+  // Per-agency feed status is not shown to riders.
+  await expect(page.locator('#source-statuses')).toHaveCount(0);
   await expect(page.locator('#service-notice-text'))
     .toHaveText('Holiday service — Sunday schedule on Monday, August 3.');
   await expect(page.locator('#map-label-layer .map-dropoff-card')).toContainText('Passenger');
-  await expect(page.locator('.map-platform-card[data-platform="3"] .map-platform-card__status')).toHaveText('8A arriving');
-  await expect(page.locator('.map-platform-card[data-platform="7"] .map-platform-card__status')).toContainText('Departs');
+  // Map cards show platform and routes only; times live on the board.
+  await expect(page.locator('.map-platform-card__status')).toHaveCount(0);
+  await expect(page.locator('.map-platform-card[data-platform="3"]')).toHaveClass(/map-platform-card--approaching/);
+  await expect(page.locator('.map-platform-card[data-platform="7"]')).toHaveClass(/map-platform-card--occupied/);
   await expect(page.locator('.map-platform-card[data-platform="5"]')).not.toHaveClass(/map-platform-card--occupied/);
   await expect(page.locator('.map-platform-card[data-platform="7"] .map-platform-card__route')).toContainText('68');
   await expect(page.locator('.map-platform-card[data-platform="14"]')).toContainText('12B');
@@ -649,16 +647,16 @@ test('platform map renders current assignments and updates markers in place', as
     ).fontSize),
     insidePanel: card.getBoundingClientRect().right <= card.closest('.platform-directory').getBoundingClientRect().right,
   }));
-  expect(tvTypography.platform).toBeGreaterThanOrEqual(26);
-  expect(tvTypography.destination).toBeGreaterThanOrEqual(20);
-  expect(tvTypography.state).toBeGreaterThanOrEqual(16);
-  expect(tvTypography.scheduledTime).toBeGreaterThanOrEqual(20);
+  // Sizes for reading a 60-inch 1080p screen from several metres away.
+  expect(tvTypography.platform).toBeGreaterThanOrEqual(36);
+  expect(tvTypography.destination).toBeGreaterThanOrEqual(26);
+  expect(tvTypography.state).toBeGreaterThanOrEqual(18);
+  expect(tvTypography.scheduledTime).toBeGreaterThanOrEqual(40);
   expect(tvTypography.insidePanel).toBe(true);
   await expect(page.locator('.vehicle-marker')).toHaveCount(1);
   await expect(page.locator('.vehicle-marker__count')).toHaveText('3 vehicles');
   await expect(page.locator('.vehicle-marker__detail')).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.evaluate(() => globalThis.window.__platformMapApp.showDeparturePage(1));
   const compactDirectoryFits = await page.locator('.platform-directory').evaluate((directory) => {
     const visibleCards = Array.from(directory.querySelectorAll(
       '.platform-card:not([hidden]), .platform-connections:not([hidden])'
@@ -828,8 +826,8 @@ test('platform map hides vehicle icons when the live feed goes offline', async (
   await page.goto('/platform.map');
   await expect(page.locator('.vehicle-marker')).toHaveCount(1);
   await expect(page.locator('.vehicle-marker')).toHaveCount(0, { timeout: 3000 });
-  await expect(page.locator('#connection-label')).toHaveText('OFFLINE');
-  await expect(page.locator('#platform-status')).toContainText('Icons are hidden');
+  await expect(page.locator('#connection-label')).toHaveText('SCHEDULED TIMES');
+  await expect(page.locator('#platform-status')).toHaveText('Live bus tracking is unavailable. Times may not reflect delays.');
 });
 
 test('notice display renders a holding state', async ({ page }) => {

@@ -257,6 +257,7 @@ export const DEPARTURE_NOW_GRACE_MS = 60 * 1000;
 // Trips shortly after midnight belong to tonight's service, so keep counting
 // down instead of showing "No more today".
 const COUNTDOWN_ACROSS_MIDNIGHT_MS = 2 * 60 * 60 * 1000;
+const COUNTDOWN_LIMIT_MINUTES = 60;
 
 export function formatScheduledDeparture(timestampSeconds) {
   const timestamp = Number(timestampSeconds);
@@ -297,8 +298,12 @@ export function departureDisplay(timestampSeconds, nowMs = Date.now()) {
   if (departureKey === todayKey || differenceMs < COUNTDOWN_ACROSS_MIDNIGHT_MS) {
     // Round down so riders are never told they have more time than they do.
     const minutes = Math.max(0, Math.floor(differenceMs / 60000));
+    // Beyond an hour a clock time is easier to read than a large countdown.
+    if (minutes > COUNTDOWN_LIMIT_MINUTES) {
+      return { primary: scheduledTime, secondary: '', state: 'today' };
+    }
     return {
-      primary: minutes === 0 ? 'Due now' : `${minutes} min`,
+      primary: minutes === 0 ? 'Due' : `${minutes} min`,
       secondary: scheduledTime,
       state: minutes <= 10 ? 'soon' : 'today',
     };

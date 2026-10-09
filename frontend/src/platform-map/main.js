@@ -28,6 +28,7 @@ import {
 
 const { assessVehicleFeedFreshness, selectVehiclesForDisplay } = feedFreshness;
 const DEFAULT_POLL_MS = 10000;
+const LIVE_TRACKING_UNAVAILABLE_MESSAGE = 'Live bus tracking is unavailable. Times may not reflect delays.';
 const REQUEST_TIMEOUT_MS = 8000;
 // Keep the last departure board through brief outages, then fall back to the
 // timetable so an old prediction is never shown as current.
@@ -40,17 +41,10 @@ const NO_DATA_RELOAD_MS = 10 * 60 * 1000;
 const CLUSTER_DISTANCE_METERS = 8;
 const APPROACHING_WINDOW_MS = 5 * 60 * 1000;
 const APPROACHING_DISTANCE_METERS = 500;
-const DEPARTURE_PAGE_ROTATION_SECONDS = 15;
 const PLATFORM_MAP_CENTER = Object.freeze([44.373974, -79.689423]);
 const PLATFORM_MAP_ZOOM = 18.1;
 const PLATFORM_MAPBOX_ZOOM = PLATFORM_MAP_ZOOM - 1;
 const PLATFORM_BASEMAP_LOAD_TIMEOUT_MS = 15000;
-const SOURCE_DEFINITIONS = Object.freeze([
-  Object.freeze({ key: 'barrie_transit', agencyId: 'barrie-transit', label: 'Barrie Transit', short: 'BT' }),
-  Object.freeze({ key: 'go_transit', agencyId: 'go-transit', label: 'GO Transit', short: 'GO' }),
-  Object.freeze({ key: 'ontario_northland', agencyId: 'ontario-northland', label: 'Ontario Northland', short: 'ON' }),
-  Object.freeze({ key: 'simcoe_linx', agencyId: 'simcoe-linx', label: 'Simcoe LINX', short: 'LINX' }),
-]);
 const AGENCY_BRANDING = Object.freeze({
   'barrie-transit': Object.freeze({
     id: 'barrie-transit',
@@ -83,10 +77,6 @@ const AGENCY_BRANDING = Object.freeze({
 const PLATFORM_DISPLAY_ORDER = Object.freeze([
   '1', '2', '3', '4', '5', '6', '7',
   '8', '9', '10', '11', '12', '13', '14',
-]);
-const DEPARTURE_PAGES = Object.freeze([
-  Object.freeze({ label: 'P1–P6', platforms: Object.freeze(['1', '2', '3', '4', '5', '6']) }),
-  Object.freeze({ label: 'P7–P9 · P12–P13 · Stop 14', platforms: Object.freeze(['7', '8', '9', '10', '11', '12', '13', '14']) }),
 ]);
 const PLATFORM_MAP_POSITIONS = Object.freeze({
   '1': Object.freeze({ left: 73.8, top: 54, scrubLeft: 75.6, scrubWidth: 13.4, scrubHeight: 5.5, wide: true }),
@@ -167,13 +157,6 @@ const PLATFORM_BY_STOP_ID = Object.freeze({
   AD: '1',
 });
 
-const SOURCE_STATUS_LABELS = Object.freeze({
-  live: 'Live',
-  delayed: 'Locations delayed',
-  empty: 'No vehicles reported',
-  offline: 'Locations unavailable',
-  'not-tracked': 'Vehicle locations unavailable',
-});
 
 function sourceKeyForVehicle(vehicle) {
   if (!vehicle) return '';
@@ -394,12 +377,6 @@ function setupPlatformBasemap(config, onProjectionChange) {
       if (onProjectionChange) onProjectionChange();
     },
   };
-}
-
-function formatFeedTime(timestampSeconds) {
-  const date = new Date(Number(timestampSeconds) * 1000);
-  if (!Number.isFinite(date.getTime())) return '';
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 function relativeAge(timestampSeconds) {
@@ -695,23 +672,16 @@ function setupPlatformApp() {
   let layoutTimer = null;
   let configRetryTimer = null;
   const timers = [];
-  let departurePageTimer = null;
   let platformBasemap = null;
   let projectionFrame = null;
 
   const busLayer = document.getElementById('bus-layer');
   const statusEl = document.getElementById('platform-status');
-  const emptyEl = document.getElementById('terminal-empty');
   const connectionEl = document.getElementById('connection-status');
   const connectionLabelEl = document.getElementById('connection-label');
   const clockEl = document.getElementById('platform-clock');
   const lastUpdatedEl = document.getElementById('last-updated');
-  const sourceStatusesEl = document.getElementById('source-statuses');
   const assignmentLayerEl = document.getElementById('assignment-layer');
-  const departurePageLabelEl = document.getElementById('departure-page-label');
-  const departurePageCountEl = document.getElementById('departure-page-count');
-  const departurePageCountdownEl = document.getElementById('departure-page-countdown');
-  const departurePageIndicatorEl = document.querySelector('.departure-page-indicator');
   const mapStageEl = document.querySelector('.map-stage');
   const mapPlaneEl = document.querySelector('.map-plane');
   const mapPlatformLayerEl = document.getElementById('map-platform-layer');
@@ -724,11 +694,8 @@ function setupPlatformApp() {
   const serviceNoticeEl = document.getElementById('service-notice');
   const serviceNoticeTextEl = document.getElementById('service-notice-text');
   const displayLegendEl = document.getElementById('display-legend');
-  let feedDisplayState = 'connecting';
   let lastVisibleVehicles = [];
   let lastTerminalDepartures = [];
-  let activeDeparturePage = 0;
-  let departurePageSecondsRemaining = DEPARTURE_PAGE_ROTATION_SECONDS;
 
   function projectCoordinate(lat, lon) {
     const numericLat = Number(lat);
@@ -868,53 +835,7 @@ function setupPlatformApp() {
     });
   }
 
-  function departurePageForPlatform(platform) {
-    return DEPARTURE_PAGES.findIndex((page) => page.platforms.includes(String(platform)));
-  }
-
-  function showDeparturePage(pageIndex) {
-    const normalizedPage = ((Number(pageIndex) || 0) + DEPARTURE_PAGES.length) % DEPARTURE_PAGES.length;
-    activeDeparturePage = normalizedPage;
-    const page = DEPARTURE_PAGES[activeDeparturePage];
-    assignmentLayerEl.querySelectorAll('[data-departure-page]').forEach((item) => {
-      const isActive = Number(item.dataset.departurePage) === activeDeparturePage;
-      item.hidden = !isActive;
-      item.setAttribute('aria-hidden', isActive ? 'false' : 'true');
-    });
-    assignmentLayerEl.dataset.activePage = String(activeDeparturePage);
-    assignmentLayerEl.setAttribute('aria-label', `Scheduled platform assignments, ${page.label}`);
-    departurePageLabelEl.textContent = page.label;
-    departurePageCountEl.textContent = `${activeDeparturePage + 1} / ${DEPARTURE_PAGES.length}`;
-    departurePageIndicatorEl.setAttribute(
-      'aria-label',
-      `Departure page ${activeDeparturePage + 1} of ${DEPARTURE_PAGES.length}: ${page.label}`
-    );
-    departurePageIndicatorEl.querySelectorAll('.departure-page-indicator__dot').forEach((dot) => {
-      dot.classList.toggle('departure-page-indicator__dot--active', Number(dot.dataset.page) === activeDeparturePage);
-    });
-  }
-
-  function renderDeparturePageCountdown() {
-    departurePageCountdownEl.textContent = `Next page in ${departurePageSecondsRemaining}s`;
-  }
-
-  function startDeparturePageRotation() {
-    if (departurePageTimer) clearInterval(departurePageTimer);
-    departurePageSecondsRemaining = DEPARTURE_PAGE_ROTATION_SECONDS;
-    showDeparturePage(activeDeparturePage);
-    renderDeparturePageCountdown();
-    departurePageTimer = setInterval(() => {
-      departurePageSecondsRemaining -= 1;
-      if (departurePageSecondsRemaining <= 0) {
-        showDeparturePage(activeDeparturePage + 1);
-        departurePageSecondsRemaining = DEPARTURE_PAGE_ROTATION_SECONDS;
-      }
-      renderDeparturePageCountdown();
-    }, 1000);
-  }
-
   function setConnection(state, label) {
-    feedDisplayState = state;
     connectionEl.className = `connection-status status-${state}`;
     connectionLabelEl.textContent = label;
   }
@@ -923,29 +844,6 @@ function setupPlatformApp() {
     statusEl.textContent = message || '';
     statusEl.dataset.state = state;
     statusEl.hidden = !message;
-  }
-
-  function renderSourceStatuses(sources) {
-    while (sourceStatusesEl.firstChild) {
-      sourceStatusesEl.removeChild(sourceStatusesEl.firstChild);
-    }
-    const problemDefinitions = SOURCE_DEFINITIONS.map((definition) => {
-      const source = definition.key && sources && sources[definition.key];
-      const status = definition.untracked ? 'not-tracked' : normalizedSourceStatus(source);
-      return { definition, status };
-    }).filter((entry) => entry.status !== 'live');
-    problemDefinitions.forEach(({ definition, status }) => {
-      const statusLabel = SOURCE_STATUS_LABELS[status] || 'Locations unavailable';
-      const chip = createElement('div', 'source-chip');
-      chip.dataset.status = status;
-      chip.title = `${definition.label}: ${statusLabel}`;
-      chip.setAttribute('aria-label', `${definition.label}: ${statusLabel}`);
-      chip.appendChild(createElement('strong', 'source-chip__agency', definition.short));
-      chip.appendChild(createElement('span', 'source-chip__dot'));
-      chip.appendChild(createElement('span', 'source-chip__status', statusLabel));
-      sourceStatusesEl.appendChild(chip);
-    });
-    sourceStatusesEl.hidden = problemDefinitions.length === 0;
   }
 
   function updatePlatformActivity(vehicles, terminalDepartures = lastTerminalDepartures) {
@@ -999,7 +897,6 @@ function setupPlatformApp() {
         row.classList.toggle('platform-card__service--active', active);
         row.setAttribute('aria-current', active ? 'true' : 'false');
         const countdown = row.querySelector('.platform-card__service-countdown');
-        const scheduled = row.querySelector('.platform-card__service-scheduled');
         const source = row.querySelector('.platform-card__service-source');
         const displayTimestamp = vehicleTimestamp || boardTimestamp || row.dataset.nextDepartureTime;
         const departure = row.dataset.departureLabel && !hasRealtimeDeparture && !terminalDeparture
@@ -1010,17 +907,13 @@ function setupPlatformApp() {
         if (source) {
           source.textContent = departureSource.label;
           source.dataset.source = departureSource.key;
-          source.hidden = !hasTime;
+          source.hidden = !hasTime || !hasRealtimeDeparture;
         }
         if (countdown) {
           countdown.textContent = departure.primary;
           countdown.dataset.live = hasRealtimeDeparture ? 'true' : 'false';
           countdown.dataset.departureState = departure.state;
           countdown.hidden = !countdown.textContent;
-          if (scheduled) {
-            scheduled.textContent = departure.secondary;
-            scheduled.hidden = !scheduled.textContent;
-          }
         }
       });
       sortServiceRowsByDeparture(card.querySelector('.platform-card__services'));
@@ -1069,25 +962,6 @@ function setupPlatformApp() {
           Boolean(activeVehicle && serviceRowMatchesVehicle(route, activeVehicle))
         );
       });
-      const status = card.querySelector('.map-platform-card__status');
-      if (!status) return;
-      if (state === 'occupied') {
-        const departureMs = Number(activeVehicle && activeVehicle.terminal_departure_time) * 1000;
-        const differenceMs = departureMs - Date.now();
-        const minutes = Number.isFinite(departureMs)
-          ? Math.floor(differenceMs / 60000)
-          : null;
-        status.textContent = minutes === null
-          ? 'At platform'
-          : differenceMs < -DEPARTURE_NOW_GRACE_MS
-            ? 'At platform'
-            : `Departs ${minutes <= 0 ? 'now' : `${minutes}m`}`;
-      } else if (state === 'approaching') {
-        status.textContent = `${vehicleRouteCode(activeVehicle)} arriving`;
-      } else {
-        status.textContent = card.dataset.hasSchedule === 'true' ? '' : 'No schedule';
-      }
-      status.hidden = !status.textContent;
     });
   }
 
@@ -1138,13 +1012,6 @@ function setupPlatformApp() {
     });
     const body = createElement('div', 'map-platform-card__body');
     body.appendChild(routes);
-    const mapStatus = createElement(
-      'div',
-      'map-platform-card__status',
-      assignments.length ? '' : 'No schedule'
-    );
-    mapStatus.hidden = !mapStatus.textContent;
-    body.appendChild(mapStatus);
     card.appendChild(body);
     mountManualPointer(card, platform);
     appendCardToRail(card, PLATFORM_LABEL_RAILS[platform]);
@@ -1221,11 +1088,11 @@ function setupPlatformApp() {
       'map-terminal-building__name',
       'Allandale Terminal Building'
     ));
-    terminalBuilding.appendChild(callout);
     const here = createElement('span', 'map-terminal-building__here');
     here.appendChild(createElement('span', 'map-terminal-building__pin'));
-    here.appendChild(createElement('strong', '', 'You Are Here'));
-    terminalBuilding.appendChild(here);
+    here.appendChild(createElement('strong', '', 'You are here'));
+    callout.appendChild(here);
+    terminalBuilding.appendChild(callout);
     mapLabelLayerEl.appendChild(terminalBuilding);
     positionMapLandmark(terminalBuilding);
 
@@ -1269,10 +1136,6 @@ function setupPlatformApp() {
       markerIndex.delete(key);
     });
     updatePlatformActivity(lastVisibleVehicles, lastTerminalDepartures);
-    emptyEl.hidden = clusters.length !== 0 ||
-      feedDisplayState === 'offline' ||
-      feedDisplayState === 'warning' ||
-      !statusEl.hidden;
   }
 
   function renderAssignments(layout) {
@@ -1291,14 +1154,13 @@ function setupPlatformApp() {
     const grouped = groupPlatformAssignments(layout && layout.assignments);
     const assignmentsForPlatform = (platform) => grouped[platform] || [];
     const orderedPlatforms = PLATFORM_DISPLAY_ORDER
-      .filter((platform) => departurePageForPlatform(platform) >= 0 && assignmentsForPlatform(platform).length);
+      .filter((platform) => assignmentsForPlatform(platform).length);
 
     orderedPlatforms.forEach((platform) => {
       const assignments = assignmentsForPlatform(platform);
       const card = createElement('section', 'platform-card');
       if (assignments.length > 1) card.classList.add('platform-card--multi-service');
       card.dataset.platform = platform;
-      card.dataset.departurePage = String(departurePageForPlatform(platform));
       card.setAttribute('aria-label', platformDisplayName(platform));
       const heading = createElement('header', 'platform-card__heading');
       heading.appendChild(createElement('h2', 'platform-card__title', platformDisplayName(platform)));
@@ -1344,14 +1206,10 @@ function setupPlatformApp() {
         countdown.dataset.departureState = departure.state;
         countdown.hidden = !countdown.textContent;
         departureBlock.appendChild(countdown);
-        const departureMeta = createElement('span', 'platform-card__departure-meta');
-        const scheduled = createElement('span', 'platform-card__service-scheduled', departure.secondary);
-        scheduled.hidden = !scheduled.textContent;
-        departureMeta.appendChild(scheduled);
-        const source = createElement('span', 'platform-card__service-source', 'Scheduled');
+        const source = createElement('span', 'platform-card__service-source', 'Live');
         source.dataset.source = 'scheduled';
-        departureMeta.appendChild(source);
-        departureBlock.appendChild(departureMeta);
+        source.hidden = true;
+        departureBlock.appendChild(source);
         row.appendChild(departureBlock);
         services.appendChild(row);
       });
@@ -1360,7 +1218,6 @@ function setupPlatformApp() {
     });
 
     const connections = createElement('section', 'platform-connections');
-    connections.dataset.departurePage = String(departurePageForPlatform('9'));
     connections.setAttribute('aria-label', 'Other terminal connections');
     MAP_CONNECTIONS.forEach((connection) => {
       const row = createElement('article', 'platform-connection');
@@ -1386,12 +1243,10 @@ function setupPlatformApp() {
       row.appendChild(copy);
       connections.appendChild(row);
     });
-    assignmentLayerEl.appendChild(connections);
 
     if (!grouped['14'] || !grouped['14'].length) {
       const retired = createElement('section', 'platform-card platform-card--inactive');
       retired.dataset.platform = '14';
-      retired.dataset.departurePage = String(departurePageForPlatform('14'));
       const heading = createElement('header', 'platform-card__heading');
       heading.appendChild(createElement('h2', 'platform-card__title', 'Stop 14'));
       heading.appendChild(createElement('span', 'platform-card__state', 'Assignment unavailable'));
@@ -1405,11 +1260,11 @@ function setupPlatformApp() {
       retired.appendChild(createElement('div', 'platform-card__inactive-text', 'Scheduled service data is unavailable'));
       assignmentLayerEl.appendChild(retired);
     }
+    assignmentLayerEl.appendChild(connections);
     Object.keys(PLATFORM_MAP_POSITIONS).forEach((platform) => {
       renderMapPlatformCard(platform, grouped[platform] || []);
     });
     renderMapLandmarks();
-    showDeparturePage(activeDeparturePage);
     updatePlatformActivity(lastVisibleVehicles, lastTerminalDepartures);
     scheduleProjectionRefresh();
   }
@@ -1422,44 +1277,24 @@ function setupPlatformApp() {
       });
   }
 
+  // Riders only need to know when live times may be wrong. Feed details for
+  // each agency stay in the console and the monitor, not on the public screen.
   function applyFeedState(payload, freshness) {
-    const sources = payload && payload.sources || null;
     const status = freshness.feed_status;
-    const reportedAt = formatFeedTime(freshness.latest_data_timestamp);
-    const sourceProblems = SOURCE_DEFINITIONS
-      .filter((definition) => definition.key)
-      .map((definition) => ({
-        label: definition.label,
-        status: normalizedSourceStatus(sources && sources[definition.key]),
-      }))
-      .filter((entry) => entry.status === 'offline' || entry.status === 'delayed');
-
-    renderSourceStatuses(sources);
     lastDataTimestamp = freshness.latest_data_timestamp || lastDataTimestamp;
-
     if (status === 'offline') {
-      setConnection('offline', 'OFFLINE');
-      setStatus(
-        reportedAt
-          ? `Live vehicle feeds are offline. Icons are hidden. Last data: ${reportedAt}.`
-          : 'Live vehicle feeds are offline. Icons are hidden; retrying automatically.',
-        'offline'
-      );
-      return;
-    }
-    if (status === 'empty') {
-      setConnection('warning', 'NO VEHICLES');
-      setStatus('No vehicles are currently reporting live locations. Retrying automatically.');
-      return;
-    }
-    if (sourceProblems.length) {
-      setConnection('warning', 'PARTIAL');
-      setStatus(sourceProblems.map((entry) => `${entry.label} is ${entry.status}`).join(' · '));
+      setConnection('offline', 'SCHEDULED TIMES');
+      setStatus(LIVE_TRACKING_UNAVAILABLE_MESSAGE, 'offline');
       return;
     }
     if (status === 'delayed') {
       setConnection('warning', 'DELAYED');
-      setStatus(`Live vehicle locations are delayed${reportedAt ? ` · Last data ${reportedAt}` : ''}.`);
+      setStatus('Live bus tracking is delayed. Times may not reflect recent changes.');
+      return;
+    }
+    if (status === 'empty') {
+      setConnection('warning', 'SCHEDULED TIMES');
+      setStatus('');
       return;
     }
     setConnection('live', 'LIVE');
@@ -1513,10 +1348,9 @@ function setupPlatformApp() {
           renderPayload(lastPayload);
           return;
         }
-        setConnection('offline', 'OFFLINE');
-        setStatus('Live vehicle feeds are offline. Icons are hidden; retrying automatically.', 'offline');
+        setConnection('offline', 'SCHEDULED TIMES');
+        setStatus(LIVE_TRACKING_UNAVAILABLE_MESSAGE, 'offline');
         renderVehicles([], []);
-        renderSourceStatuses(null);
       })
       .then(() => {
         if (generation !== pollGeneration) return;
@@ -1641,7 +1475,6 @@ function setupPlatformApp() {
     timers.push(setInterval(loadServiceNotice, 5 * 60 * 1000));
     layoutTimer = setInterval(refreshTerminalLayout, 60 * 1000);
     timers.push(setInterval(runKioskChecks, KIOSK_CHECK_INTERVAL_MS));
-    startDeparturePageRotation();
     pollVehicles();
   }
 
@@ -1673,12 +1506,10 @@ function setupPlatformApp() {
       if (configRetryTimer) clearTimeout(configRetryTimer);
       timers.forEach((timer) => clearInterval(timer));
       if (layoutTimer) clearInterval(layoutTimer);
-      if (departurePageTimer) clearInterval(departurePageTimer);
       if (projectionFrame) cancelAnimationFrame(projectionFrame);
       window.removeEventListener('resize', handleResize);
       if (platformBasemap) platformBasemap.remove();
     },
-    showDeparturePage,
   };
 }
 

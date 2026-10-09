@@ -25,12 +25,6 @@
         </div>
       </header>
 
-      <section class="terminal-status-rail" aria-label="Terminal live status">
-        <section id="source-statuses" class="source-statuses" aria-label="Transit feed status"></section>
-        <div id="platform-status" class="platform-status" role="alert" aria-live="assertive" hidden></div>
-        <div id="terminal-empty" class="terminal-empty" role="status" hidden>No live vehicles in the terminal area</div>
-      </section>
-
       <div class="platform-workspace">
         <div class="map-stage">
           <div class="map-plane">
@@ -58,18 +52,11 @@
         <aside class="platform-directory" aria-labelledby="platform-directory-title">
           <header class="platform-directory__header">
             <div class="platform-directory__heading">
-              <h2 id="platform-directory-title">Departures By Platform</h2>
-              <p id="departure-page-label">P1–P6</p>
-            </div>
-            <div class="departure-page-indicator" aria-label="Departure page 1 of 2">
-              <span class="departure-page-indicator__dot" data-page="0" aria-hidden="true"></span>
-              <span class="departure-page-indicator__dot" data-page="1" aria-hidden="true"></span>
-              <span class="departure-page-indicator__timing">
-                <strong id="departure-page-count">1 / 2</strong>
-                <span id="departure-page-countdown">Next page in 15s</span>
-              </span>
+              <h2 id="platform-directory-title">Next departures</h2>
+              <p>All platforms</p>
             </div>
           </header>
+          <p id="platform-status" class="platform-status" role="status" aria-live="polite" hidden></p>
           <section id="assignment-layer" class="assignment-layer" aria-label="Scheduled platform assignments"></section>
         </aside>
       </div>

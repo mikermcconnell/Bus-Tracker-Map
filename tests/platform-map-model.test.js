@@ -97,8 +97,11 @@ describe('platform map model', () => {
   test('counts down conservatively and never shows a passed time', () => {
     const now = Date.parse('2026-10-09T15:40:00Z');
     expect(departureDisplay(now / 1000 + 61, now)).toMatchObject({ primary: '1 min', secondary: '11:41 AM' });
-    expect(departureDisplay(now / 1000 + 59, now)).toMatchObject({ primary: 'Due now' });
-    expect(departureDisplay(now / 1000 - 30, now)).toMatchObject({ primary: 'Due now' });
+    expect(departureDisplay(now / 1000 + 59, now)).toMatchObject({ primary: 'Due' });
+    expect(departureDisplay(now / 1000 - 30, now)).toMatchObject({ primary: 'Due' });
+    expect(departureDisplay(now / 1000 + 60 * 60 + 30, now)).toMatchObject({ primary: '60 min' });
+    // Beyond an hour the clock time is shown instead of a large countdown.
+    expect(departureDisplay(now / 1000 + 61 * 60, now)).toMatchObject({ primary: '12:41 PM', secondary: '' });
     expect(departureDisplay(now / 1000 - 5 * 60, now)).toMatchObject({ primary: 'See schedule', state: 'past' });
     expect(departureDisplay(null, now)).toMatchObject({ primary: 'See schedule', state: 'unavailable' });
   });

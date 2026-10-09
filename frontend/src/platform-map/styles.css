@@ -51,18 +51,18 @@ body {
   height: calc(100vh - (var(--safe-gap) * 2));
   overflow: hidden;
   display: grid;
-  grid-template-rows: 8.6% 4.7% 79.7% 7%;
+  grid-template-rows: 8.2% 84.8% 7%;
   background: #fff;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.48);
 }
 
 .platform-workspace {
   position: relative;
-  grid-row: 3;
+  grid-row: 2;
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(620px, 43%, 860px);
+  grid-template-columns: minmax(0, 1fr) clamp(620px, 48.1%, 900px);
   overflow: hidden;
   background: #dce6e9;
 }
@@ -208,8 +208,7 @@ body {
   letter-spacing: 0.08em;
 }
 
-.connection-status__dot,
-.source-chip__dot {
+.connection-status__dot {
   width: 0.65em;
   height: 0.65em;
   flex: 0 0 auto;
@@ -249,80 +248,15 @@ body {
 #last-updated {
   margin-top: 0.25em;
   color: #b9d5e4;
-  font-size: clamp(7px, 0.67vw, 13px);
-  font-weight: 750;
+  font-size: clamp(11px, 0.94vw, 18px);
+  font-weight: 800;
   letter-spacing: 0.07em;
-}
-
-.terminal-status-rail {
-  position: relative;
-  grid-row: 2;
-  z-index: 55;
-  min-width: 0;
-  padding: 0.35% 1.5%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.2%;
-  color: #fff;
-  background: #0a2233;
-  border-bottom: 1px solid rgba(137, 217, 232, 0.55);
-}
-
-.source-statuses {
-  min-width: 0;
-  display: flex;
-  gap: clamp(3px, 0.35vw, 8px);
-}
-
-.source-chip {
-  min-width: 0;
-  padding: 0.34em 0.58em;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4em;
-  border: 1px solid rgba(255, 255, 255, 0.34);
-  border-radius: 999px;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.07);
-  box-shadow: none;
-  font-size: clamp(11px, 0.82vw, 16px);
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.source-chip__agency {
-  letter-spacing: 0.04em;
-}
-
-.source-chip__status {
-  color: #d8e5ec;
-  font-weight: 750;
-}
-
-.source-chip[data-status="live"] .source-chip__dot {
-  color: var(--live);
-}
-
-.source-chip[data-status="delayed"] .source-chip__dot,
-.source-chip[data-status="empty"] .source-chip__dot {
-  color: var(--warning);
-}
-
-.source-chip[data-status="offline"] .source-chip__dot,
-.source-chip[data-status="not-tracked"] .source-chip__dot {
-  color: var(--offline);
 }
 
 .map-platform-layer,
 .bus-layer {
   position: absolute;
   inset: 0;
-}
-
-.source-statuses[hidden] {
-  display: none;
 }
 
 .map-platform-layer {
@@ -381,10 +315,10 @@ body {
   z-index: 2;
   width: auto;
   min-width: 0;
-  height: 76px;
+  height: 96px;
   overflow: hidden;
   display: grid;
-  grid-template-rows: 31px minmax(0, 1fr);
+  grid-template-rows: 42px minmax(0, 1fr);
   border: 1px solid #628192;
   border-left: 4px solid var(--agency-accent);
   border-radius: 7px;
@@ -479,22 +413,19 @@ body {
 }
 
 .map-terminal-building__here {
-  position: absolute;
-  top: 62%;
-  left: 53%;
-  padding: 5px 8px;
+  margin: 8px -10px -8px;
+  padding: 6px 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  border-radius: 5px;
+  gap: 8px;
+  border-radius: 0 0 5px 5px;
   color: #092337;
   background: #ffd447;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-  font-size: clamp(10px, 1cqw, 12px);
+  font-size: clamp(14px, 1.9cqw, 19px);
+  font-weight: 900;
   line-height: 1;
   text-transform: uppercase;
-  transform: translate(-50%, -50%);
   white-space: nowrap;
 }
 
@@ -722,7 +653,7 @@ body {
 }
 
 .map-platform-card__header {
-  min-height: 31px;
+  min-height: 42px;
   padding: 5px 7px;
   display: flex;
   align-items: center;
@@ -736,10 +667,10 @@ body {
 
 .map-platform-card__title {
   overflow: hidden;
-  font-size: 18px;
+  font-size: 30px;
   font-weight: 900;
   line-height: 1;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
@@ -780,15 +711,20 @@ body {
 }
 
 .map-platform-card[data-platform="14"] .map-platform-card__title {
-  font-size: 15px;
+  font-size: 22px;
+}
+
+/* "STOP 14" needs the width its logo would take. */
+.map-platform-card[data-platform="14"] .map-platform-card__brand {
+  display: none;
 }
 
 .map-platform-card__routes {
   min-height: 0;
-  padding: 4px 7px 2px;
+  padding: 6px 7px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  flex-wrap: nowrap;
+  gap: 6px;
 }
 
 .map-platform-card__body {
@@ -801,17 +737,23 @@ body {
 
 .map-platform-card__route {
   min-width: 34px;
-  padding: 4px 6px;
+  padding: 3px 7px;
   overflow: hidden;
-  border-radius: 4px;
+  border-radius: 5px;
   color: var(--route-text-color, #fff);
   background: var(--route-color, #075f86);
-  font-size: 15px;
+  font-size: 28px;
   font-weight: 900;
   line-height: 1;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.map-platform-card__route:nth-child(2),
+.map-platform-card__route:first-child:nth-last-child(2) {
+  padding-inline: 5px;
+  font-size: 24px;
 }
 
 .map-platform-card__route--active {
@@ -823,19 +765,6 @@ body {
 .map-platform-card--approaching .map-platform-card__route:not(.map-platform-card__route--active) {
   opacity: 0.38;
   filter: saturate(0.45);
-}
-
-.map-platform-card__status {
-  padding: 1px 7px 4px;
-  overflow: hidden;
-  color: #496777;
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.02em;
-  line-height: 1.05;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
 }
 
 .map-platform-card--wide {
@@ -851,10 +780,6 @@ body {
   box-shadow: 0 0 0 2px var(--agency-header), 0 0 7px rgba(74, 222, 128, 0.8);
 }
 
-.map-platform-card--occupied .map-platform-card__status {
-  color: #08783f;
-}
-
 .map-platform-card--approaching {
   border-left-color: var(--warning);
 }
@@ -862,10 +787,6 @@ body {
 .map-platform-card--approaching .map-platform-card__dot {
   background: var(--warning);
   box-shadow: 0 0 0 2px var(--agency-header), 0 0 7px rgba(251, 191, 36, 0.78);
-}
-
-.map-platform-card--approaching .map-platform-card__status {
-  color: #8a5b00;
 }
 
 .map-connection-card {
@@ -1078,51 +999,10 @@ body {
 .platform-directory__header p {
   margin-top: 0.28em;
   color: #89d9e8;
-  font-size: clamp(14px, 0.9vw, 18px);
+  font-size: clamp(14px, 1.04vw, 20px);
   font-weight: 850;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-}
-
-.departure-page-indicator {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: clamp(7px, 0.5vw, 10px);
-  color: #cfe4ed;
-  font-size: clamp(16px, 1vw, 21px);
-  font-variant-numeric: tabular-nums;
-}
-
-.departure-page-indicator__dot {
-  width: clamp(10px, 0.68vw, 14px);
-  height: clamp(10px, 0.68vw, 14px);
-  border: 2px solid #78909c;
-  border-radius: 50%;
-  background: transparent;
-}
-
-.departure-page-indicator__dot--active {
-  border-color: #89d9e8;
-  background: #00a8c8;
-  box-shadow: 0 0 0.6em rgba(0, 168, 200, 0.65);
-}
-
-.departure-page-indicator__timing {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.15em;
-  line-height: 1;
-}
-
-#departure-page-countdown {
-  color: #89d9e8;
-  font-size: clamp(13px, 0.78vw, 16px);
-  font-weight: 800;
-  letter-spacing: 0.035em;
-  text-transform: uppercase;
-  white-space: nowrap;
 }
 
 .assignment-layer {
@@ -1145,13 +1025,12 @@ body {
 .platform-card {
   position: relative;
   min-width: 0;
-  min-height: 0;
-  padding: clamp(5px, 0.55vh, 8px) clamp(16px, 1.15vw, 24px);
-  flex: 1 1 0;
+  padding: 3px clamp(14px, 1.15vw, 22px);
+  flex: 1 1 auto;
   display: grid;
-  grid-template-columns: clamp(106px, 6.3vw, 126px) clamp(78px, 5vw, 94px) minmax(0, 1fr);
+  grid-template-columns: clamp(96px, 7.1vw, 136px) clamp(56px, 3.65vw, 70px) minmax(0, 1fr);
   align-items: center;
-  gap: clamp(10px, 0.75vw, 14px);
+  gap: clamp(8px, 0.63vw, 12px);
   overflow: hidden;
   color: #f8fafc;
   background: #0a1c27;
@@ -1176,9 +1055,9 @@ body {
 
 .platform-card__agency-logo {
   display: block;
-  width: clamp(72px, 4.7vw, 88px);
-  height: clamp(38px, 4.2vh, 48px);
-  padding: 4px 5px;
+  width: clamp(56px, 3.65vw, 70px);
+  height: clamp(32px, 3.7vh, 40px);
+  padding: 3px 4px;
   border-radius: 5px;
   background: #fff;
   object-fit: contain;
@@ -1187,25 +1066,21 @@ body {
 .platform-card__title {
   margin: 0;
   min-width: 0;
-  font-size: clamp(34px, 2.15vw, 44px);
+  font-size: clamp(26px, 1.98vw, 38px);
   font-weight: 800;
   line-height: 1;
   white-space: nowrap;
 }
 
-.platform-card[data-platform="14"] {
-  grid-template-columns: clamp(132px, 7.5vw, 150px) clamp(78px, 5vw, 94px) minmax(0, 1fr);
-}
-
 .platform-card[data-platform="14"] .platform-card__title {
-  font-size: clamp(32px, 1.9vw, 39px);
+  font-size: clamp(20px, 1.46vw, 28px);
 }
 
 .platform-card__state {
   color: #90a4ad;
-  font-size: clamp(15px, 0.9vw, 18px);
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  font-size: clamp(14px, 0.94vw, 18px);
+  font-weight: 900;
+  letter-spacing: 0.01em;
   line-height: 1;
   text-transform: uppercase;
   white-space: nowrap;
@@ -1217,30 +1092,18 @@ body {
   gap: clamp(3px, 0.25vw, 6px);
 }
 
-.platform-card--multi-service .platform-card__service {
-  font-size: clamp(22px, 1.35vw, 28px);
-}
-
 .platform-card--multi-service {
-  flex-grow: 1.35;
-}
-
-.platform-card--multi-service .platform-card__service-countdown {
-  font-size: clamp(25px, 1.52vw, 31px);
-}
-
-.platform-card--multi-service .platform-card__service-scheduled {
-  font-size: clamp(15px, 0.88vw, 18px);
+  flex-grow: 1.6;
 }
 
 .platform-card__service {
   min-width: 0;
   display: grid;
-  grid-template-columns: clamp(78px, 4.8vw, 96px) minmax(0, 1fr) clamp(165px, 9.4vw, 190px);
+  grid-template-columns: clamp(70px, 5.2vw, 100px) minmax(0, 1fr) auto;
   align-items: center;
-  gap: clamp(8px, 0.62vw, 12px);
-  font-size: clamp(25px, 1.58vw, 33px);
-  line-height: 1.12;
+  gap: clamp(8px, 0.73vw, 14px);
+  font-size: clamp(20px, 1.46vw, 28px);
+  line-height: 1;
 }
 
 .platform-card__route {
@@ -1266,10 +1129,10 @@ body {
   min-width: 0;
   overflow: visible;
   color: #eef5f7;
-  font-size: clamp(21px, 1.35vw, 28px);
-  font-weight: 790;
-  line-height: 1.02;
-  overflow-wrap: anywhere;
+  font-size: clamp(20px, 1.46vw, 28px);
+  font-weight: 800;
+  line-height: 1;
+  overflow-wrap: normal;
   text-overflow: clip;
   white-space: normal;
 }
@@ -1277,53 +1140,44 @@ body {
 .platform-card__departure {
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
-  gap: 0.12em;
-  overflow: hidden;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: flex-start;
+  gap: clamp(8px, 0.63vw, 12px);
   font-variant-numeric: tabular-nums;
   text-align: right;
-}
-
-.platform-card__departure-meta {
-  max-width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: clamp(5px, 0.36vw, 8px);
   white-space: nowrap;
 }
 
+/* Shown only for live trips: a dot plus the word, so colour is not the only cue. */
 .platform-card__service-source {
-  padding: 2px 5px;
-  border: 1px solid #607985;
-  border-radius: 999px;
-  color: #c2d3db;
-  background: rgba(255, 255, 255, 0.06);
-  font-size: clamp(11px, 0.68vw, 14px);
+  padding: 3px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 2px solid #2fd27a;
+  border-radius: 6px;
+  color: #2fd27a;
+  font-size: clamp(14px, 1.04vw, 20px);
   font-weight: 900;
-  letter-spacing: 0.055em;
+  letter-spacing: 0.04em;
   line-height: 1;
   text-transform: uppercase;
 }
 
-.platform-card__service-source[data-source="live"] {
-  border-color: #007a33;
-  border-radius: 0.24em;
-  color: #fff;
-  background: #007a33;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+.platform-card__service-source::before {
+  content: "";
+  width: 0.5em;
+  height: 0.5em;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .platform-card__service-countdown {
-  max-width: 100%;
-  overflow: hidden;
   color: #f8fafc;
-  font-size: clamp(29px, 1.85vw, 38px);
-  font-weight: 850;
+  font-size: clamp(26px, 2.19vw, 42px);
+  font-weight: 900;
   line-height: 1;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -1335,26 +1189,10 @@ body {
   font-size: clamp(19px, 1.2vw, 24px);
 }
 
-.platform-card__service-countdown[data-departure-state="future-day"]
-  + .platform-card__departure-meta .platform-card__service-source {
-  display: none;
-}
-
 .platform-card__service-countdown[data-departure-state="unavailable"],
 .platform-card__service-countdown[data-departure-state="past"] {
   color: #a8bbc4;
   font-size: clamp(18px, 1.08vw, 22px);
-}
-
-.platform-card__service-scheduled {
-  max-width: 100%;
-  overflow: hidden;
-  color: #a8bbc4;
-  font-size: clamp(17px, 1vw, 20px);
-  font-weight: 750;
-  line-height: 1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .platform-card--occupied .platform-card__service--active .platform-card__service-countdown {
@@ -1405,7 +1243,7 @@ body {
 }
 
 .platform-connection__platform {
-  font-size: clamp(28px, 1.7vw, 35px);
+  font-size: clamp(26px, 1.98vw, 38px);
   line-height: 1;
 }
 
@@ -1424,7 +1262,7 @@ body {
   border-radius: 0.32em;
   color: #fff;
   background: #00658c;
-  font-size: clamp(21px, 1.22vw, 25px);
+  font-size: clamp(20px, 1.46vw, 28px);
   line-height: 1;
   text-align: center;
 }
@@ -1438,7 +1276,7 @@ body {
 
 .platform-connection__stop {
   overflow: hidden;
-  font-size: clamp(19px, 1.12vw, 23px);
+  font-size: clamp(20px, 1.46vw, 28px);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1447,7 +1285,7 @@ body {
   margin-top: 0.2em;
   display: block;
   color: #a8bbc4;
-  font-size: clamp(13px, 0.78vw, 16px);
+  font-size: clamp(14px, 1.15vw, 22px);
   font-weight: 750;
 }
 
@@ -1635,33 +1473,20 @@ body {
   white-space: nowrap;
 }
 
-.platform-status,
-.terminal-empty {
-  min-width: 0;
-  max-width: 48%;
-  margin-left: auto;
-  padding: 0.38em 0.72em;
-  border: 1px solid var(--warning);
-  border-radius: 999px;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: none;
-  font-size: clamp(7px, 0.67vw, 14px);
+.platform-status {
+  margin: 0;
+  padding: clamp(6px, 0.52vw, 10px) clamp(14px, 1.25vw, 24px);
+  flex: 0 0 auto;
+  color: #1a1300;
+  background: #ffd25e;
+  font-size: clamp(16px, 1.25vw, 24px);
   font-weight: 800;
-  text-align: center;
-}
-
-.platform-status[data-state="offline"] {
-  border-color: var(--offline);
-}
-
-.terminal-empty {
-  border-color: rgba(255, 255, 255, 0.45);
+  line-height: 1.2;
 }
 
 .platform-footer {
   position: relative;
-  grid-row: 4;
+  grid-row: 3;
   z-index: 65;
   min-width: 0;
   overflow: hidden;
@@ -1735,10 +1560,6 @@ body {
     align-self: center;
   }
 
-  .source-chip {
-    padding-inline: 0.45em;
-  }
-
   .platform-card__state {
     font-size: clamp(11px, 0.8vw, 15px);
   }
@@ -1750,19 +1571,25 @@ body {
 }
 
 @container (max-width: 760px) {
+  .map-platform-card {
+    height: 64px;
+    grid-template-rows: 26px minmax(0, 1fr);
+  }
+
+  .map-platform-card__header {
+    min-height: 26px;
+  }
+
   .map-platform-card__title {
     font-size: 13px;
   }
 
-  .map-platform-card__route {
+  .map-platform-card__route,
+  .map-platform-card__route:nth-child(2),
+  .map-platform-card__route:first-child:nth-last-child(2) {
     min-width: 25px;
     padding: 3px 4px;
-    font-size: 10px;
-  }
-
-  .map-platform-card__status {
-    font-size: 8px;
-    letter-spacing: 0;
+    font-size: 12px;
   }
 
   .map-connection-card__header {
@@ -1845,8 +1672,8 @@ body {
 
   .platform-card {
     min-height: 0;
-    padding-block: 3px;
-    grid-template-columns: 92px 66px minmax(0, 1fr);
+    padding-block: 1px;
+    grid-template-columns: 84px 56px minmax(0, 1fr);
     gap: 8px;
   }
 
@@ -1857,31 +1684,30 @@ body {
   }
 
   .platform-card__title {
-    font-size: 30px;
-  }
-
-  .platform-card__state {
-    font-size: 15px;
-  }
-
-  .platform-card__service {
-    grid-template-columns: 68px minmax(0, 1fr) 145px;
-    gap: 6px;
-    font-size: 21px;
-  }
-
-  .platform-card__service-countdown,
-  .platform-card--multi-service .platform-card__service-countdown {
     font-size: 24px;
   }
 
-  .platform-card--multi-service .platform-card__service {
-    font-size: 20px;
+  .platform-card__state {
+    font-size: 12px;
   }
 
-  .platform-card__service-scheduled,
-  .platform-card--multi-service .platform-card__service-scheduled {
-    display: none;
+  .platform-card__service {
+    grid-template-columns: 60px minmax(0, 1fr) auto;
+    gap: 6px;
+    font-size: 17px;
+  }
+
+  .platform-card__destination {
+    font-size: 17px;
+  }
+
+  .platform-card__service-countdown {
+    font-size: 22px;
+  }
+
+  .platform-card__service-source {
+    padding: 2px 5px;
+    font-size: 12px;
   }
 
   .platform-connections {
