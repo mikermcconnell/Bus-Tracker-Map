@@ -86,6 +86,33 @@ describe('GTFS static change monitor', () => {
     expect(JSON.parse(fs.readFileSync(stateFile, 'utf8')).feedVersion).toBe('v2');
   });
 
+  test('does not send If-Modified-Since so a rollback to an older file is detected', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gtfs-change-'));
+    const stateFile = path.join(dir, 'state.json');
+    await checkGtfsStaticChange({
+      url: 'https://example.test/gtfs.zip',
+      stateFile,
+      fetchImpl: async () => response(buildZip('v2'), {
+        etag: '"v2"',
+        'last-modified': 'Fri, 09 Oct 2026 12:00:00 GMT',
+      }),
+    });
+    let sentHeaders;
+    const result = await checkGtfsStaticChange({
+      url: 'https://example.test/gtfs.zip',
+      stateFile,
+      fetchImpl: async (url, options) => {
+        sentHeaders = options.headers;
+        return response(buildZip('v1'), {
+          etag: '"v1"',
+          'last-modified': 'Wed, 30 Sep 2026 12:31:48 GMT',
+        });
+      },
+    });
+    expect(sentHeaders).toEqual({ 'If-None-Match': '"v2"' });
+    expect(result.status).toBe('changed');
+  });
+
   test('ignores ZIP metadata changes when GTFS file contents are identical', () => {
     const first = buildZip('v1');
     const secondZip = new AdmZip(first);

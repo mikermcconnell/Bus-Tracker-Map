@@ -5,11 +5,13 @@
  */
 
 import { buildNearbyRenderSignature } from '../map/tracked-services.js';
+import { buildRouteLegendItems, splitDepartureLabel } from '../tv-layout.js';
 
 const BANNER_PRIORITY = ['routes', 'vehicles'];
 
-export function createUiController() {
+export function createUiController({ tvLayout = false } = {}) {
   let bannerEl = null;
+  let routeLegendStripEl = null;
   let bannerDefaultText = '';
   let legendEl = null;
   let stopLegendEl = null;
@@ -36,6 +38,7 @@ export function createUiController() {
     lastUpdatedEl = document.getElementById('last-updated');
     nearbyBusesListEl = document.getElementById('nearby-buses-list');
     trackedServicesListEl = document.getElementById('tracked-services-list');
+    routeLegendStripEl = tvLayout ? document.getElementById('route-legend') : null;
 
     if (bannerEl) {
       bannerDefaultText = bannerEl.textContent || 'Live data unavailable, retrying';
@@ -141,6 +144,25 @@ export function createUiController() {
     const departure = document.createElement('small');
     departure.className = 'nearby-bus__departure';
 
+    // TV layout: minutes are the largest thing in the row.
+    let eta = null;
+    let etaValue = null;
+    let etaUnit = null;
+    let etaCaption = null;
+    if (tvLayout) {
+      eta = document.createElement('span');
+      eta.className = 'nearby-bus__eta';
+      etaValue = document.createElement('span');
+      etaValue.className = 'nearby-bus__eta-value';
+      etaUnit = document.createElement('span');
+      etaUnit.className = 'nearby-bus__eta-unit';
+      etaCaption = document.createElement('span');
+      etaCaption.className = 'nearby-bus__eta-caption';
+      eta.appendChild(etaValue);
+      eta.appendChild(etaUnit);
+      eta.appendChild(etaCaption);
+    }
+
     details.appendChild(title);
     details.appendChild(agency);
     details.appendChild(proximity);
@@ -154,6 +176,7 @@ export function createUiController() {
     item.appendChild(route);
     item.appendChild(details);
     item.appendChild(wayfinding);
+    if (eta) item.appendChild(eta);
     item.__nearbyParts = {
       route,
       routeAgency,
@@ -168,6 +191,10 @@ export function createUiController() {
       platformType,
       platformNumber,
       departure,
+      eta,
+      etaValue,
+      etaUnit,
+      etaCaption,
     };
     return item;
   }
@@ -205,11 +232,20 @@ export function createUiController() {
     const platformLabel = String(entry.platformLabel || 'CHECK BOARD');
     const platformMatch = platformLabel.match(/^(PLATFORM|STOP)\s+(.+)$/i);
     parts.platform.dataset.kind = platformMatch ? 'assigned' : 'check';
+    parts.platform.dataset.type = platformMatch ? platformMatch[1].toLowerCase() : 'check';
     parts.platformType.textContent = platformMatch ? platformMatch[1] : 'CHECK';
     parts.platformNumber.textContent = platformMatch ? platformMatch[2] : 'BOARD';
     parts.platform.setAttribute('aria-label', platformLabel);
     parts.departure.textContent = String(entry.departureLabel || '');
     parts.departure.hidden = !entry.departureLabel;
+    if (parts.eta) {
+      const eta = splitDepartureLabel(entry.departureLabel);
+      parts.eta.hidden = !eta;
+      parts.eta.classList.toggle('nearby-bus__eta--now', Boolean(eta && eta.now));
+      parts.etaValue.textContent = eta ? eta.value : '';
+      parts.etaUnit.textContent = eta ? eta.unit : '';
+      parts.etaCaption.textContent = eta ? eta.caption : '';
+    }
     item.setAttribute('aria-label', [
       String(entry.routeLabel || entry.routeCode || 'Bus'),
       destination,
@@ -427,7 +463,7 @@ export function createUiController() {
         if (upcomingMatch) {
           const heading = document.createElement('strong');
           heading.className = 'service-notice__heading';
-          heading.textContent = 'Upcoming Holiday Service -';
+          heading.textContent = tvLayout ? 'Upcoming holiday service' : 'Upcoming Holiday Service -';
           segment.appendChild(heading);
           if (upcomingMatch[1]) {
             segment.appendChild(document.createTextNode(` ${upcomingMatch[1]}`));
@@ -438,6 +474,9 @@ export function createUiController() {
       });
     }
     serviceNoticeEl.hidden = !message;
+    if (tvLayout && document.body) {
+      document.body.classList.toggle('has-service-notice', Boolean(message));
+    }
   }
 
   function getSpecialServiceDisplay(status, today) {
@@ -566,7 +605,42 @@ export function createUiController() {
     renderStopLegend(context);
   }
 
+  function renderRouteLegendStrip(context) {
+    if (!routeLegendStripEl || !context) return;
+    const routeLayers = context.getRouteLayers() || {};
+    const items = buildRouteLegendItems(context.getRouteIds().map((routeId) => ({
+      routeId,
+      meta: context.getRouteMeta(routeId),
+      visible: Boolean(routeLayers[routeId]) && routeLayers[routeId].visible !== false,
+    })));
+    routeLegendStripEl.textContent = '';
+    const title = document.createElement('span');
+    title.className = 'route-legend__title';
+    title.textContent = 'Routes';
+    routeLegendStripEl.appendChild(title);
+    items.forEach((item) => {
+      const entry = document.createElement('span');
+      entry.className = 'route-legend__item';
+      const swatch = document.createElement('span');
+      swatch.className = 'route-legend__swatch';
+      swatch.style.background = item.color;
+      entry.appendChild(swatch);
+      entry.appendChild(document.createTextNode(item.label));
+      routeLegendStripEl.appendChild(entry);
+    });
+    const bus = document.createElement('span');
+    bus.className = 'route-legend__item route-legend__item--bus';
+    const busIcon = document.createElement('span');
+    busIcon.className = 'route-legend__bus';
+    busIcon.setAttribute('aria-hidden', 'true');
+    bus.appendChild(busIcon);
+    bus.appendChild(document.createTextNode('Live bus · arrow shows direction'));
+    routeLegendStripEl.appendChild(bus);
+    routeLegendStripEl.hidden = !items.length;
+  }
+
   function renderRouteLegend(context) {
+    renderRouteLegendStrip(context);
     if (!legendEl) return;
     const routeList = legendEl.querySelector('#routeList');
     if (!routeList) return;

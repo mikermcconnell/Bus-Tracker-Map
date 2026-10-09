@@ -56,6 +56,15 @@ body {
   font-weight: 400;
 }
 
+.departure-board__clock.has-warning #departure-clock {
+  display: none;
+}
+
+#departure-health {
+  font-size: 0.8em;
+  font-weight: 700;
+}
+
 .departure-board tbody tr {
   background: #fff;
 }

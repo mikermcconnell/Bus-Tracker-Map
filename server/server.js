@@ -824,7 +824,9 @@ apiRouter.get('/departures', async (req, res) => {
       });
     }
     try {
-      const terminalPayload = await getDepartures({ limit: 30, board: 'allandale' });
+      const terminalPayload = await getDepartures({
+        limit: 30, board: 'allandale', platform: parsePlatformStopCode(stopCode).platform,
+      });
       const data = buildPlatformDeparturePayload({ stopCode, terminalPayload });
       res.setHeader('Cache-Control', 'public, max-age=5, stale-while-revalidate=5');
       return res.json(data);

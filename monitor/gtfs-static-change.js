@@ -106,8 +106,8 @@ async function checkGtfsStaticChange(options) {
   } = options;
   const previous = loadState(stateFile);
   const headers = {};
+  // ETag only: If-Modified-Since would hide a rollback to an older file.
   if (previous && previous.etag) headers['If-None-Match'] = previous.etag;
-  if (previous && previous.lastModified) headers['If-Modified-Since'] = previous.lastModified;
 
   const response = await fetchImpl(url, { headers, timeout: 30000 });
   if (response.status === 304) {

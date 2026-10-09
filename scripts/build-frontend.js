@@ -175,7 +175,8 @@ function copySharedAssets() {
     'agency-barrie-transit.png',
     'agency-go-transit.svg',
     'agency-ontario-northland.png',
-    'agency-simcoe-linx.png'
+    'agency-simcoe-linx.png',
+    'barrie-sim-city.webp'
   ];
   if (!fs.existsSync(sharedAssetsDir)) return;
 

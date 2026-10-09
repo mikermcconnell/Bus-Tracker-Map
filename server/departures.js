@@ -7,10 +7,12 @@ const {
   isBarrieAllandalePlatformStop,
 } = require('./allandale-platforms');
 const { fetchTripUpdates } = require('./gtfs-trip-updates');
+const { agencyForPlatform, PLATFORM_HORIZON_HOURS } = require('./platform-departures');
 
 const TIME_ZONE = 'America/Toronto';
 const HORIZON_HOURS = 1;
 const GRACE_SECONDS = 60;
+const LATE_LOOKBACK_SECONDS = 6 * 3600;
 const GO_BUS_DESTINATION = 'Barrie / Newmarket';
 const LINX_ALLANDALE_STOP_ID = 'SCSTOP210';
 const LINX_HANDOFF_MAX_GAP_SECONDS = 10 * 60;
@@ -53,12 +55,13 @@ function metadataForBoard(metadata, agencyKey, boardId) {
   };
 }
 
-function localDateKeys(nowMs) {
+function localDateKeys(nowMs, horizonHours = HORIZON_HOURS) {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' })
     .formatToParts(new Date(nowMs));
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   const base = Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day));
-  return [-1, 0, 1, 2].map((offset) => {
+  const offsets = Array.from({ length: Math.ceil(horizonHours / 24) + 3 }, (_, index) => index - 1);
+  return offsets.map((offset) => {
     const date = new Date(base + offset * 86400000);
     return `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, '0')}${String(date.getUTCDate()).padStart(2, '0')}`;
   });
@@ -121,17 +124,17 @@ function isBoardableTerminalDeparture(agencyKey, stop) {
   return !stop || stop.is_departure !== false;
 }
 
-function collectScheduledDepartures(metadata, agencyKey, nowMs, horizonHours = HORIZON_HOURS) {
+function collectScheduledDepartures(metadata, agencyKey, nowMs, horizonHours = HORIZON_HOURS, lookbackSeconds = GRACE_SECONDS) {
   const agency = AGENCIES[agencyKey];
   if (!agency || !metadata || !metadata.trips) return [];
-  const start = nowMs / 1000 - GRACE_SECONDS;
+  const start = nowMs / 1000 - lookbackSeconds;
   const end = nowMs / 1000 + horizonHours * 3600;
   const results = [];
   for (const [tripId, trip] of Object.entries(metadata.trips)) {
     for (const stop of trip.terminal_stops || []) {
       if (!isBoardableTerminalDeparture(agencyKey, stop)) continue;
       const stopId = String(stop.stop_id || '');
-      for (const serviceDate of localDateKeys(nowMs)) {
+      for (const serviceDate of localDateKeys(nowMs, horizonHours)) {
         if (!isServiceActiveOnDate(metadata, trip.service_id, serviceDate)) continue;
         const scheduled = scheduledTimeToEpochSeconds(serviceDate, stop.departure_time || stop.arrival_time, TIME_ZONE);
         if (!Number.isFinite(scheduled) || scheduled < start || scheduled > end) continue;
@@ -170,6 +173,11 @@ function mergeTripUpdates(scheduled, realtime, nowMs, delayedAfterMs, offlineAft
   const usedUpdates = new Set();
   let realtimeCount = 0;
   const departures = scheduled.flatMap((departure) => {
+    if (updates.some((candidate) => candidate.trip_level && candidate.canceled &&
+      candidate.trip_id === departure.trip_id &&
+      (candidate.start_date
+        ? candidate.start_date === departure.service_date
+        : departure.service_date === serviceDateFromEpochSeconds(realtime.feed_timestamp)))) return [];
     let updateIndex = updates.findIndex((candidate, index) => (
       !usedUpdates.has(index) &&
       candidate.trip_id === departure.trip_id &&
@@ -182,7 +190,8 @@ function mergeTripUpdates(scheduled, realtime, nowMs, delayedAfterMs, offlineAft
     if (updateIndex < 0) {
       let nearestDifference = 20 * 60 + 1;
       updates.forEach((candidate, index) => {
-        if (usedUpdates.has(index) || candidate.canceled || candidate.skipped) return;
+        if (usedUpdates.has(index) || candidate.canceled || candidate.skipped || candidate.no_data) return;
+        if (candidate.start_date && candidate.start_date !== departure.service_date) return;
         if (candidate.stop_id !== departure.stop_id || String(candidate.route_id || '') !== String(departure.route_id || '')) return;
         if (!Number.isFinite(candidate.departure_time)) return;
         const difference = Math.abs(candidate.departure_time - departure.scheduled_departure_time);
@@ -197,6 +206,9 @@ function mergeTripUpdates(scheduled, realtime, nowMs, delayedAfterMs, offlineAft
     if (!update) return [departure];
     if (update.canceled || update.skipped) return [];
     usedUpdates.add(updateIndex);
+    if (update.no_data || (!Number.isFinite(update.departure_time) && !Number.isFinite(update.delay_seconds))) {
+      return [departure];
+    }
     const expected = Number.isFinite(update.departure_time)
       ? update.departure_time
       : departure.scheduled_departure_time + (Number(update.delay_seconds) || 0);
@@ -208,6 +220,7 @@ function mergeTripUpdates(scheduled, realtime, nowMs, delayedAfterMs, offlineAft
       prediction_source: 'trip_update',
       prediction_trip_id: String(update.trip_id || ''),
       prediction_match_type: predictionMatchType,
+      prediction_timestamp: realtime.feed_timestamp * 1000,
       delay_seconds: Math.round(expected - departure.scheduled_departure_time),
     }];
   });
@@ -349,6 +362,7 @@ function applyVehicleEvidence(departures, vehiclePayload, nowMs, maxAgeMs) {
         live_evidence: barrieExactPrediction ? 'trip_update' : null,
         live_vehicle_id: null,
         live_vehicle_last_reported: null,
+        live_valid_until: barrieExactPrediction ? Number(departure.prediction_timestamp) + maxAgeMs : null,
       };
     }
 
@@ -360,6 +374,10 @@ function applyVehicleEvidence(departures, vehiclePayload, nowMs, maxAgeMs) {
         : 'trip_update_and_vehicle',
       live_vehicle_id: String(matchingVehicle.id || ''),
       live_vehicle_last_reported: Number(matchingVehicle.last_reported),
+      live_valid_until: Math.min(
+        Number(departure.prediction_timestamp) + maxAgeMs,
+        normalizeEpochMilliseconds(matchingVehicle.last_reported) + maxAgeMs
+      ),
     };
   });
 }
@@ -426,7 +444,20 @@ function unavailableSource(reason) {
   return { display_mode: 'scheduled', realtime_status: 'offline', status_reason: reason, latest_data_timestamp: null };
 }
 
-function selectScheduledDepartures(departures, nowMs, limit, horizonHours = HORIZON_HOURS) {
+function scheduleStatus(metadata, nowMs) {
+  if (!metadata || !metadata.trips || !Object.keys(metadata.trips).length) return 'unavailable';
+  const dates = Object.keys(metadata.service_exceptions || {}).sort();
+  const calendars = Object.values(metadata.service_calendars || {});
+  const starts = calendars.map((entry) => entry.start_date).filter(Boolean).concat(dates.slice(0, 1)).sort();
+  const ends = calendars.map((entry) => entry.end_date).filter(Boolean).concat(dates.slice(-1)).sort();
+  const start = String(metadata.feed_start_date || starts[0] || '').replace(/-/g, '');
+  const end = String(metadata.feed_end_date || ends[ends.length - 1] || '').replace(/-/g, '');
+  const today = serviceDateFromEpochSeconds(nowMs / 1000);
+  if (!start || !end || today < start || today > end) return 'unavailable';
+  return 'available';
+}
+
+function selectScheduledDepartures(departures, nowMs, limit, horizonHours = HORIZON_HOURS, byExpectedTime = false) {
   const start = nowMs / 1000;
   const end = nowMs / 1000 + horizonHours * 3600;
   const seenServices = new Set();
@@ -442,7 +473,7 @@ function selectScheduledDepartures(departures, nowMs, limit, horizonHours = HORI
         : row.scheduled_departure_time >= start;
     })
     .sort((a, b) => (
-      a.scheduled_departure_time - b.scheduled_departure_time ||
+      (byExpectedTime ? a.expected_departure_time - b.expected_departure_time : a.scheduled_departure_time - b.scheduled_departure_time) ||
       Number(a.platform) - Number(b.platform) ||
       String(a.route_label || '').localeCompare(String(b.route_label || '')) ||
       a.id.localeCompare(b.id)
@@ -462,45 +493,53 @@ function createDeparturesService(options = {}) {
   const metadata = options.metadata || {};
   const delayedAfterMs = options.delayedAfterMs || 120000;
   const offlineAfterMs = options.offlineAfterMs || 900000;
-  return async function getDepartures({ limit = 12, now = Date.now(), board = 'allandale' } = {}) {
+  const loadTripUpdates = options.fetchTripUpdates || fetchTripUpdates;
+  return async function getDepartures({ limit = 12, now = Date.now(), board = 'allandale', platform = null } = {}) {
     const nowMs = Number(now);
     const boardId = String(board || 'allandale').toLowerCase();
     const boardConfig = BOARD_CONFIGS[boardId];
     if (!boardConfig) {
       const error = new Error('Unknown departure board'); error.statusCode = 400; error.code = 'INVALID_BOARD'; throw error;
     }
+    const horizonHours = platform === null ? HORIZON_HOURS : PLATFORM_HORIZON_HOURS;
+    const requiredAgency = platform === null ? null : agencyForPlatform(platform);
+    const keys = platform === null ? boardConfig.agencies : boardConfig.agencies.filter((key) => key === requiredAgency);
     const boardMetadata = {};
-    boardConfig.agencies.forEach((key) => {
+    keys.forEach((key) => {
       boardMetadata[key] = metadataForBoard(metadata[key], key, boardId);
     });
     const schedule = {};
-    for (const key of boardConfig.agencies) schedule[key] = collectScheduledDepartures(boardMetadata[key], key, nowMs);
-    if (!Object.values(boardMetadata).some((value) => value && value.trips && Object.keys(value.trips).length)) {
+    for (const key of keys) schedule[key] = collectScheduledDepartures(boardMetadata[key], key, nowMs, horizonHours, LATE_LOOKBACK_SECONDS);
+    if (requiredAgency && scheduleStatus(boardMetadata[requiredAgency], nowMs) !== 'available') {
+      const error = new Error('Platform schedule metadata is unavailable or outside its validity dates');
+      error.statusCode = 503;
+      throw error;
+    }
+    if (platform === null && !Object.values(boardMetadata).some((value) => value && value.trips && Object.keys(value.trips).length)) {
       const error = new Error('Departure schedule metadata is unavailable'); error.statusCode = 503; throw error;
     }
     const realtimePromises = {};
-    if (boardConfig.agencies.includes('barrie_transit')) {
+    if (keys.includes('barrie_transit')) {
       realtimePromises.barrie_transit = options.urls && options.urls.barrie
-        ? fetchTripUpdates(options.urls.barrie, boardMetadata.barrie_transit && boardMetadata.barrie_transit.terminal_stop_ids, { now: nowMs })
+        ? loadTripUpdates(options.urls.barrie, boardMetadata.barrie_transit && boardMetadata.barrie_transit.terminal_stop_ids, { now: nowMs })
         : Promise.reject(new Error('not_configured'));
     }
-    if (boardConfig.agencies.includes('ontario_northland')) {
+    if (keys.includes('ontario_northland')) {
       realtimePromises.ontario_northland = options.urls && options.urls.ontarioNorthland
-        ? fetchTripUpdates(options.urls.ontarioNorthland, metadata.ontario_northland && metadata.ontario_northland.barrie_stop_ids, { now: nowMs })
+        ? loadTripUpdates(options.urls.ontarioNorthland, metadata.ontario_northland && metadata.ontario_northland.barrie_stop_ids, { now: nowMs })
         : Promise.reject(new Error('not_configured'));
     }
-    if (boardConfig.agencies.includes('simcoe_linx')) {
+    if (keys.includes('simcoe_linx')) {
       realtimePromises.simcoe_linx = options.urls && options.urls.linx
-        ? fetchTripUpdates(options.urls.linx, metadata.simcoe_linx && metadata.simcoe_linx.terminal_stop_ids, { now: nowMs })
+        ? loadTripUpdates(options.urls.linx, metadata.simcoe_linx && metadata.simcoe_linx.terminal_stop_ids, { now: nowMs })
         : Promise.reject(new Error('not_configured'));
     }
-    if (boardConfig.agencies.includes('go_transit')) {
+    if (keys.includes('go_transit')) {
       realtimePromises.go_transit = fetchGoNextServices({ apiBase: options.goApiBase, apiKey: options.goApiKey, nowMs });
     }
-    const vehiclePayloadPromise = typeof options.fetchVehiclePayload === 'function'
+    const vehiclePayloadPromise = keys.length && typeof options.fetchVehiclePayload === 'function'
       ? Promise.resolve().then(() => options.fetchVehiclePayload())
       : Promise.resolve({ vehicles: [] });
-    const keys = boardConfig.agencies;
     const settled = await Promise.allSettled(keys.map((key) => realtimePromises[key]));
     const sources = {};
     let combined = [];
@@ -514,7 +553,9 @@ function createDeparturesService(options = {}) {
       if (key === 'go_transit') {
         const state = freshness(result.value.feed_timestamp, nowMs, delayedAfterMs, offlineAfterMs);
         if (state.realtime_status === 'live' && result.value.departures.length) {
-          combined = combined.concat(result.value.departures);
+          combined = combined.concat(result.value.departures.map((row) => ({
+            ...row, prediction_timestamp: result.value.feed_timestamp * 1000,
+          })));
           sources[key] = { display_mode: 'realtime', ...state };
         } else {
           combined = combined.concat(schedule[key]);
@@ -536,14 +577,16 @@ function createDeparturesService(options = {}) {
       nowMs,
       options.vehicleLiveMaxAgeMs || delayedAfterMs
     );
-    const departures = selectScheduledDepartures(classified, nowMs, limit);
-    for (const key of boardConfig.agencies) {
+    const platformRows = platform === null ? classified : classified.filter((row) => String(row.platform) === String(platform));
+    const departures = selectScheduledDepartures(platformRows, nowMs, limit, horizonHours, platform !== null);
+    for (const key of keys) {
       const agency = AGENCIES[key];
       const agencyRows = departures.filter((row) => row.agency_id === agency.id);
       sources[key].live_departure_count = agencyRows.filter((row) => row.departure_source === 'realtime').length;
       sources[key].estimated_departure_count = agencyRows.filter((row) => row.departure_source === 'estimated').length;
+      sources[key].schedule_status = scheduleStatus(boardMetadata[key], nowMs);
     }
-    return { generated_at: nowMs, time_zone: TIME_ZONE, horizon_hours: HORIZON_HOURS, board: boardId, departures, sources };
+    return { generated_at: nowMs, time_zone: TIME_ZONE, horizon_hours: horizonHours, board: boardId, departures, sources };
   };
 }
 
@@ -560,6 +603,7 @@ module.exports = {
   parsePrefixedGoTripId,
   parseGoNextService,
   readGoTime,
+  scheduleStatus,
   selectScheduledDepartures,
   vehicleMatchesDepartureTrip,
 };

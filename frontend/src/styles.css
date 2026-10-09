@@ -2490,3 +2490,493 @@ body {
     text-align: left;
   }
 }
+
+/* ── TV redesign (opt-in: /?layout=tv) ─────────────────────────
+   Two columns (map | arrivals), Barrie Simulator basemap, route legend
+   under the map, minutes-first rows and a static amber alert banner.
+   Sizes use --u: one design pixel on a 1920×1080 screen. */
+
+.route-legend[hidden] {
+  display: none !important;
+}
+
+body.layout-tv {
+  --u: min(calc(100vw / 1920), calc(100vh / 1080));
+  --tv-header-h: calc(88 * var(--u));
+  --tv-notice-h: calc(88 * var(--u));
+  --tv-safe-x: calc(48 * var(--u));
+  --tv-ink: #10202e;
+  --tv-muted: #5b6b78;
+  --tv-line: #dfe5ea;
+  --tv-yah: #e11d2e;
+  transition: transform 1.5s ease;
+}
+
+body.layout-tv .map-title {
+  height: var(--tv-header-h);
+  min-height: 0;
+  padding: 0 var(--tv-safe-x);
+  border-bottom: calc(4 * var(--u)) solid #00a8c8;
+  box-shadow: none;
+}
+
+body.layout-tv .map-title__main {
+  font-size: calc(40 * var(--u));
+}
+
+body.layout-tv .live-feed-summary {
+  min-height: 0;
+  padding: calc(8 * var(--u)) calc(20 * var(--u)) calc(8 * var(--u)) calc(16 * var(--u));
+  border: 0;
+  background: rgba(255, 255, 255, 0.12);
+  font-size: calc(26 * var(--u));
+  gap: calc(12 * var(--u));
+}
+
+body.layout-tv .live-feed-summary .live-dot {
+  width: calc(16 * var(--u));
+  height: calc(16 * var(--u));
+}
+
+body.layout-tv .map-title__right {
+  display: flex;
+  align-items: center;
+  gap: calc(18 * var(--u));
+  font-size: calc(20 * var(--u));
+}
+
+body.layout-tv .current-time {
+  font-size: calc(44 * var(--u));
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+body.layout-tv .info-separator {
+  display: none;
+}
+
+body.layout-tv .last-updated {
+  padding: calc(6 * var(--u)) calc(14 * var(--u));
+  border-radius: calc(8 * var(--u));
+  background: rgba(74, 222, 128, 0.18);
+  color: #bbf7d0;
+  font-weight: 700;
+}
+
+body.layout-tv.vehicle-feed-degraded .last-updated {
+  background: #fbbf24;
+  color: #3a2600;
+}
+
+/* Two columns: nothing floats over the map. */
+body.layout-tv .map-stage {
+  position: fixed;
+  top: var(--tv-header-h);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: auto;
+  height: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40%;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+body.layout-tv.has-service-notice .map-stage {
+  bottom: var(--tv-notice-h);
+}
+
+body.layout-tv #map {
+  grid-column: 1;
+  grid-row: 1;
+  height: auto;
+  min-height: 0;
+}
+
+body.layout-tv .leaflet-control-attribution {
+  font-size: calc(11 * var(--u));
+}
+
+body.layout-tv .route-legend {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(8 * var(--u)) calc(16 * var(--u));
+  min-height: calc(60 * var(--u));
+  padding: calc(10 * var(--u)) calc(20 * var(--u)) calc(10 * var(--u)) var(--tv-safe-x);
+  box-sizing: border-box;
+  overflow: hidden;
+  background: #ffffff;
+  border-top: 1px solid #c9d3da;
+  color: var(--tv-ink);
+  font-size: calc(19 * var(--u));
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+body.layout-tv .route-legend__title {
+  color: var(--tv-muted);
+  font-size: calc(15 * var(--u));
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+body.layout-tv .route-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(8 * var(--u));
+}
+
+body.layout-tv .route-legend__swatch {
+  width: calc(28 * var(--u));
+  height: calc(8 * var(--u));
+  border-radius: calc(4 * var(--u));
+}
+
+body.layout-tv .route-legend__item--bus {
+  padding-left: calc(16 * var(--u));
+  border-left: 2px solid var(--tv-line);
+}
+
+body.layout-tv .route-legend__bus {
+  position: relative;
+  width: calc(22 * var(--u));
+  height: calc(22 * var(--u));
+  border: calc(3 * var(--u)) solid #ffffff;
+  border-radius: 50%;
+  background: #1f1f1f;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.3);
+}
+
+body.layout-tv .route-legend__bus::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  border: calc(6 * var(--u)) solid transparent;
+  border-bottom: calc(8 * var(--u)) solid #1f1f1f;
+}
+
+/* Arrivals column */
+body.layout-tv .map-overlay-frame {
+  position: static;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: block;
+  padding: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.layout-tv .map-overlay-column--left {
+  display: none;
+}
+
+body.layout-tv .map-overlay-column--right {
+  position: static;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+body.layout-tv .nearby-buses {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 0;
+  border-left: 1px solid #c9d3da;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
+}
+
+body.layout-tv .nearby-buses__header {
+  padding: calc(20 * var(--u)) var(--tv-safe-x) calc(14 * var(--u)) calc(28 * var(--u));
+  color: var(--transit-blue);
+  background: #ffffff;
+  border-bottom: calc(3 * var(--u)) solid var(--transit-blue);
+}
+
+body.layout-tv .nearby-buses__eyebrow {
+  color: var(--tv-muted);
+  font-size: calc(15 * var(--u));
+  opacity: 1;
+}
+
+body.layout-tv .nearby-buses h2 {
+  font-size: calc(38 * var(--u));
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+body.layout-tv .nearby-buses__terminal-name {
+  color: var(--tv-muted);
+  font-size: calc(20 * var(--u));
+  font-weight: 600;
+}
+
+body.layout-tv .nearby-buses__list {
+  flex: 1;
+  min-height: 0;
+}
+
+body.layout-tv .nearby-bus {
+  grid-template-columns: calc(84 * var(--u)) minmax(0, 1fr) calc(150 * var(--u)) calc(112 * var(--u));
+  gap: 0 calc(14 * var(--u));
+  min-height: calc(136 * var(--u));
+  padding: 0 var(--tv-safe-x) 0 calc(28 * var(--u));
+  border-bottom: 1px solid var(--tv-line);
+}
+
+body.layout-tv .nearby-bus--terminal {
+  background: #ecfdf3;
+  box-shadow: inset calc(8 * var(--u)) 0 0 #16a34a;
+}
+
+body.layout-tv .nearby-bus__agency-brand {
+  display: none;
+}
+
+body.layout-tv .nearby-bus__route { order: 1; }
+body.layout-tv .nearby-bus__details { order: 2; }
+body.layout-tv .nearby-bus__eta { order: 3; }
+body.layout-tv .nearby-bus__wayfinding { order: 4; }
+
+body.layout-tv .nearby-bus__route {
+  width: calc(76 * var(--u));
+  height: calc(76 * var(--u));
+  border-width: calc(4 * var(--u));
+  font-size: calc(30 * var(--u));
+}
+
+body.layout-tv .nearby-bus__route-agency {
+  font-size: calc(13 * var(--u));
+}
+
+body.layout-tv .nearby-bus__title {
+  color: var(--tv-ink);
+  font-size: calc(33 * var(--u));
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+body.layout-tv .nearby-bus__agency,
+body.layout-tv .nearby-bus__proximity {
+  color: var(--tv-muted);
+  font-size: calc(19 * var(--u));
+  font-weight: 600;
+}
+
+body.layout-tv .nearby-bus--terminal .nearby-bus__proximity {
+  color: #15803d;
+  font-weight: 800;
+}
+
+body.layout-tv .nearby-bus__eta {
+  display: block;
+  color: var(--tv-ink);
+  line-height: 1;
+  text-align: right;
+  white-space: nowrap;
+}
+
+body.layout-tv .nearby-bus__eta[hidden] {
+  display: none;
+}
+
+body.layout-tv .nearby-bus__eta-value {
+  font-family: var(--font-display);
+  font-size: calc(58 * var(--u));
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+body.layout-tv .nearby-bus__eta-unit {
+  margin-left: calc(4 * var(--u));
+  font-size: calc(22 * var(--u));
+  font-weight: 700;
+}
+
+body.layout-tv .nearby-bus__eta-caption {
+  display: block;
+  margin-top: calc(4 * var(--u));
+  color: var(--tv-muted);
+  font-size: calc(15 * var(--u));
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+body.layout-tv .nearby-bus__eta--now .nearby-bus__eta-value {
+  color: #15803d;
+  font-size: calc(34 * var(--u));
+}
+
+body.layout-tv .nearby-bus--terminal .nearby-bus__eta-caption {
+  color: #15803d;
+}
+
+body.layout-tv.vehicle-feed-degraded .nearby-bus__eta-value::before {
+  content: "~";
+  font-size: 0.55em;
+  font-weight: 400;
+  vertical-align: 0.35em;
+}
+
+body.layout-tv .nearby-bus__wayfinding {
+  width: auto;
+  align-items: center;
+}
+
+body.layout-tv .nearby-bus__departure {
+  display: none;
+}
+
+body.layout-tv .nearby-bus__platform {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  width: calc(108 * var(--u));
+  height: calc(84 * var(--u));
+  border-radius: calc(12 * var(--u));
+  background: var(--transit-blue);
+  color: #ffffff;
+  box-sizing: border-box;
+}
+
+body.layout-tv .nearby-bus__platform[data-type="stop"] {
+  border: calc(4 * var(--u)) solid var(--transit-blue);
+  background: #ffffff;
+  color: var(--transit-blue);
+}
+
+body.layout-tv .nearby-bus__platform[data-type="check"] {
+  background: #eef2f5;
+  color: var(--tv-muted);
+}
+
+body.layout-tv .nearby-bus__platform-type {
+  font-size: calc(13 * var(--u));
+  letter-spacing: 0.03em;
+}
+
+body.layout-tv .nearby-bus__platform-number {
+  font-size: calc(46 * var(--u));
+}
+
+body.layout-tv .nearby-bus__platform[data-kind="check"] .nearby-bus__platform-number {
+  font-size: calc(20 * var(--u));
+}
+
+body.layout-tv .nearby-buses__holding {
+  font-size: calc(26 * var(--u));
+}
+
+/* Map markers: direction is the arrow on the bubble, not a small N/S letter. */
+body.layout-tv .vehicle-label-line--direction {
+  display: none;
+}
+
+/* Street names for the major roads drawn over the simulator basemap. */
+body.layout-tv .major-road-label {
+  color: #3b4a5c;
+  font-size: calc(17 * var(--u));
+  letter-spacing: 0.06em;
+  opacity: 1;
+}
+
+/* Landmarks and a clear "You Are Here". */
+body.layout-tv .stop-highlight-label {
+  font-size: calc(21 * var(--u));
+  opacity: 1;
+}
+
+body.layout-tv .stop-highlight[data-stop="9002"] .stop-highlight-label,
+body.layout-tv .stop-highlight[data-stop="9005"] .stop-highlight-label {
+  padding: calc(8 * var(--u)) calc(18 * var(--u));
+  border: calc(4 * var(--u)) solid #ffffff;
+  border-radius: calc(10 * var(--u));
+  max-width: none;
+  background: var(--tv-yah);
+  box-shadow: 0 calc(6 * var(--u)) calc(18 * var(--u)) rgba(0, 0, 0, 0.3);
+  font-size: calc(18 * var(--u));
+}
+
+body.layout-tv .stop-highlight[data-stop="9002"] .stop-highlight-note,
+body.layout-tv .stop-highlight[data-stop="9005"] .stop-highlight-note {
+  order: -1;
+  margin: 0;
+  font-size: calc(28 * var(--u));
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-shadow: none;
+}
+
+body.layout-tv .stop-highlight[data-stop="9002"] .stop-highlight-callout,
+body.layout-tv .stop-highlight[data-stop="9005"] .stop-highlight-callout {
+  width: calc(4 * var(--u));
+  background: var(--tv-yah);
+  box-shadow: none;
+}
+
+body.layout-tv .stop-highlight[data-stop="9002"]::before,
+body.layout-tv .stop-highlight[data-stop="9005"]::before {
+  border: calc(4 * var(--u)) solid var(--tv-yah);
+}
+
+/* Static amber alert banner: no scrolling text. */
+body.layout-tv .service-notice {
+  height: var(--tv-notice-h);
+  padding: 0 var(--tv-safe-x);
+  border-top: 0;
+  background: #fbbf24;
+  color: #2b1d00;
+  font-size: calc(38 * var(--u));
+  font-weight: 800;
+  text-shadow: none;
+  box-sizing: border-box;
+  gap: calc(24 * var(--u));
+}
+
+body.layout-tv .service-notice::before {
+  width: calc(30 * var(--u));
+  height: calc(30 * var(--u));
+  background: #2b1d00;
+}
+
+body.layout-tv .service-notice__agency-logo {
+  width: calc(112 * var(--u));
+  height: calc(44 * var(--u));
+}
+
+body.layout-tv .service-notice__track {
+  display: block;
+  width: auto;
+  min-width: 0;
+  overflow: hidden;
+  animation: none;
+  transform: none;
+}
+
+body.layout-tv .service-notice__text {
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  text-overflow: ellipsis;
+}
+
+body.layout-tv .service-notice__heading {
+  display: inline-block;
+  margin-right: calc(20 * var(--u));
+  padding: calc(8 * var(--u)) calc(16 * var(--u));
+  border-radius: calc(8 * var(--u));
+  background: #2b1d00;
+  color: #fbbf24;
+  font-size: calc(20 * var(--u));
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  vertical-align: 0.3em;
+}

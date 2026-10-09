@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -15,8 +16,8 @@ function writeGtfsZip(cacheDir, options = {}) {
   const zip = new AdmZip();
   zip.addFile('calendar.txt', Buffer.from([
     'service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date',
-    'weekday,1,1,1,1,1,0,0,20260101,20261231',
-    'sunday,0,0,0,0,0,0,1,20260101,20261231',
+    `weekday,1,1,1,1,1,0,0,${options.feedStartDate || '20260101'},20261231`,
+    `sunday,0,0,0,0,0,0,1,${options.feedStartDate || '20260101'},20261231`,
   ].join('\n')));
   const trips = [
     'route_id,service_id,trip_id,block_id',
@@ -41,7 +42,7 @@ function writeGtfsZip(cacheDir, options = {}) {
 
   zip.addFile('feed_info.txt', Buffer.from([
     'feed_publisher_name,feed_publisher_url,feed_lang,feed_start_date,feed_end_date,feed_version',
-    'Test Transit,https://example.com,en,20260101,20261231,2026-test',
+    `Test Transit,https://example.com,en,${options.feedStartDate || '20260101'},20261231,2026-test`,
   ].join('\n')));
   zip.addFile('trips.txt', Buffer.from(trips.join('\n')));
   zip.addFile('stop_times.txt', Buffer.from(stopTimes.join('\n')));
@@ -192,6 +193,42 @@ describe('monitor schedule service overrides', () => {
       feedCoverageStart: '20260101',
       feedCoverageEnd: '20261231',
     });
+  });
+
+  test('re-downloads a cached feed that does not cover today before reporting a gap', async () => {
+    const cacheDir = makeTempDir();
+    writeGtfsZip(cacheDir, { feedStartDate: '20261010' });
+    const publishedDir = makeTempDir();
+    writeGtfsZip(publishedDir);
+    const published = fs.readFileSync(path.join(publishedDir, 'google_transit.zip'));
+
+    const server = http.createServer((req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/zip' });
+      res.end(published);
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address();
+
+    try {
+      const result = await getExpectedBuses(
+        `http://127.0.0.1:${port}/google_transit.zip`,
+        cacheDir,
+        24,
+        0,
+        {
+          now: new Date('2026-10-09T10:15:00-04:00'),
+          timeZone: 'America/Toronto',
+          serviceOverrides: {},
+        }
+      );
+
+      expect(result.coverageIssue).toBeNull();
+      expect(result.totalExpected).toBe(1);
+      expect(result.serviceContext.feedCoverageStart).toBe('20260101');
+      expect(fs.readFileSync(path.join(cacheDir, 'google_transit.zip'))).toEqual(published);
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 
   test('prefers a cache override file over the repo-level default file', () => {

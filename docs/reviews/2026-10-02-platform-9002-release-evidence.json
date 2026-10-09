@@ -1,0 +1,68 @@
+{
+  "checkedAt": "2026-10-02T16:16:31.589Z",
+  "base": "https://bus-tracker-map.vercel.app",
+  "assets": [
+    {
+      "path": "/departures/assets/platformDepartures.3ca508d3f7.css",
+      "status": 200,
+      "bytes": 4963
+    },
+    {
+      "path": "/departures/assets/platformDepartures.d1f1a31eac.js",
+      "status": 200,
+      "bytes": 21519
+    }
+  ],
+  "platform": {
+    "stop_code": "9002",
+    "platform": "2",
+    "platform_display": "02",
+    "generated_at": 1790957792048,
+    "horizon_hours": 72,
+    "source": {
+      "display_mode": "mixed",
+      "realtime_status": "live",
+      "status_reason": "fresh_feed",
+      "latest_data_timestamp": 1790957791000,
+      "live_departure_count": 1,
+      "estimated_departure_count": 0,
+      "schedule_status": "available"
+    },
+    "status": "ok",
+    "departures": [
+      {
+        "agency_id": "simcoe-linx",
+        "agency_name": "Simcoe LINX",
+        "route_id": "2",
+        "route_label": "2",
+        "source_route_id": "",
+        "trip_id": "2008:1314233",
+        "service_date": "20261002",
+        "destination": "Wasaga Beach 45th St",
+        "departure_time": 1790958600,
+        "scheduled_departure_time": 1790958600,
+        "departure_source": "realtime",
+        "prediction_timestamp": 1790957791000,
+        "live_valid_until": 1790957906000,
+        "live_evidence": "trip_update_and_terminal_handoff_vehicle",
+        "progress_status": "scheduled"
+      }
+    ]
+  },
+  "invalidStopStatus": 400,
+  "terminal": {
+    "horizon_hours": 1,
+    "departure_count": 10
+  },
+  "rendered": {
+    "title": "Platform 02 Departures",
+    "route": "2 - Wasaga Beach 45th St",
+    "departure": "Departing in 14 min",
+    "source": "realtime",
+    "geometry": {
+      "width": 320,
+      "height": 80
+    },
+    "pageErrors": []
+  }
+}

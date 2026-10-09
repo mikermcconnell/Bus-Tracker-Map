@@ -1,0 +1,412 @@
+{
+  "reviewed_commit": "5edb757d8080d423581456786c623e536182e261",
+  "captured_at": "2026-10-02T15:32:30.902Z",
+  "live_html": {
+    "url": "https://bus-tracker-map.vercel.app/departures/platform.aspx?stop=9002",
+    "status": 200,
+    "ms": 228,
+    "headers": {
+      "cache": "no-cache",
+      "csp": "default-src 'self' data:; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self';",
+      "date": "Fri, 02 Oct 2026 15:32:31 GMT"
+    }
+  },
+  "live_assets": [
+    {
+      "url": "https://bus-tracker-map.vercel.app/departures/assets/platformDepartures.32814d9286.js",
+      "status": 200,
+      "bytes": 15272
+    },
+    {
+      "url": "https://bus-tracker-map.vercel.app/departures/assets/platformDepartures.57f99c5dae.css",
+      "status": 200,
+      "bytes": 4552
+    }
+  ],
+  "live_api_checks": [
+    {
+      "url": "https://bus-tracker-map.vercel.app/api/departures?view=platform&stop=9002",
+      "status": 200,
+      "ms": 46,
+      "headers": {
+        "cache": "public, max-age=5",
+        "csp": null,
+        "date": "Fri, 02 Oct 2026 15:32:27 GMT"
+      }
+    },
+    {
+      "url": "https://bus-tracker-map.vercel.app/api/departures?limit=30",
+      "status": 200,
+      "ms": 875,
+      "headers": {
+        "cache": "public, max-age=5",
+        "csp": null,
+        "date": "Fri, 02 Oct 2026 15:32:32 GMT"
+      }
+    },
+    {
+      "url": "https://bus-tracker-map.vercel.app/api/departures?view=platform&stop=9999",
+      "status": 400,
+      "ms": 309,
+      "headers": {
+        "cache": "no-cache",
+        "csp": null,
+        "date": "Fri, 02 Oct 2026 15:32:31 GMT"
+      },
+      "error": "INVALID_STOP_CODE"
+    },
+    {
+      "url": "https://bus-tracker-map.vercel.app/api/departures?view=platform&stop=9002%27%3Cscript%3E",
+      "status": 400,
+      "ms": 248,
+      "headers": {
+        "cache": "no-cache",
+        "csp": null,
+        "date": "Fri, 02 Oct 2026 15:32:31 GMT"
+      },
+      "error": "INVALID_STOP_CODE"
+    },
+    {
+      "url": "https://bus-tracker-map.vercel.app/api/departures?view=platform&stop=9002&stop=9003",
+      "status": 400,
+      "ms": 373,
+      "headers": {
+        "cache": "no-cache",
+        "csp": null,
+        "date": "Fri, 02 Oct 2026 15:32:31 GMT"
+      },
+      "error": "INVALID_STOP_CODE"
+    },
+    {
+      "url": "https://bus-tracker-map.vercel.app/api/terminal-layout",
+      "status": 200,
+      "ms": 2610,
+      "headers": {
+        "cache": "public, max-age=300",
+        "csp": null,
+        "date": "Fri, 02 Oct 2026 15:32:33 GMT"
+      }
+    }
+  ],
+  "live_sign": {
+    "stop_code": "9002",
+    "platform": "2",
+    "platform_display": "02",
+    "generated_at": 1790955146910,
+    "status": "ok",
+    "departures": [
+      {
+        "agency_id": "simcoe-linx",
+        "agency_name": "Simcoe LINX",
+        "route_id": "2",
+        "route_label": "2",
+        "source_route_id": "",
+        "destination": "Wasaga Beach 45th St",
+        "departure_time": 1790958600,
+        "scheduled_departure_time": 1790958600,
+        "departure_source": "realtime",
+        "progress_status": "scheduled"
+      }
+    ]
+  },
+  "linx_source_health": {
+    "display_mode": "realtime",
+    "realtime_status": "live",
+    "status_reason": "fresh_feed",
+    "latest_data_timestamp": 1790955142000,
+    "live_departure_count": 1,
+    "estimated_departure_count": 0
+  },
+  "local_metadata": {
+    "generated_at": "2026-08-04T15:31:36.491Z",
+    "feed_version": "1/20260723 10:53:53/20260723 00:00:00",
+    "sha": "444febf2e8a70d621a65e759a30bdc0fc668091a9af41c1ba347d5b7b397b824",
+    "start": "20260723",
+    "end": "20270706",
+    "trips": 28,
+    "stops": [
+      {
+        "id": "SCSTOP210",
+        "name": "Barrie Allandale Bus Station - Detour",
+        "platform_code": "2"
+      }
+    ]
+  },
+  "current_metadata": {
+    "generated_at": "2026-10-02T15:32:34.426Z",
+    "feed_version": "1/20260930 22:00:00/20261001 00:00:00",
+    "sha": "fcdae5ecaf7b19dffcf8360f107035ec2f2deee2655308c31bc12572b434d94e",
+    "start": "20260930",
+    "end": "20270706",
+    "trips": 28,
+    "stops": [
+      {
+        "id": "SCSTOP210",
+        "name": "Barrie Allandale Bus Station - Detour",
+        "platform_code": "2"
+      }
+    ]
+  },
+  "next24h_schedule_matches": true,
+  "scheduled_rows": [
+    {
+      "trip": "2008:1314233",
+      "destination": "Wasaga Beach 45th St",
+      "scheduled": "2026-10-02T16:30:00.000Z",
+      "platform": "2"
+    },
+    {
+      "trip": "2009:1314302",
+      "destination": "Wasaga Beach 45th St",
+      "scheduled": "2026-10-02T17:30:00.000Z",
+      "platform": "2"
+    },
+    {
+      "trip": "2011:1314339",
+      "destination": "Wasaga Beach 45th St",
+      "scheduled": "2026-10-02T19:30:00.000Z",
+      "platform": "2"
+    },
+    {
+      "trip": "2010:1314350",
+      "destination": "Wasaga Beach 45th St",
+      "scheduled": "2026-10-02T18:30:00.000Z",
+      "platform": "2"
+    },
+    {
+      "trip": "2012:1314507",
+      "destination": "Wasaga Beach 45th St",
+      "scheduled": "2026-10-02T20:30:00.000Z",
+      "platform": "2"
+    },
+    {
+      "trip": "2014:1314618",
+      "destination": "Wasaga Beach 45th St",
+      "scheduled": "2026-10-02T22:30:00.000Z",
+      "platform": "2"
+    },
+    {
+      "trip": "2013:1314637",
+      "destination": "Wasaga Beach 45th St",
+      "scheduled": "2026-10-02T21:30:00.000Z",
+      "platform": "2"
+    }
+  ],
+  "gtfs_audit": {
+    "sha256": "fcdae5ecaf7b19dffcf8360f107035ec2f2deee2655308c31bc12572b434d94e",
+    "feedInfo": {
+      "feed_publisher_name": "Consat Telematics AB",
+      "feed_publisher_url": "http://www.consat.se",
+      "feed_lang": "en",
+      "feed_version": "1/20260930 22:00:00/20261001 00:00:00",
+      "feed_start_date": "20260930",
+      "feed_end_date": "20270706"
+    },
+    "counts": {
+      "routes": 6,
+      "stops": 129,
+      "trips": 221,
+      "stopTimes": 3360,
+      "transfers": 0,
+      "usedStops": 129
+    },
+    "errors": [],
+    "warnings": []
+  },
+  "unit_tests": {
+    "passed": 73,
+    "failed": 0,
+    "files": [
+      {
+        "file": "api.test.js",
+        "tests": 21,
+        "status": "passed"
+      },
+      {
+        "file": "departures.test.js",
+        "tests": 18,
+        "status": "passed"
+      },
+      {
+        "file": "platform-departures.test.js",
+        "tests": 3,
+        "status": "passed"
+      },
+      {
+        "file": "simcoe-linx.test.js",
+        "tests": 6,
+        "status": "passed"
+      },
+      {
+        "file": "terminal-layout.test.js",
+        "tests": 7,
+        "status": "passed"
+      },
+      {
+        "file": "terminal-progress.test.js",
+        "tests": 18,
+        "status": "passed"
+      }
+    ]
+  },
+  "browser_tests": {
+    "passed": 6,
+    "failed": 0,
+    "run_against": "deployed frontend; intercepted API fixtures",
+    "duration_seconds": 17.1
+  },
+  "source_reproductions": {
+    "late_departure": {
+      "scheduled": "12:00 Toronto",
+      "now": "12:01:01 Toronto",
+      "predicted": "12:10 Toronto",
+      "collected": 0,
+      "merged": 0
+    },
+    "no_data": {
+      "updates": [
+        {
+          "trip_id": "outbound",
+          "route_id": "2",
+          "start_date": "20261002",
+          "stop_id": "SCSTOP210",
+          "stop_sequence": null,
+          "departure_time": null,
+          "delay_seconds": null,
+          "canceled": false,
+          "skipped": false
+        }
+      ],
+      "result": [
+        {
+          "source": "realtime",
+          "live_evidence": "trip_update_and_vehicle"
+        }
+      ]
+    },
+    "outage": {
+      "calls": 2,
+      "scheduledRefreshes": 1,
+      "status": "Departure data is temporarily unavailable. Retrying automatically.",
+      "board": "Platform022 - Wasaga BeachDeparting in 6 min",
+      "sources": [
+        "realtime"
+      ],
+      "cache_age_minutes": 34
+    },
+    "cachedOutage": {
+      "calls": 1,
+      "scheduledRefreshes": 1,
+      "status": "Departure data is temporarily unavailable. Retrying automatically.",
+      "board": "Platform022 - Wasaga BeachDeparting in 9 min",
+      "sources": [
+        "realtime"
+      ],
+      "cache_age_minutes": 60
+    },
+    "hung_fetch": {
+      "calls": 1,
+      "scheduledRefreshes": 0,
+      "status": "",
+      "board": "",
+      "sources": [],
+      "cache_age_minutes": 34
+    },
+    "dst": {
+      "now": "2026-11-01T00:30:00-04:00",
+      "departure": "2026-11-02T00:10:00-05:00",
+      "text": "Departs Mon at 12:10 AM"
+    },
+    "horizon": {
+      "now": "18:31:01 Toronto",
+      "next_one_hour": [],
+      "next_24_hours": []
+    }
+  },
+  "deployed_frontend_reproductions": {
+    "late_departure": {
+      "scheduled": "12:00 Toronto",
+      "now": "12:01:01 Toronto",
+      "predicted": "12:10 Toronto",
+      "collected": 0,
+      "merged": 0
+    },
+    "no_data": {
+      "updates": [
+        {
+          "trip_id": "outbound",
+          "route_id": "2",
+          "start_date": "20261002",
+          "stop_id": "SCSTOP210",
+          "stop_sequence": null,
+          "departure_time": null,
+          "delay_seconds": null,
+          "canceled": false,
+          "skipped": false
+        }
+      ],
+      "result": [
+        {
+          "source": "realtime",
+          "live_evidence": "trip_update_and_vehicle"
+        }
+      ]
+    },
+    "outage": {
+      "calls": 2,
+      "scheduledRefreshes": 1,
+      "status": "Departure data is temporarily unavailable. Retrying automatically.",
+      "board": "Platform022 - Wasaga BeachDeparting in 6 min",
+      "sources": [
+        "realtime"
+      ],
+      "cache_age_minutes": 34
+    },
+    "cachedOutage": {
+      "calls": 1,
+      "scheduledRefreshes": 1,
+      "status": "Departure data is temporarily unavailable. Retrying automatically.",
+      "board": "Platform022 - Wasaga BeachDeparting in 9 min",
+      "sources": [
+        "realtime"
+      ],
+      "cache_age_minutes": 60
+    },
+    "hung_fetch": {
+      "calls": 1,
+      "scheduledRefreshes": 0,
+      "status": "",
+      "board": "",
+      "sources": [],
+      "cache_age_minutes": 34
+    },
+    "dst": {
+      "now": "2026-11-01T00:30:00-04:00",
+      "departure": "2026-11-02T00:10:00-05:00",
+      "text": "Departs Mon at 12:10 AM"
+    },
+    "horizon": {
+      "now": "18:31:01 Toronto",
+      "next_one_hour": [],
+      "next_24_hours": []
+    }
+  },
+  "trip_cancellation_probe": {
+    "parsed_updates": [],
+    "result": 1
+  },
+  "missing_linx_schedule_probe": {
+    "stop_code": "9002",
+    "platform": "2",
+    "platform_display": "02",
+    "generated_at": 1790955150902,
+    "status": "no_departures",
+    "departures": []
+  },
+  "horizon_probe": {
+    "now": "2026-10-05T04:00:00-04:00",
+    "one_hour_departures": 0,
+    "next_departure": "2026-10-05T05:30:00-04:00",
+    "trip_id": "2001:1314471"
+  }
+}

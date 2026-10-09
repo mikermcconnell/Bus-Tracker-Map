@@ -1,11 +1,15 @@
 const REFRESH_INTERVAL_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 15_000;
 const CACHE_MAX_AGE_MS = 30 * 60 * 1000;
+const LIVE_MAX_AGE_MS = 2 * 60 * 1000;
 const CACHE_KEY_PREFIX = 'platform-departures:v1:';
 const API_PATH = '/api/departures';
 const ASSET_PATH = '../../assets/';
 
 let renderedPayloadSignature = '';
+let currentPayload = null;
+let provisionalData = false;
+let requestFailed = false;
 
 const AGENCY_BRANDING = Object.freeze({
   'barrie-transit': Object.freeze({
@@ -90,12 +94,26 @@ function departurePayloadSignature(payload) {
   }
   return JSON.stringify([
     String(payload && payload.platform_display || '--'),
+    payload && payload.status || '',
+    payload && payload.horizon_hours || 72,
     signatureRows,
   ]);
 }
 
 function cacheKey(stopCode) {
   return `${CACHE_KEY_PREFIX}${stopCode}`;
+}
+
+function validPayload(payload, stopCode) {
+  const parsed = parseStopCode(stopCode);
+  return Boolean(parsed && payload && String(payload.stop_code) === stopCode &&
+    String(payload.platform_display) === parsed.display &&
+    Number.isFinite(Number(payload.generated_at)) && Number(payload.generated_at) > 0 &&
+    ['ok', 'no_departures', 'schedule_unavailable'].indexOf(payload.status) >= 0 &&
+    Array.isArray(payload.departures) && payload.departures.every((row) => row &&
+      typeof row === 'object' && Number.isFinite(Number(row.departure_time)) &&
+      Number(row.departure_time) > 0 &&
+      ['scheduled', 'estimated', 'realtime'].indexOf(row.departure_source) >= 0));
 }
 
 function readCachedDepartures(stopCode, nowMs = Date.now()) {
@@ -105,9 +123,8 @@ function readCachedDepartures(stopCode, nowMs = Date.now()) {
     const record = JSON.parse(stored);
     const savedAt = Number(record && record.saved_at);
     const payload = record && record.payload;
-    if (!Number.isFinite(savedAt) || nowMs - savedAt > CACHE_MAX_AGE_MS) return null;
-    if (!payload || String(payload.stop_code || '') !== String(stopCode)) return null;
-    if (!Array.isArray(payload.departures)) return null;
+    if (!Number.isFinite(savedAt) || savedAt > nowMs + 60_000 || nowMs - savedAt > CACHE_MAX_AGE_MS) return null;
+    if (!validPayload(payload, stopCode)) return null;
     return payload;
   } catch (err) {
     return null;
@@ -162,8 +179,15 @@ function formatDepartureText(timestampSeconds, nowMs = Date.now()) {
     const minutes = Math.max(0, Math.ceil(differenceMs / 60_000));
     return minutes === 0 ? 'Departing now' : `Departing in ${minutes} min`;
   }
-  const tomorrow = new Date(nowMs + 24 * 60 * 60 * 1000);
-  if (localDateKey(departure) === localDateKey(tomorrow)) {
+  // Advance the Toronto calendar date, not a fixed 24-hour duration.
+  const todayKey = localDateKey(new Date(nowMs));
+  const tomorrowKey = (() => {
+    const match = todayKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return localDateKey(new Date(nowMs + 24 * 60 * 60 * 1000));
+    const nextDate = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + 1, 16));
+    return localDateKey(nextDate);
+  })();
+  if (localDateKey(departure) === tomorrowKey) {
     return `Departs tomorrow at ${formatTorontoTime(departure)}`;
   }
   try {
@@ -176,6 +200,46 @@ function formatDepartureText(timestampSeconds, nowMs = Date.now()) {
     const weekday = departure.toLocaleDateString([], { weekday: 'short' });
     return `Departs ${weekday} at ${formatTorontoTime(departure)}`;
   }
+}
+
+function displayPayload(payload, nowMs = Date.now(), { provisional = false, failed = false } = {}) {
+  const generatedAt = Number(payload && payload.generated_at);
+  if (!payload || !Number.isFinite(generatedAt) || generatedAt > nowMs + 60_000 || nowMs - generatedAt > CACHE_MAX_AGE_MS) {
+    return { ...payload, status: 'data_unavailable', departures: [] };
+  }
+  if (payload.status === 'schedule_unavailable') return { ...payload, departures: [] };
+  const freshResponse = !provisional && !failed && nowMs - generatedAt <= LIVE_MAX_AGE_MS;
+  const departures = (payload.departures || []).map((departure) => {
+    const predicted = ['realtime', 'estimated'].indexOf(departure.departure_source) >= 0;
+    const validUntil = Number(departure.live_valid_until) || generatedAt + LIVE_MAX_AGE_MS;
+    const predictionAt = Number(departure.prediction_timestamp) || generatedAt;
+    const freshPrediction = freshResponse && nowMs <= validUntil && nowMs - predictionAt <= LIVE_MAX_AGE_MS;
+    if (!predicted || freshPrediction) return { ...departure };
+    const scheduled = Number(departure.scheduled_departure_time);
+    return {
+      ...departure,
+      departure_source: scheduled > 0 ? 'scheduled' : 'cached',
+      departure_time: scheduled > 0 ? scheduled : departure.departure_time,
+    };
+  }).filter((departure) => Number(departure.departure_time) >= nowMs / 1000 - 60)
+    .sort((left, right) => Number(left.departure_time) - Number(right.departure_time));
+  return {
+    ...payload,
+    status: departures.length ? 'ok' : !freshResponse ? 'data_unavailable' : payload.departures.length ? 'updating' : payload.status,
+    departures,
+    updates_unavailable: !freshResponse,
+  };
+}
+
+function renderCurrentPayload(nowMs = Date.now()) {
+  const displayed = displayPayload(currentPayload, nowMs, { provisional: provisionalData, failed: requestFailed });
+  renderDepartures(displayed);
+  if (displayed.status === 'schedule_unavailable') setStatus('Schedule unavailable. Retrying automatically.', 'Schedule unavailable');
+  else if (displayed.status === 'data_unavailable' || displayed.updates_unavailable) {
+    setStatus('Departure updates are unavailable. Any remaining times are scheduled or cached.',
+      provisionalData && !requestFailed ? 'Checking updates' : 'Updates unavailable');
+  } else if (displayed.status === 'updating') setStatus('Checking for the next departure.', 'Updating departures');
+  else setStatus('');
 }
 
 function createCell(tag, className, text) {
@@ -227,6 +291,7 @@ function routeDescription(departure) {
 }
 
 function renderEmpty(platformDisplay, message, detail) {
+  renderedPayloadSignature = '';
   const rows = document.getElementById('departure-rows');
   clearChildren(rows);
   const routeRow = document.createElement('tr');
@@ -248,7 +313,10 @@ function renderDepartures(payload) {
   const signature = departurePayloadSignature(payload);
   if (signature === renderedPayloadSignature) return false;
   if (!departures.length) {
-    renderEmpty(platformDisplay, 'No departures scheduled', 'Please check again shortly');
+    const unavailable = ['data_unavailable', 'schedule_unavailable'].indexOf(payload && payload.status) >= 0;
+    renderEmpty(platformDisplay,
+      unavailable ? 'Departures unavailable' : payload && payload.status === 'updating' ? 'Updating departures' : 'No departures scheduled',
+      unavailable ? 'Retrying automatically' : `In the next ${Number(payload && payload.horizon_hours) || 72} hours`);
     renderedPayloadSignature = signature;
     return true;
   }
@@ -302,14 +370,23 @@ function updateClock(now = new Date()) {
       clock.textContent = clockText;
     }
   }
+  if (currentPayload) renderCurrentPayload(now.getTime());
   refreshCountdowns(now.getTime());
 }
 
-function setStatus(message) {
+function setStatus(message, shortMessage = 'Updates unavailable') {
   const status = document.getElementById('departure-status');
   if (!status) return;
-  status.textContent = message || '';
-  status.hidden = !message;
+  setTextIfChanged(status, message || '');
+  if (status.hidden !== !message) status.hidden = !message;
+  const health = document.getElementById('departure-health');
+  if (health) {
+    setTextIfChanged(health, message ? shortMessage : '');
+    if (health.hidden !== !message) health.hidden = !message;
+    const heading = health.parentNode;
+    const className = message ? 'departure-board__clock has-warning' : 'departure-board__clock';
+    if (heading && heading.className !== className) heading.className = className;
+  }
 }
 
 function requestJsonWithXhr(url) {
@@ -340,21 +417,43 @@ async function requestJson(url) {
   if (typeof fetch !== 'function') {
     return requestJsonWithXhr(url);
   }
-  const response = await fetch(url, {
-    cache: 'no-store',
-    headers: { Accept: 'application/json' },
+  return new Promise((resolve, reject) => {
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    let settled = false;
+    const finish = (error, payload) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) reject(error);
+      else resolve(payload);
+    };
+    const timer = setTimeout(() => {
+      finish(new Error('Departure request failed (timeout)'));
+      if (controller) controller.abort();
+    }, REQUEST_TIMEOUT_MS);
+    Promise.resolve().then(() => fetch(url, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+      ...(controller ? { signal: controller.signal } : {}),
+    })).then((response) => {
+      if (!response.ok) throw new Error(`Departure request failed (${response.status})`);
+      return response.json();
+    }).then((payload) => finish(null, payload), (error) => finish(error));
   });
-  if (!response.ok) throw new Error(`Departure request failed (${response.status})`);
-  return response.json();
 }
 
 async function loadDepartures(stopCode) {
   const payload = await requestJson(
     `${API_PATH}?view=platform&stop=${encodeURIComponent(stopCode)}`
   );
-  renderDepartures(payload);
+  if (!validPayload(payload, stopCode)) {
+    throw new Error('Invalid platform departure response');
+  }
+  currentPayload = payload;
+  provisionalData = false;
+  requestFailed = false;
+  renderCurrentPayload();
   writeCachedDepartures(stopCode, payload);
-  setStatus('');
   return true;
 }
 
@@ -373,16 +472,22 @@ function startDepartureScreen() {
   document.title = `Platform ${parsedStop.display} Departures`;
   const cachedPayload = readCachedDepartures(parsedStop.stopCode);
   let hasRenderedData = Boolean(cachedPayload);
-  if (cachedPayload) renderDepartures(cachedPayload);
+  if (cachedPayload) {
+    currentPayload = cachedPayload;
+    provisionalData = true;
+    renderCurrentPayload();
+  }
 
   async function refresh() {
     try {
       hasRenderedData = await loadDepartures(parsedStop.stopCode);
     } catch (err) {
+      requestFailed = true;
       if (!hasRenderedData) {
         renderEmpty(parsedStop.display, 'Departures unavailable', 'Retrying automatically');
       }
-      setStatus('Departure data is temporarily unavailable. Retrying automatically.');
+      if (currentPayload) renderCurrentPayload();
+      else setStatus('Departure data is temporarily unavailable. Retrying automatically.');
     } finally {
       window.setTimeout(refresh, REFRESH_INTERVAL_MS);
     }
@@ -402,4 +507,7 @@ export {
   readQueryParameter,
   routeDescription,
   writeCachedDepartures,
+  displayPayload,
+  requestJson,
+  validPayload,
 };

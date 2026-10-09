@@ -72,7 +72,11 @@ The regional page uses separate `/api/simcoe/*` data so expanding the county vie
 
 Open [http://localhost:3000/departures](http://localhost:3000/departures) locally or `/departures` on the production site. The TV-safe board displays the next 10 outbound departures within 24 hours for Barrie Transit, Ontario Northland, GO buses and trains, and Simcoe LINX route 2.
 
-Each terminal platform also has a compact digital departure sign at `/departures/platform.aspx?stop=9002`. Replace `9002` with a terminal code from `9001` through `9014`; the sign filters the terminal-wide departure data to that platform and is optimized for the installed 320 x 80 display.
+Each terminal platform also has a compact digital departure sign at `/departures/platform.aspx?stop=9002`. Replace `9002` with a terminal code from `9001` through `9014`. The sign searches the assigned agency's next 72 hours, filters before limiting rows, and is optimized for the installed 320 x 80 display. The terminal-wide board retains its one-hour window.
+
+Platform signs expire live evidence within two minutes, immediately downgrade saved/failed-refresh predictions, and visibly warn inside the small screen when updates are unavailable. Scheduled or explicitly cached rows are retained for at most 30 minutes without a successful response. Each request has a 15-second deadline and retries automatically. Missing or expired required schedule metadata is unavailable data, not proof of no service; valid empty boards show the searched 72-hour window. Delayed departures remain eligible within a bounded six-hour lookback before realtime filtering, and whole-trip cancellations and NO_DATA predictions are respected.
+
+Focused verification without replacing local build or schedule files: `npx vitest run tests/platform-sign-reliability.test.js tests/gtfs-trip-updates.test.js tests/departures.test.js tests/platform-departures.test.js tests/api.test.js`, then `npx playwright test --config e2e/platform-sign.config.js`. The browser fixture compiles only this sign in memory using the normal legacy transformation and does not deploy anything.
 
 Rows are selected from the next hour of published service and show only the next trip for each agency, route, destination, and platform combination. A **LIVE** badge and live countdown require both a fresh stop prediction and a fresh vehicle position for the exact agency and trip. Every other row is labelled **SCHED** and uses its published scheduled time. The supporting `GET /api/departures?limit=12` endpoint accepts limits from 1 through 30.
 
