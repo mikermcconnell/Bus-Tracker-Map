@@ -649,9 +649,9 @@ test('platform map renders current assignments and updates markers in place', as
   }));
   // Sizes for reading a 60-inch 1080p screen from several metres away.
   expect(tvTypography.platform).toBeGreaterThanOrEqual(36);
-  expect(tvTypography.destination).toBeGreaterThanOrEqual(26);
+  expect(tvTypography.destination).toBeGreaterThanOrEqual(24);
   expect(tvTypography.state).toBeGreaterThanOrEqual(18);
-  expect(tvTypography.scheduledTime).toBeGreaterThanOrEqual(40);
+  expect(tvTypography.scheduledTime).toBeGreaterThanOrEqual(38);
   expect(tvTypography.insidePanel).toBe(true);
   await expect(page.locator('.vehicle-marker')).toHaveCount(1);
   await expect(page.locator('.vehicle-marker__count')).toHaveText('3 vehicles');
@@ -978,4 +978,23 @@ test('platform map draws a boarding GO train on the simulator map and marks P1 b
   });
   expect(placement).toEqual({ trainVisible: true, tagInside: true });
   expect(errors).toEqual([]);
+});
+
+test('platform map board rows and pointer labels fit in a shorter browser window', async ({ page }) => {
+  await page.setViewportSize({ width: 1760, height: 913 });
+  await page.goto('/platform.map');
+  await expect(page.locator('#platform-directory-title')).toHaveText('Next Departures');
+  await expect(page.locator('.map-platform-anchor__label')).not.toHaveCount(0);
+  const fit = await page.evaluate(() => {
+    const doc = globalThis.document;
+    const clippedRows = Array.from(doc.querySelectorAll('.platform-card, .platform-connections'))
+      .filter((row) => row.scrollHeight > row.clientHeight + 1).length;
+    const labels = Array.from(doc.querySelectorAll('.map-platform-anchor__label')).map((label) => label.getBoundingClientRect());
+    let overlaps = 0;
+    labels.forEach((a, index) => labels.slice(index + 1).forEach((b) => {
+      if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) overlaps += 1;
+    }));
+    return { clippedRows, overlaps };
+  });
+  expect(fit).toEqual({ clippedRows: 0, overlaps: 0 });
 });

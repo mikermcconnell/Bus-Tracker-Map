@@ -113,6 +113,9 @@ const PLATFORM_LABEL_RAILS = Object.freeze({
   '14': Object.freeze({ rail: 'bottom', order: 1 }),
 });
 const REVERSED_POINTER_LABEL_PLATFORMS = new Set(['2', '3', '4', '5', '6', '7', '8']);
+// Neighbouring pointers are only a label-width apart; these sit one row further out.
+const STAGGERED_POINTER_LABEL_PLATFORMS = new Set(['2', '4', '7']);
+const POINTER_LABEL_PLACEMENT_OVERRIDES = Object.freeze({ '12': 'left' });
 // User-confirmed physical pointer locations. Add platforms here one at a time;
 // do not substitute agency GTFS stop coordinates for these display anchors.
 const PLATFORM_POINTER_COORDINATES = Object.freeze({
@@ -636,9 +639,12 @@ function setupPlatformApp() {
     anchor.dataset.agencyId = agencyId;
     anchorLabel.dataset.pointerLabel = pointerLabel;
     const defaultLabelPlacement = labelRail === 'top' ? 'below' : labelRail === 'bottom' ? 'above' : 'left';
-    anchorLabel.dataset.labelPlacement = REVERSED_POINTER_LABEL_PLATFORMS.has(String(platform))
-      ? defaultLabelPlacement === 'above' ? 'below' : 'above'
-      : defaultLabelPlacement;
+    anchorLabel.dataset.labelPlacement = POINTER_LABEL_PLACEMENT_OVERRIDES[String(platform)] || (
+      REVERSED_POINTER_LABEL_PLATFORMS.has(String(platform))
+        ? defaultLabelPlacement === 'above' ? 'below' : 'above'
+        : defaultLabelPlacement
+    );
+    if (STAGGERED_POINTER_LABEL_PLATFORMS.has(String(platform))) anchorLabel.dataset.labelStagger = 'true';
     anchorLabel.dataset.agencyId = agencyId;
     if (card.classList.contains('map-dropoff-card')) {
       anchor.classList.add('map-platform-anchor--pickup-dropoff');
@@ -1344,7 +1350,15 @@ function setupPlatformApp() {
       });
   }
 
+  // 1 at the TV's 1920x1080; smaller when the map is drawn smaller.
+  function updateMapScale() {
+    const scale = mapPlaneEl.clientHeight / BASEMAP_CALIBRATION.height;
+    if (scale > 0) mapStageEl.style.setProperty('--map-scale', String(Math.min(1.2, scale)));
+  }
+  updateMapScale();
+
   const handleResize = () => {
+    updateMapScale();
     scheduleProjectionRefresh();
   };
   window.addEventListener('resize', handleResize);
