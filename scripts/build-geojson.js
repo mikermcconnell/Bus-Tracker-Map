@@ -5,6 +5,7 @@ const fetch = require('node-fetch');
 const AdmZip = require('adm-zip');
 const { parse } = require('csv-parse/sync');
 const { buildServiceCalendarMetadata } = require('../shared/gtfs-service-calendar');
+const { buildShelterDepartureMetadata } = require('../shared/shelter-departure-cache');
 require('dotenv').config();
 
 const args = process.argv.slice(2);
@@ -28,9 +29,11 @@ const OUT_DIR = path.resolve(process.env.CACHE_DIR || path.join(__dirname, '..',
 const ROUTES_PATH = path.join(OUT_DIR, 'routes.geojson');
 const STOPS_PATH = path.join(OUT_DIR, 'stops.geojson');
 const BARRIE_METADATA_PATH = path.join(OUT_DIR, 'barrie-transit.json');
+const BARRIE_DEPARTURES_PATH = path.join(OUT_DIR, 'barrie-departures.json');
 const hasCache = fs.existsSync(ROUTES_PATH) &&
   fs.existsSync(STOPS_PATH) &&
-  fs.existsSync(BARRIE_METADATA_PATH);
+  fs.existsSync(BARRIE_METADATA_PATH) &&
+  fs.existsSync(BARRIE_DEPARTURES_PATH);
 const GTFS_URL = process.env.GTFS_STATIC_URL;
 
 if (!GTFS_URL) {
@@ -159,6 +162,7 @@ function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
     const stopTimesTxt = getText('stop_times.txt');
     const calendarTxt = getText('calendar.txt');
     const calendarDatesTxt = getText('calendar_dates.txt');
+    const feedInfoTxt = getText('feed_info.txt');
     const serviceCalendarMetadata = buildServiceCalendarMetadata(
       calendarTxt ? parse(calendarTxt, { columns: true, skip_empty_lines: true }) : [],
       calendarDatesTxt ? parse(calendarDatesTxt, { columns: true, skip_empty_lines: true }) : []
@@ -205,8 +209,9 @@ function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
     };
 
     const routeInfoById = new Map();
+    let routesRows = [];
     if (routesTxt) {
-      const routesRows = parse(routesTxt, { columns: true, skip_empty_lines: true });
+      routesRows = parse(routesTxt, { columns: true, skip_empty_lines: true });
       routesRows.forEach((route) => {
         const id = route.route_id;
         if (!id) return;
@@ -335,6 +340,30 @@ function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
 
     const terminalStopIds = new Set(terminalStops.map((stop) => String(stop.stop_id)));
     const stopTimeRows = parse(stopTimesTxt, { columns: true, skip_empty_lines: true });
+    const generatedAt = new Date().toISOString();
+    const feedInfoRows = feedInfoTxt
+      ? parse(feedInfoTxt, { columns: true, skip_empty_lines: true })
+      : [];
+    const shelterDepartureMetadata = buildShelterDepartureMetadata({
+      generatedAt,
+      sourceUrl: GTFS_URL,
+      feedInfo: feedInfoRows[0] || {},
+      serviceCalendarMetadata,
+      stopsRows,
+      routesRows,
+      tripsRows,
+      stopTimesRows: stopTimeRows,
+    });
+    fs.writeFileSync(BARRIE_DEPARTURES_PATH, JSON.stringify(shelterDepartureMetadata));
+    console.log(
+      'Wrote cache/barrie-departures.json with',
+      Object.keys(shelterDepartureMetadata.stops).length,
+      'stops and',
+      Object.values(shelterDepartureMetadata.departures_by_stop)
+        .reduce((total, rows) => total + rows.length, 0),
+      'boardable stop times'
+    );
+
     const lastStopSequenceByTrip = {};
     stopTimeRows.forEach((stopTime) => {
       const tripId = String(stopTime.trip_id || '');
@@ -442,7 +471,7 @@ function buildTerminalApproachFallbacks(trips, stopTimes, terminalStopIds) {
     );
 
     fs.writeFileSync(BARRIE_METADATA_PATH, JSON.stringify({
-      generated_at: new Date().toISOString(),
+      generated_at: generatedAt,
       source_url: GTFS_URL,
       terminal_stop_ids: Array.from(terminalStopIds).sort(),
       terminal_stops: terminalStops.map((stop) => ({
