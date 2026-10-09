@@ -568,7 +568,7 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(page.locator('.platform-card[data-platform="3"] .platform-card__state')).toHaveText('Arriving');
   const arrivingRow = page.locator('.platform-card[data-platform="3"] .platform-card__service[data-route-id="8A"]');
   await expect(arrivingRow).toHaveClass(/platform-card__service--active/);
-  await expect(arrivingRow.locator('.platform-card__service-countdown')).toHaveText('9 min');
+  await expect(arrivingRow.locator('.platform-card__service-countdown')).toHaveText('8 min');
   const inactiveRow = page.locator('.platform-card[data-platform="3"] .platform-card__service[data-route-id="8B"]');
   const inactiveExpectedTime = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Toronto',
@@ -577,7 +577,7 @@ test('platform map renders current assignments and updates markers in place', as
   }).format(new Date((nowSeconds + 1500) * 1000));
   await expect(inactiveRow).not.toHaveClass(/platform-card__service--active/);
   await expect(inactiveRow.locator('.platform-card__service-countdown'))
-    .toHaveText('25 min');
+    .toHaveText('24 min');
   await expect(inactiveRow.locator('.platform-card__service-scheduled'))
     .toHaveText(inactiveExpectedTime);
   await expect(inactiveRow.locator('.platform-card__service-source')).toHaveText('Scheduled');
@@ -588,7 +588,7 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(longDwellCard).not.toHaveClass(/platform-card--occupied/);
   await expect(longDwellCard.locator('.platform-card__state')).toBeHidden();
   await expect(longDwellRow).not.toHaveClass(/platform-card__service--active/);
-  await expect(longDwellRow.locator('.platform-card__service-countdown')).toHaveText('21 min');
+  await expect(longDwellRow.locator('.platform-card__service-countdown')).toHaveText('20 min');
   await expect(longDwellRow.locator('.platform-card__service-source')).toHaveText('Scheduled');
   await expect(page.locator('.platform-card[data-platform="7"] .platform-card__state')).toHaveText('At platform');
   const trainRouteBadge = page.locator('.platform-card[data-platform="1"] .platform-card__route');

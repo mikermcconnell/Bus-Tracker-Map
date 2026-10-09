@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import {
   calibrationInImagePercent,
+  departureDisplay,
+  departureMatchesVehicle,
   departureSourceDisplay,
   getRouteEightDirection,
   getVehicleLabel,
@@ -68,6 +70,45 @@ describe('platform map model', () => {
       terminal_departure_time: now / 1000 + 20 * 60 + 1,
     }, now)).toBe(false);
     expect(isAtPlatformDepartureEligible({}, now)).toBe(true);
+  });
+
+  test('does not treat a bus whose terminal time has passed as boardable', () => {
+    const now = Date.parse('2026-10-09T15:40:00Z');
+    expect(isAtPlatformDepartureEligible({
+      terminal_departure_time: now / 1000 - 90,
+    }, now)).toBe(true);
+    expect(isAtPlatformDepartureEligible({
+      terminal_departure_time: now / 1000 - 5 * 60,
+    }, now)).toBe(false);
+    expect(isAtPlatformDepartureEligible({
+      terminal_departure_time: now / 1000 + 60,
+      terminal_is_departure: false,
+    }, now)).toBe(false);
+  });
+
+  test('matches a vehicle to a departure by vehicle or trip, never by route alone', () => {
+    const departure = { route_id: '7A', trip_id: 'trip-1209', live_vehicle_id: null };
+    expect(departureMatchesVehicle(departure, { id: 'bus-1', route_id: '7A', trip_id: 'trip-1140' })).toBe(false);
+    expect(departureMatchesVehicle(departure, { id: 'bus-1', route_id: '7A', trip_id: 'trip-1209' })).toBe(true);
+    expect(departureMatchesVehicle({ ...departure, live_vehicle_id: 'bus-2' }, { id: 'bus-2' })).toBe(true);
+    expect(departureMatchesVehicle(null, { id: 'bus-2' })).toBe(false);
+  });
+
+  test('counts down conservatively and never shows a passed time', () => {
+    const now = Date.parse('2026-10-09T15:40:00Z');
+    expect(departureDisplay(now / 1000 + 61, now)).toMatchObject({ primary: '1 min', secondary: '11:41 AM' });
+    expect(departureDisplay(now / 1000 + 59, now)).toMatchObject({ primary: 'Due now' });
+    expect(departureDisplay(now / 1000 - 30, now)).toMatchObject({ primary: 'Due now' });
+    expect(departureDisplay(now / 1000 - 5 * 60, now)).toMatchObject({ primary: 'See schedule', state: 'past' });
+    expect(departureDisplay(null, now)).toMatchObject({ primary: 'See schedule', state: 'unavailable' });
+  });
+
+  test('keeps counting down to trips shortly after midnight', () => {
+    const now = Date.parse('2026-10-10T03:50:00Z'); // 11:50 PM Toronto
+    expect(departureDisplay(Date.parse('2026-10-10T04:15:00Z') / 1000, now))
+      .toMatchObject({ primary: '25 min', secondary: '12:15 AM' });
+    expect(departureDisplay(Date.parse('2026-10-10T10:00:00Z') / 1000, now))
+      .toMatchObject({ primary: 'No more today', secondary: 'Next 6:00 AM' });
   });
 
   test('groups current assignments without inventing retired platforms', () => {

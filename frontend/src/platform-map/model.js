@@ -3,6 +3,7 @@ export const MAP_IMAGE_HEIGHT = 9010;
 export const MAP_IMAGE_RATIO = MAP_IMAGE_WIDTH / MAP_IMAGE_HEIGHT;
 
 const AT_PLATFORM_MAX_LEAD_MS = 20 * 60 * 1000;
+const AT_PLATFORM_DEPARTED_GRACE_MS = 2 * 60 * 1000;
 
 const REFERENCE_VIEWPORT = Object.freeze({ width: 1920, height: 1080 });
 const REFERENCE_CALIBRATION = Object.freeze([
@@ -194,9 +195,23 @@ export function isTerminalDisplayVehicle(vehicle) {
 }
 
 export function isAtPlatformDepartureEligible(vehicle, nowMs = Date.now()) {
+  if (vehicle && vehicle.terminal_is_departure === false) return false;
   const departureMs = Number(vehicle && vehicle.terminal_departure_time) * 1000;
   if (!Number.isFinite(departureMs) || departureMs <= 0) return true;
-  return departureMs - nowMs <= AT_PLATFORM_MAX_LEAD_MS;
+  // A terminal time well in the past belongs to a trip that has already ended
+  // here (or left), not to a bus that riders can board now.
+  const leadMs = departureMs - nowMs;
+  return leadMs >= -AT_PLATFORM_DEPARTED_GRACE_MS && leadMs <= AT_PLATFORM_MAX_LEAD_MS;
+}
+
+export function departureMatchesVehicle(departure, vehicle) {
+  if (!departure || !vehicle) return false;
+  const vehicleId = String(vehicle.id || '');
+  const tripId = String(vehicle.trip_id || '');
+  return Boolean(
+    vehicleId && String(departure.live_vehicle_id || '') === vehicleId ||
+    tripId && String(departure.trip_id || '') === tripId
+  );
 }
 
 export function groupPlatformAssignments(assignments) {
@@ -236,4 +251,75 @@ export function departureSourceDisplay(departure, hasActiveVehicle = false) {
   );
   if (hasMatchingVehicle) return { key: 'live', label: 'Live' };
   return { key: 'scheduled', label: 'Scheduled' };
+}
+
+export const DEPARTURE_NOW_GRACE_MS = 60 * 1000;
+// Trips shortly after midnight belong to tonight's service, so keep counting
+// down instead of showing "No more today".
+const COUNTDOWN_ACROSS_MIDNIGHT_MS = 2 * 60 * 60 * 1000;
+
+export function formatScheduledDeparture(timestampSeconds) {
+  const timestamp = Number(timestampSeconds);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return '';
+  const date = new Date(timestamp * 1000);
+  if (!Number.isFinite(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Toronto',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function localDateKey(date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Toronto',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+export function departureDisplay(timestampSeconds, nowMs = Date.now()) {
+  const timestamp = Number(timestampSeconds);
+  const departure = new Date(timestamp * 1000);
+  if (!Number.isFinite(timestamp) || timestamp <= 0 || !Number.isFinite(departure.getTime())) {
+    return { primary: 'See schedule', secondary: '', state: 'unavailable' };
+  }
+
+  const differenceMs = departure.getTime() - nowMs;
+  if (differenceMs < -DEPARTURE_NOW_GRACE_MS) {
+    return { primary: 'See schedule', secondary: '', state: 'past' };
+  }
+
+  const scheduledTime = formatScheduledDeparture(timestamp);
+  const todayKey = localDateKey(new Date(nowMs));
+  const departureKey = localDateKey(departure);
+  if (departureKey === todayKey || differenceMs < COUNTDOWN_ACROSS_MIDNIGHT_MS) {
+    // Round down so riders are never told they have more time than they do.
+    const minutes = Math.max(0, Math.floor(differenceMs / 60000));
+    return {
+      primary: minutes === 0 ? 'Due now' : `${minutes} min`,
+      secondary: scheduledTime,
+      state: minutes <= 10 ? 'soon' : 'today',
+    };
+  }
+
+  const tomorrowKey = localDateKey(new Date(nowMs + 24 * 60 * 60 * 1000));
+  if (departureKey === tomorrowKey) {
+    return {
+      primary: 'No more today',
+      secondary: `Next ${scheduledTime}`,
+      state: 'future-day',
+    };
+  }
+
+  const dayLabel = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Toronto',
+    weekday: 'short',
+  }).format(departure);
+  return {
+    primary: dayLabel,
+    secondary: scheduledTime,
+    state: 'future-day',
+  };
 }

@@ -5,6 +5,9 @@ import { BATT_COORDS, getTerminalListStatus } from '../map/nearby-vehicles.js';
 import { clusterVehicles, distanceBetweenMeters } from '../map/vehicle-groups.js';
 import feedFreshness from '../../../shared/feed-freshness.js';
 import {
+  DEPARTURE_NOW_GRACE_MS,
+  departureDisplay,
+  departureMatchesVehicle,
   departureSourceDisplay,
   getRouteEightDirection,
   getVehicleLabel,
@@ -22,7 +25,6 @@ const DEFAULT_POLL_MS = 10000;
 const CLUSTER_DISTANCE_METERS = 8;
 const APPROACHING_WINDOW_MS = 5 * 60 * 1000;
 const APPROACHING_DISTANCE_METERS = 500;
-const DEPARTURE_NOW_GRACE_MS = 60 * 1000;
 const DEPARTURE_PAGE_ROTATION_SECONDS = 15;
 const PLATFORM_MAP_CENTER = Object.freeze([44.373974, -79.689423]);
 const PLATFORM_MAP_ZOOM = 18.1;
@@ -401,71 +403,6 @@ function platformForVehicle(vehicle) {
   return String(vehicle && vehicle.platform || '');
 }
 
-function formatScheduledDeparture(timestampSeconds) {
-  const timestamp = Number(timestampSeconds);
-  if (!Number.isFinite(timestamp) || timestamp <= 0) return '';
-  const date = new Date(timestamp * 1000);
-  if (!Number.isFinite(date.getTime())) return '';
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Toronto',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
-}
-
-function localDateKey(date) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Toronto',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
-}
-
-function departureDisplay(timestampSeconds, nowMs = Date.now()) {
-  const timestamp = Number(timestampSeconds);
-  const departure = new Date(timestamp * 1000);
-  if (!Number.isFinite(timestamp) || timestamp <= 0 || !Number.isFinite(departure.getTime())) {
-    return { primary: 'No time', secondary: '', state: 'unavailable' };
-  }
-
-  const differenceMs = departure.getTime() - nowMs;
-  if (differenceMs < -DEPARTURE_NOW_GRACE_MS) {
-    return { primary: 'No time', secondary: '', state: 'past' };
-  }
-
-  const scheduledTime = formatScheduledDeparture(timestamp);
-  const todayKey = localDateKey(new Date(nowMs));
-  const departureKey = localDateKey(departure);
-  if (departureKey === todayKey) {
-    const minutes = Math.max(0, Math.ceil(differenceMs / 60000));
-    return {
-      primary: minutes === 0 ? 'Due now' : `${minutes} min`,
-      secondary: scheduledTime,
-      state: minutes <= 10 ? 'soon' : 'today',
-    };
-  }
-
-  const tomorrowKey = localDateKey(new Date(nowMs + 24 * 60 * 60 * 1000));
-  if (departureKey === tomorrowKey) {
-    return {
-      primary: 'No more today',
-      secondary: `Next ${scheduledTime}`,
-      state: 'future-day',
-    };
-  }
-
-  const dayLabel = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Toronto',
-    weekday: 'short',
-  }).format(departure);
-  return {
-    primary: dayLabel,
-    secondary: scheduledTime,
-    state: 'future-day',
-  };
-}
-
 function normalizeServiceNotice(message) {
   const cleaned = String(message || '')
     .replace(/^Barrie Transit\s*(?:—|-|:)\s*/i, '')
@@ -516,16 +453,18 @@ function livePlatformState(vehicle, nowMs = Date.now()) {
   return '';
 }
 
-function activityCountdown(vehicle, state, concise = false) {
-  const departureMs = Number(vehicle && vehicle.terminal_departure_time) * 1000;
-  if (!Number.isFinite(departureMs) || departureMs <= 0) return '';
-  const differenceMs = departureMs - Date.now();
-  const minutes = Math.ceil(differenceMs / 60000);
-  if (concise) return minutes <= 0 ? 'Now' : `${minutes} min`;
-  if (state === 'approaching') {
-    return minutes <= 0 ? 'Due now' : `Due in ${minutes} min`;
+function sortServiceRowsByDeparture(container) {
+  if (!container) return;
+  const sortTime = (row) => Number(row.dataset.sortTime) || Number.POSITIVE_INFINITY;
+  const rows = Array.from(container.children);
+  const sorted = rows.slice().sort((a, b) => {
+    const first = sortTime(a);
+    const second = sortTime(b);
+    return first === second ? 0 : first < second ? -1 : 1;
+  });
+  if (sorted.some((row, index) => row !== rows[index])) {
+    sorted.forEach((row) => container.appendChild(row));
   }
-  return minutes <= 0 ? 'Departs now' : `Departs in ${minutes} min`;
 }
 
 function isSourceVehicleVisible(vehicle, sources) {
@@ -1008,9 +947,25 @@ function setupPlatformApp() {
       card.querySelectorAll('.platform-card__service').forEach((row) => {
         const active = Boolean(activeVehicle && serviceRowMatchesVehicle(row, activeVehicle));
         const terminalDeparture = terminalDepartureForRow(row, terminalDepartures);
+        const boardTimestamp = terminalDeparture && terminalDeparture.departure_time;
+        // A bus still at the platform after the board has moved on to the next
+        // trip is boardable now, so its own departure time wins.
+        const activeVehicleTimestamp = active && state && activeVehicle.terminal_is_departure !== false
+          ? Number(activeVehicle.terminal_departure_time) || null
+          : null;
+        const vehicleTimestamp = activeVehicleTimestamp && (
+          !boardTimestamp ||
+          state === 'occupied' && activeVehicleTimestamp * 1000 <= activityNow
+        )
+          ? activeVehicleTimestamp
+          : null;
+        // A route match only proves the same route is nearby. The vehicle is
+        // live evidence for this row only when it runs the displayed trip.
+        const vehicleRunsDisplayedTrip = Boolean(vehicleTimestamp) ||
+          Boolean(active && state && departureMatchesVehicle(terminalDeparture, activeVehicle));
         const departureSource = departureSourceDisplay(
-          terminalDeparture,
-          Boolean(active && state)
+          vehicleTimestamp ? null : terminalDeparture,
+          vehicleRunsDisplayedTrip
         );
         const hasRealtimeDeparture = departureSource.key === 'live';
         row.classList.toggle('platform-card__service--active', active);
@@ -1018,23 +973,19 @@ function setupPlatformApp() {
         const countdown = row.querySelector('.platform-card__service-countdown');
         const scheduled = row.querySelector('.platform-card__service-scheduled');
         const source = row.querySelector('.platform-card__service-source');
+        const displayTimestamp = vehicleTimestamp || boardTimestamp || row.dataset.nextDepartureTime;
+        const departure = row.dataset.departureLabel && !hasRealtimeDeparture && !terminalDeparture
+          ? { primary: row.dataset.departureLabel, secondary: '', state: 'unavailable' }
+          : departureDisplay(displayTimestamp);
+        const hasTime = departure.state !== 'unavailable' && departure.state !== 'past';
+        row.dataset.sortTime = hasTime ? String(Number(displayTimestamp)) : '';
         if (source) {
           source.textContent = departureSource.label;
           source.dataset.source = departureSource.key;
+          source.hidden = !hasTime;
         }
         if (countdown) {
-          const displayTimestamp = terminalDeparture && terminalDeparture.departure_time
-            ? terminalDeparture.departure_time
-            : active && state && activeVehicle.terminal_departure_time
-              ? activeVehicle.terminal_departure_time
-              : row.dataset.nextDepartureTime;
-          const departure = row.dataset.departureLabel && !hasRealtimeDeparture && !terminalDeparture
-            ? { primary: row.dataset.departureLabel, secondary: '', state: 'unavailable' }
-            : departureDisplay(displayTimestamp);
-          const physicalStatus = active && state === 'occupied'
-            ? activityCountdown(activeVehicle, state, true)
-            : '';
-          countdown.textContent = physicalStatus || departure.primary;
+          countdown.textContent = departure.primary;
           countdown.dataset.live = hasRealtimeDeparture ? 'true' : 'false';
           countdown.dataset.departureState = departure.state;
           countdown.hidden = !countdown.textContent;
@@ -1044,6 +995,7 @@ function setupPlatformApp() {
           }
         }
       });
+      sortServiceRowsByDeparture(card.querySelector('.platform-card__services'));
       const badge = card.querySelector('.platform-card__state');
       if (!badge) return;
       badge.textContent = state === 'occupied'
@@ -1095,7 +1047,7 @@ function setupPlatformApp() {
         const departureMs = Number(activeVehicle && activeVehicle.terminal_departure_time) * 1000;
         const differenceMs = departureMs - Date.now();
         const minutes = Number.isFinite(departureMs)
-          ? Math.ceil(differenceMs / 60000)
+          ? Math.floor(differenceMs / 60000)
           : null;
         status.textContent = minutes === null
           ? 'At platform'

@@ -64,6 +64,28 @@ describe('BATT trip progress classification', () => {
     });
   });
 
+  test('flags a bus whose trip ends at the terminal so it is not shown as boardable', () => {
+    const enriched = enrichTerminalProgress({
+      start_date: '20260731',
+      stop_id: '9005',
+      current_stop_sequence: 41,
+      current_status: 1,
+    }, {
+      terminalStops: [{
+        stop_id: '9005',
+        stop_sequence: 41,
+        departure_time: '09:12:00',
+        is_departure: false,
+      }],
+      terminalStopIds: ['9005'],
+    });
+
+    expect(enriched).toMatchObject({
+      terminal_progress_status: 'at_terminal',
+      terminal_is_departure: false,
+    });
+  });
+
   test('uses the previous service date for an after-midnight GTFS departure', () => {
     const nowMs = Date.parse('2026-08-01T04:32:00Z');
     expect(inferScheduledDepartureEpochSeconds('24:35:00', { nowMs }))
