@@ -109,21 +109,21 @@ export function createDataClient(options = {}) {
       return fetchJson(resolveUrl('/api/config'), options);
     },
 
-    fetchRoutes() {
-      return fetchJson(resolveUrl('/api/routes.geojson'));
+    fetchRoutes(options) {
+      return fetchJson(resolveUrl('/api/routes.geojson'), options);
     },
 
     fetchStops() {
       return fetchJson(resolveUrl('/api/stops.geojson'));
     },
 
-    fetchServiceStatus(date) {
+    fetchServiceStatus(date, options) {
       const suffix = date ? `?date=${encodeURIComponent(date)}` : '';
-      return fetchJson(resolveUrl(`/api/service-status${suffix}`));
+      return fetchJson(resolveUrl(`/api/service-status${suffix}`), options);
     },
 
-    fetchTerminalLayout() {
-      return fetchJson(resolveUrl('/api/terminal-layout'));
+    fetchTerminalLayout(options) {
+      return fetchJson(resolveUrl('/api/terminal-layout'), options);
     },
 
     fetchDepartures(limit = 12, options = {}) {
@@ -132,8 +132,8 @@ export function createDataClient(options = {}) {
       return fetchJson(resolveUrl(`/api/departures?limit=${encodeURIComponent(limit)}${boardQuery}`), fetchOptions);
     },
 
-    fetchVehicles() {
-      return fetchJson(resolveUrl('/api/vehicles.json'));
+    fetchVehicles(options) {
+      return fetchJson(resolveUrl('/api/vehicles.json'), options);
     },
 
     fetchMajorRoads() {

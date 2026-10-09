@@ -852,3 +852,77 @@ test('notice display renders a holding state', async ({ page }) => {
   await expect(page.locator('#holding-title')).toContainText(/No active .*service notices/i);
   expect(errors).toEqual([]);
 });
+
+function platformVehiclePayload(nowSeconds) {
+  return {
+    feed_timestamp: nowSeconds,
+    vehicles: [{
+      id: 'resilient-bus',
+      route_id: '7A',
+      route_label: '7A',
+      agency_id: 'barrie-transit',
+      lat: 44.373837,
+      lon: -79.689279,
+      last_reported: nowSeconds,
+    }],
+    sources: {
+      barrie_transit: { feed_status: 'live' },
+      go_transit: { feed_status: 'live' },
+      ontario_northland: { feed_status: 'live' },
+      simcoe_linx: { feed_status: 'live' },
+    },
+  };
+}
+
+test('platform map rides out brief poll failures and hung requests', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  let pollCount = 0;
+  await page.route('**/api/config', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ poll_ms: 750, feed_delayed_after_ms: 120000, feed_offline_after_ms: 900000, base_path: '/' }),
+  }));
+  await page.route('**/api/vehicles.json*', (route) => {
+    pollCount += 1;
+    if (pollCount === 2) return route.fulfill({ status: 500, body: 'upstream error' });
+    // Poll 3 never answers; the request timeout must free the loop.
+    if (pollCount === 3) return undefined;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(platformVehiclePayload(nowSeconds)),
+    });
+  });
+
+  await page.goto('/platform.map');
+  await expect(page.locator('#connection-label')).toHaveText('LIVE');
+  await expect.poll(() => pollCount).toBeGreaterThanOrEqual(3);
+  await expect(page.locator('#connection-label')).toHaveText('LIVE');
+  await expect(page.locator('.vehicle-marker')).toHaveCount(1);
+  await expect.poll(() => pollCount, { timeout: 15000 }).toBeGreaterThanOrEqual(4);
+  await expect(page.locator('#connection-label')).toHaveText('LIVE');
+});
+
+test('platform map starts its clock and polling when the network is down at boot', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  let configCalls = 0;
+  await page.route('**/api/config', (route) => {
+    configCalls += 1;
+    if (configCalls === 1) return route.abort('internetdisconnected');
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ poll_ms: 750, feed_delayed_after_ms: 120000, feed_offline_after_ms: 900000, base_path: '/' }),
+    });
+  });
+  await page.route('**/api/vehicles.json*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(platformVehiclePayload(nowSeconds)),
+  }));
+
+  await page.goto('/platform.map');
+  await expect(page.locator('#platform-clock')).not.toHaveText('--:--');
+  await expect(page.locator('.vehicle-marker')).toHaveCount(1);
+  await expect.poll(() => configCalls, { timeout: 10000 }).toBeGreaterThanOrEqual(2);
+});

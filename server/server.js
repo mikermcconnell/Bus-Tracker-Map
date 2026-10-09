@@ -1012,6 +1012,7 @@ router.get('/platform.map', (req, res, next) => {
   const platformPath = path.join(FRONTEND_DIR, 'platform.map.html');
   if (!fs.existsSync(platformPath)) return next();
   res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
+  res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(platformPath);
 });
 

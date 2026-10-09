@@ -19,9 +19,24 @@ import {
   normalizeBearing,
   projectVehicleToImage,
 } from './model.js';
+import {
+  fetchText,
+  isNewBuild,
+  isNightlyReloadDue,
+  isPollStalled,
+} from './kiosk.js';
 
 const { assessVehicleFeedFreshness, selectVehiclesForDisplay } = feedFreshness;
 const DEFAULT_POLL_MS = 10000;
+const REQUEST_TIMEOUT_MS = 8000;
+// Keep the last departure board through brief outages, then fall back to the
+// timetable so an old prediction is never shown as current.
+const DEPARTURES_RETENTION_MS = 2 * 60 * 1000;
+const CONFIG_RETRY_MAX_MS = 60 * 1000;
+const KIOSK_CHECK_INTERVAL_MS = 60 * 1000;
+const BUILD_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+// With no successful poll for this long, reload to clear any broken state.
+const NO_DATA_RELOAD_MS = 10 * 60 * 1000;
 const CLUSTER_DISTANCE_METERS = 8;
 const APPROACHING_WINDOW_MS = 5 * 60 * 1000;
 const APPROACHING_DISTANCE_METERS = 500;
@@ -308,7 +323,7 @@ function setupPlatformBasemap(config, onProjectionChange) {
       map.remove();
       map = null;
     }
-    container.replaceChildren();
+    while (container.firstChild) container.removeChild(container.firstChild);
     mapPlane.classList.remove('map-plane--live-basemap');
     fallbackMap = setupLeafletBasemap(container, mapPlane, {
       url: basemap.fallback_url,
@@ -329,18 +344,23 @@ function setupPlatformBasemap(config, onProjectionChange) {
   }
 
   mapboxgl.accessToken = basemap.access_token;
-  map = new mapboxgl.Map({
-    container,
-    style: basemap.style_url,
-    center: [PLATFORM_MAP_CENTER[1], PLATFORM_MAP_CENTER[0]],
-    zoom: PLATFORM_MAPBOX_ZOOM,
-    bearing: 0,
-    pitch: 0,
-    interactive: false,
-    attributionControl: true,
-    fadeDuration: 0,
-    renderWorldCopies: false,
-  });
+  try {
+    map = new mapboxgl.Map({
+      container,
+      style: basemap.style_url,
+      center: [PLATFORM_MAP_CENTER[1], PLATFORM_MAP_CENTER[0]],
+      zoom: PLATFORM_MAPBOX_ZOOM,
+      bearing: 0,
+      pitch: 0,
+      interactive: false,
+      attributionControl: true,
+      fadeDuration: 0,
+      renderWorldCopies: false,
+    });
+  } catch (err) {
+    startFallback(err && err.message || 'Mapbox failed to start');
+    return fallbackMap;
+  }
 
   loadTimer = setTimeout(() => startFallback('load timed out'), PLATFORM_BASEMAP_LOAD_TIMEOUT_MS);
   map.once('load', () => {
@@ -560,7 +580,9 @@ function terminalDepartureForRow(row, terminalDepartures) {
   const card = row.closest('.platform-card');
   const platform = String(card && card.dataset.platform || '');
   const agencyId = String(row.dataset.agencyId || '');
+  const earliestSeconds = (Date.now() - DEPARTURE_NOW_GRACE_MS) / 1000;
   return terminalDepartures.find((departure) => (
+    Number(departure && departure.departure_time) >= earliestSeconds &&
     String(departure && departure.platform || '') === platform &&
     String(departure && departure.agency_id || '') === agencyId &&
     serviceRowMatchesVehicle(row, departure)
@@ -666,7 +688,13 @@ function setupPlatformApp() {
   let lastPayload = null;
   let lastDataTimestamp = null;
   let pollTimer = null;
+  let pollGeneration = 0;
+  let lastPollSettledAt = Date.now();
+  let lastHealthyPollAt = Date.now();
+  let lastDeparturesAt = 0;
   let layoutTimer = null;
+  let configRetryTimer = null;
+  const timers = [];
   let departurePageTimer = null;
   let platformBasemap = null;
   let projectionFrame = null;
@@ -1257,7 +1285,9 @@ function setupPlatformApp() {
     mapLabelLayerEl.querySelectorAll('.map-platform-anchor__label').forEach((label) => label.remove());
     mapLabelLayerEl.querySelectorAll('.map-terminal-building').forEach((landmark) => landmark.remove());
     mapLabelLayerEl.querySelectorAll('.map-dropoff-card[data-geographic-card="true"]').forEach((card) => card.remove());
-    Object.values(mapLabelRails).forEach((rail) => rail.replaceChildren());
+    Object.values(mapLabelRails).forEach((rail) => {
+      while (rail.firstChild) rail.removeChild(rail.firstChild);
+    });
     const grouped = groupPlatformAssignments(layout && layout.assignments);
     const assignmentsForPlatform = (platform) => grouped[platform] || [];
     const orderedPlatforms = PLATFORM_DISPLAY_ORDER
@@ -1385,7 +1415,7 @@ function setupPlatformApp() {
   }
 
   function refreshTerminalLayout() {
-    return dataClient.fetchTerminalLayout()
+    return dataClient.fetchTerminalLayout({ timeoutMs: REQUEST_TIMEOUT_MS })
       .then((layout) => renderAssignments(layout))
       .catch((err) => {
         console.warn('Platform assignment refresh unavailable; keeping current times:', err);
@@ -1450,29 +1480,57 @@ function setupPlatformApp() {
   }
 
   function pollVehicles() {
+    // A watchdog restart bumps the generation, so a late reply from a stalled
+    // request cannot start a second polling loop.
+    const generation = ++pollGeneration;
     Promise.all([
-      dataClient.fetchVehicles(),
-      dataClient.fetchDepartures(30, { board: 'allandale' }).catch((err) => {
-        console.warn('Platform departures poll failed; using scheduled layout times:', err);
+      dataClient.fetchVehicles({ timeoutMs: REQUEST_TIMEOUT_MS }),
+      dataClient.fetchDepartures(30, { board: 'allandale', timeoutMs: REQUEST_TIMEOUT_MS }).catch((err) => {
+        console.warn('Platform departures poll failed:', err);
         return null;
       }),
     ])
       .then(([payload, departuresPayload]) => {
+        if (generation !== pollGeneration) return;
         if (!payload || !Array.isArray(payload.vehicles)) throw new Error('Invalid vehicle response');
         lastPayload = payload;
-        renderPayload(payload, departuresPayload);
+        lastHealthyPollAt = Date.now();
+        if (departuresPayload) {
+          lastDeparturesAt = lastHealthyPollAt;
+          renderPayload(payload, departuresPayload);
+        } else {
+          // Keep the last board briefly, then use timetable times instead.
+          const keepBoard = lastHealthyPollAt - lastDeparturesAt < DEPARTURES_RETENTION_MS;
+          renderPayload(payload, keepBoard ? undefined : null);
+        }
       })
       .catch((err) => {
-        lastPayload = null;
+        if (generation !== pollGeneration) return;
+        console.warn('Platform vehicle poll failed:', err);
+        if (lastPayload) {
+          // One failed poll is not an outage. The freshness rules mark the
+          // data delayed or offline as the last good payload ages.
+          renderPayload(lastPayload);
+          return;
+        }
         setConnection('offline', 'OFFLINE');
         setStatus('Live vehicle feeds are offline. Icons are hidden; retrying automatically.', 'offline');
         renderVehicles([], []);
         renderSourceStatuses(null);
-        console.warn('Platform vehicle poll failed:', err);
       })
       .then(() => {
+        if (generation !== pollGeneration) return;
+        lastPollSettledAt = Date.now();
         pollTimer = setTimeout(pollVehicles, pollMs);
       });
+  }
+
+  function restartPollingIfStalled() {
+    if (!isPollStalled(lastPollSettledAt, Date.now(), pollMs)) return;
+    console.warn('Platform poll loop stalled; restarting it.');
+    if (pollTimer) clearTimeout(pollTimer);
+    lastPollSettledAt = Date.now();
+    pollVehicles();
   }
 
   function updateClock() {
@@ -1487,7 +1545,7 @@ function setupPlatformApp() {
   }
 
   function loadServiceNotice() {
-    dataClient.fetchServiceStatus()
+    dataClient.fetchServiceStatus(undefined, { timeoutMs: REQUEST_TIMEOUT_MS })
       .then((status) => {
         const upcoming = status && status.upcoming_warning && status.upcoming_warning.message;
         const special = status && status.is_special_service && status.today;
@@ -1509,46 +1567,111 @@ function setupPlatformApp() {
   };
   window.addEventListener('resize', handleResize);
 
-  dataClient.fetchConfig()
-    .then((config) => {
-      if (config && config.base_path) dataClient.setBasePath(config.base_path);
-      if (Number(config && config.poll_ms) > 0) pollMs = Number(config.poll_ms);
-      if (Number(config && config.feed_delayed_after_ms) > 0) delayedAfterMs = Number(config.feed_delayed_after_ms);
-      if (Number(config && config.feed_offline_after_ms) > 0) offlineAfterMs = Number(config.feed_offline_after_ms);
-      platformBasemap = setupPlatformBasemap(config, scheduleProjectionRefresh);
-    })
-    .catch((err) => {
-      console.warn('Using default platform-map configuration:', err);
-    })
+  function applyConfig(config) {
+    if (config && config.base_path) dataClient.setBasePath(config.base_path);
+    if (Number(config && config.poll_ms) > 0) pollMs = Number(config.poll_ms);
+    if (Number(config && config.feed_delayed_after_ms) > 0) delayedAfterMs = Number(config.feed_delayed_after_ms);
+    if (Number(config && config.feed_offline_after_ms) > 0) offlineAfterMs = Number(config.feed_offline_after_ms);
+    if (!platformBasemap) platformBasemap = setupPlatformBasemap(config, scheduleProjectionRefresh);
+  }
+
+  // After a power cut the TV can start before the network does. Keep trying
+  // so the basemap appears once the connection is back.
+  function loadConfigWithRetry(delayMs = 5000) {
+    return dataClient.fetchConfig({ timeoutMs: REQUEST_TIMEOUT_MS })
+      .then(applyConfig)
+      .catch((err) => {
+        console.warn(`Platform-map configuration unavailable; retrying in ${delayMs / 1000}s:`, err);
+        configRetryTimer = setTimeout(
+          () => loadConfigWithRetry(Math.min(delayMs * 2, CONFIG_RETRY_MAX_MS)),
+          delayMs
+        );
+      });
+  }
+
+  const startedAt = Date.now();
+  const buildIdMeta = document.querySelector('meta[name="app-build-id"]');
+  const currentBuildId = buildIdMeta ? buildIdMeta.getAttribute('content') || '' : '';
+  let lastBuildCheckAt = startedAt;
+  let reloadPending = false;
+
+  // Only reload when the server answers; a reload while it is down would
+  // leave the TV on a browser error page with nothing to recover it.
+  function reloadWhenServerReachable(reason) {
+    if (reloadPending) return;
+    reloadPending = true;
+    dataClient.fetchConfig({ timeoutMs: REQUEST_TIMEOUT_MS })
+      .then(() => {
+        console.warn(`Reloading platform map: ${reason}.`);
+        window.location.reload();
+      })
+      .catch(() => {
+        reloadPending = false;
+      });
+  }
+
+  function runKioskChecks() {
+    const now = Date.now();
+    restartPollingIfStalled();
+    if (isNightlyReloadDue(now, startedAt)) {
+      reloadWhenServerReachable('nightly refresh');
+      return;
+    }
+    if (now - lastHealthyPollAt > NO_DATA_RELOAD_MS) {
+      reloadWhenServerReachable('no data received for 10 minutes');
+      return;
+    }
+    if (currentBuildId && now - lastBuildCheckAt >= BUILD_CHECK_INTERVAL_MS) {
+      lastBuildCheckAt = now;
+      fetchText(window.location.href, REQUEST_TIMEOUT_MS)
+        .then((html) => {
+          if (isNewBuild(currentBuildId, html)) reloadWhenServerReachable('new version deployed');
+        })
+        .catch(() => {});
+    }
+  }
+
+  function startTimers() {
+    updateClock();
+    timers.push(setInterval(updateClock, 1000));
+    timers.push(setInterval(() => {
+      if (lastPayload) renderPayload(lastPayload);
+    }, 5000));
+    loadServiceNotice();
+    timers.push(setInterval(loadServiceNotice, 5 * 60 * 1000));
+    layoutTimer = setInterval(refreshTerminalLayout, 60 * 1000);
+    timers.push(setInterval(runKioskChecks, KIOSK_CHECK_INTERVAL_MS));
+    startDeparturePageRotation();
+    pollVehicles();
+  }
+
+  loadConfigWithRetry()
     .then(() => Promise.all([
-      dataClient.fetchRoutes().catch((err) => {
+      dataClient.fetchRoutes({ timeoutMs: REQUEST_TIMEOUT_MS }).catch((err) => {
         console.warn('Platform route styles unavailable:', err);
         return null;
       }),
-      dataClient.fetchTerminalLayout().catch((err) => {
+      dataClient.fetchTerminalLayout({ timeoutMs: REQUEST_TIMEOUT_MS }).catch((err) => {
         console.warn('Platform assignments unavailable:', err);
         return { assignments: [] };
       }),
-    ]).then(([routes, layout]) => {
+    ]))
+    .then(([routes, layout]) => {
       routeStyles = routeStyleIndex(routes);
       renderAssignments(layout);
-    }))
-    .then(() => {
-      updateClock();
-      setInterval(updateClock, 1000);
-      setInterval(() => {
-        if (lastPayload) renderPayload(lastPayload);
-      }, 5000);
-      loadServiceNotice();
-      setInterval(loadServiceNotice, 5 * 60 * 1000);
-      layoutTimer = setInterval(refreshTerminalLayout, 60 * 1000);
-      startDeparturePageRotation();
-      pollVehicles();
-    });
+    })
+    .catch((err) => {
+      // Never let a render error stop the clock, polling and recovery checks.
+      console.error('Platform map startup render failed:', err);
+    })
+    .then(startTimers);
 
   return {
     destroy() {
       if (pollTimer) clearTimeout(pollTimer);
+      pollGeneration += 1;
+      if (configRetryTimer) clearTimeout(configRetryTimer);
+      timers.forEach((timer) => clearInterval(timer));
       if (layoutTimer) clearInterval(layoutTimer);
       if (departurePageTimer) clearInterval(departurePageTimer);
       if (projectionFrame) cancelAnimationFrame(projectionFrame);
