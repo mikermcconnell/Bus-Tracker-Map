@@ -556,7 +556,8 @@ test('platform map renders current assignments and updates markers in place', as
   });
 
   await page.goto('/platform.map');
-  await expect(page.locator('.vehicle-marker img')).toHaveCount(0);
+  // Only the Barrie Transit logo; no photo-style bus images.
+  await expect(page.locator('.vehicle-marker img:not(.vehicle-marker__logo)')).toHaveCount(0);
   await expect(page.locator('.vehicle-marker__route')).toHaveCount(3);
   await expect(page.locator('.vehicle-marker__route').first()).toHaveCSS('border-radius', '50%');
   await expect(page.locator('.vehicle-marker__route').first()).toContainText('8A');

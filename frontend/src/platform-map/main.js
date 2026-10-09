@@ -427,28 +427,48 @@ function terminalDepartureForRow(row, terminalDepartures) {
   )) || null;
 }
 
+// Split-circle bus icon: the top half names the operator, the bottom half shows the
+// route. Barrie Transit uses its logo and route colours; regional agencies use theirs.
+const VEHICLE_AGENCY_TOPS = Object.freeze({
+  'go-transit': Object.freeze({ text: 'GO', top: '#ffffff', topText: '#00853f', color: '#00853f', textColor: '#ffffff' }),
+  'ontario-northland': Object.freeze({ text: 'ON', top: '#f1b900', topText: '#002a5c', color: '#002a5c', textColor: '#ffffff' }),
+  'simcoe-linx': Object.freeze({ text: 'LINX', top: '#f2a900', topText: '#062235', color: '#00549f', textColor: '#ffffff' }),
+});
+
 function vehicleMarkerStyle(vehicle, routeStyles) {
   const style = getVehicleStyle(vehicle, routeStyles);
-  const isGoBus = String(vehicle && vehicle.agency_id || '') === 'go-transit' &&
-    String(vehicle && vehicle.route_mode || '').toLowerCase() !== 'train';
-  return isGoBus ? { ...style, color: '#00843d', textColor: '#fff' } : style;
+  const agency = VEHICLE_AGENCY_TOPS[String(vehicle && vehicle.agency_id || '')];
+  return agency ? { ...style, color: agency.color, textColor: agency.textColor } : style;
 }
 
-function renderVehicleBubbleLabel(element, vehicle, includeDirection = false) {
+function renderVehicleIcon(marker, vehicle) {
+  const { top, bottom, badge } = marker.__parts;
+  while (top.firstChild) top.removeChild(top.firstChild);
+  const agency = VEHICLE_AGENCY_TOPS[String(vehicle && vehicle.agency_id || '')];
+  if (agency) {
+    top.textContent = agency.text;
+    top.style.setProperty('--top-color', agency.top);
+    top.style.setProperty('--top-text-color', agency.topText);
+  } else {
+    const logo = createElement('img', 'vehicle-marker__logo');
+    logo.src = AGENCY_BRANDING['barrie-transit'].logo;
+    logo.alt = 'Barrie Transit';
+    top.appendChild(logo);
+    top.style.setProperty('--top-color', '#ffffff');
+  }
+  top.classList.toggle('vehicle-marker__top--logo', !agency);
+  bottom.textContent = vehicleRouteCode(vehicle);
+  bottom.classList.toggle('vehicle-marker__bottom--long', bottom.textContent.length > 2);
+  const direction = getRouteEightDirection(vehicle);
+  badge.textContent = direction ? (direction === 'NORTHBOUND' ? 'N' : 'S') : '';
+  badge.hidden = !badge.textContent;
+}
+
+function renderVehicleBubbleLabel(element, vehicle) {
   while (element.firstChild) element.removeChild(element.firstChild);
   const agency = vehicleAgencyMark(vehicle);
   if (agency) element.appendChild(createElement('span', 'vehicle-marker__agency', agency));
   element.appendChild(createElement('span', 'vehicle-marker__route-text', vehicleRouteCode(vehicle)));
-  if (includeDirection) {
-    const direction = getRouteEightDirection(vehicle);
-    if (direction) {
-      element.appendChild(createElement(
-        'span',
-        'vehicle-marker__direction',
-        direction === 'NORTHBOUND' ? 'N' : 'S'
-      ));
-    }
-  }
 }
 
 function createMarker(key) {
@@ -456,15 +476,20 @@ function createMarker(key) {
   marker.dataset.markerKey = key;
   const arrow = createElement('span', 'vehicle-marker__arrow');
   const body = createElement('span', 'vehicle-marker__body');
-  const label = createElement('span', 'vehicle-marker__label');
-  body.appendChild(label);
+  const top = createElement('span', 'vehicle-marker__top');
+  const bottom = createElement('span', 'vehicle-marker__bottom');
+  body.appendChild(top);
+  body.appendChild(bottom);
+  const badge = createElement('span', 'vehicle-marker__badge');
+  badge.hidden = true;
   const labels = createElement('span', 'vehicle-marker__labels');
   marker.appendChild(arrow);
   marker.appendChild(body);
+  marker.appendChild(badge);
   marker.appendChild(labels);
   const count = createElement('span', 'vehicle-marker__count');
   marker.appendChild(count);
-  marker.__parts = { arrow, body, label, labels, count };
+  marker.__parts = { arrow, body, top, bottom, badge, labels, count };
   return marker;
 }
 
@@ -484,7 +509,7 @@ function updateMarker(marker, cluster, routeStyles, projectCoordinate) {
   const style = vehicleMarkerStyle(lead, routeStyles);
   marker.style.setProperty('--route-color', style.color);
   marker.style.setProperty('--route-text-color', style.textColor);
-  renderVehicleBubbleLabel(marker.__parts.label, lead, true);
+  renderVehicleIcon(marker, lead);
 
   while (marker.__parts.labels.firstChild) {
     marker.__parts.labels.removeChild(marker.__parts.labels.firstChild);
