@@ -34,3 +34,7 @@ Thumbs.db
 # Monitor
 monitor/cache/
 monitor/logs/
+
+# Raw training video sources (transcoded MP4s live in frontend/src/training-videos/media)
+drive-download-*/
+*.mov

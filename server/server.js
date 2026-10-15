@@ -692,7 +692,18 @@ async function getSimcoeRegionVehiclePayload() {
 
 const router = express.Router();
 const apiRouter = express.Router();
-const TRAINING_CSP = "default-src 'self'; style-src 'self'; script-src 'self' https://www.youtube.com https://s.ytimg.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com; img-src 'self' data: https://i.ytimg.com; connect-src 'self' https://www.youtube.com;";
+const TRAINING_CSP = "default-src 'self'; style-src 'self'; script-src 'self'; media-src 'self'; img-src 'self' data:; connect-src 'self';";
+
+// Serve training video media files
+router.use('/training-videos/media', express.static(path.join(__dirname, '..', 'frontend', 'src', 'training-videos', 'media'), {
+  setHeaders(res, servedPath) {
+    if (servedPath.endsWith('.mov') || servedPath.endsWith('.mp4')) {
+      res.setHeader('Content-Type', 'video/mp4');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      res.setHeader('Accept-Ranges', 'bytes');
+    }
+  }
+}));
 
 router.use(express.static(FRONTEND_DIR, {
   extensions: ['html'],

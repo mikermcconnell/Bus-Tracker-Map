@@ -1,11 +1,8 @@
-// Only videos with an approved timed transcript belong in this catalogue.
-// Once the public YouTube playlist exists, paste its ID here. Videos added to
-// that playlist are displayed only when their ID is also present below.
-export const PLAYLIST_ID = '';
-
+// Local video files with timed transcripts
 export const VIDEOS = [
   {
-    id: 'RU5GO8qtHUE',
+    id: 'how-to-wait-and-board',
+    file: 'how-to-wait-and-board.mp4',
     title: 'How to Wait for and Board a Bus',
     cues: [
       {
@@ -36,7 +33,8 @@ export const VIDEOS = [
     ]
   },
   {
-    id: 'Rdip0McYaHM',
+    id: 'how-to-pay-fare',
+    file: 'how-to-pay-fare.mp4',
     title: 'How to Pay Your Fare',
     cues: [
       {
@@ -70,5 +68,65 @@ export const VIDEOS = [
         text: 'Whether you are using the app, a transit pass, or cash, paying your fare is simple and easy.'
       }
     ]
+  },
+  {
+    id: 'bus-stop-sign',
+    file: 'bus-stop-sign.mp4',
+    title: 'How to Read and Understand a Bus Stop Sign',
+    cues: []
+  },
+  {
+    id: 'exiting-bus',
+    file: 'exiting-bus.mp4',
+    title: 'Exiting the Bus',
+    cues: []
+  },
+  {
+    id: 'georgian-college-upass',
+    file: 'georgian-college-upass.mp4',
+    title: 'Georgian College, UPASS, and Barrie Transit',
+    cues: []
+  },
+  {
+    id: 'etiquette-exiting',
+    file: 'etiquette-exiting.mp4',
+    title: 'Rider Etiquette: Exiting the Bus',
+    cues: []
+  },
+  {
+    id: 'etiquette-fare-ready',
+    file: 'etiquette-fare-ready.mp4',
+    title: 'Rider Etiquette: Have Your Fare Ready',
+    cues: []
+  },
+  {
+    id: 'etiquette-bags',
+    file: 'etiquette-bags.mp4',
+    title: 'Rider Etiquette: Bags',
+    cues: []
+  },
+  {
+    id: 'etiquette-garbage',
+    file: 'etiquette-garbage.mp4',
+    title: 'Rider Etiquette: Garbage',
+    cues: []
+  },
+  {
+    id: 'etiquette-headphones',
+    file: 'etiquette-headphones.mp4',
+    title: 'Rider Etiquette: Headphones',
+    cues: []
+  },
+  {
+    id: 'etiquette-priority-seating',
+    file: 'etiquette-priority-seating.mp4',
+    title: 'Rider Etiquette: Priority Seating',
+    cues: []
+  },
+  {
+    id: 'winter-tips',
+    file: 'winter-tips.mp4',
+    title: 'Winter Transit Tips',
+    cues: []
   }
 ];
