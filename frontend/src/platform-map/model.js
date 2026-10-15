@@ -3,6 +3,7 @@ export const MAP_IMAGE_HEIGHT = 9010;
 export const MAP_IMAGE_RATIO = MAP_IMAGE_WIDTH / MAP_IMAGE_HEIGHT;
 
 const AT_PLATFORM_MAX_LEAD_MS = 20 * 60 * 1000;
+const AT_PLATFORM_DEPARTED_GRACE_MS = 2 * 60 * 1000;
 
 const REFERENCE_VIEWPORT = Object.freeze({ width: 1920, height: 1080 });
 const REFERENCE_CALIBRATION = Object.freeze([
@@ -194,9 +195,23 @@ export function isTerminalDisplayVehicle(vehicle) {
 }
 
 export function isAtPlatformDepartureEligible(vehicle, nowMs = Date.now()) {
+  if (vehicle && vehicle.terminal_is_departure === false) return false;
   const departureMs = Number(vehicle && vehicle.terminal_departure_time) * 1000;
   if (!Number.isFinite(departureMs) || departureMs <= 0) return true;
-  return departureMs - nowMs <= AT_PLATFORM_MAX_LEAD_MS;
+  // A terminal time well in the past belongs to a trip that has already ended
+  // here (or left), not to a bus that riders can board now.
+  const leadMs = departureMs - nowMs;
+  return leadMs >= -AT_PLATFORM_DEPARTED_GRACE_MS && leadMs <= AT_PLATFORM_MAX_LEAD_MS;
+}
+
+export function departureMatchesVehicle(departure, vehicle) {
+  if (!departure || !vehicle) return false;
+  const vehicleId = String(vehicle.id || '');
+  const tripId = String(vehicle.trip_id || '');
+  return Boolean(
+    vehicleId && String(departure.live_vehicle_id || '') === vehicleId ||
+    tripId && String(departure.trip_id || '') === tripId
+  );
 }
 
 export function groupPlatformAssignments(assignments) {
@@ -236,4 +251,134 @@ export function departureSourceDisplay(departure, hasActiveVehicle = false) {
   );
   if (hasMatchingVehicle) return { key: 'live', label: 'Live' };
   return { key: 'scheduled', label: 'Scheduled' };
+}
+
+export const DEPARTURE_NOW_GRACE_MS = 60 * 1000;
+// Trips shortly after midnight belong to tonight's service, so keep counting
+// down instead of showing "No more today".
+const COUNTDOWN_ACROSS_MIDNIGHT_MS = 2 * 60 * 60 * 1000;
+const COUNTDOWN_LIMIT_MINUTES = 60;
+
+export function formatScheduledDeparture(timestampSeconds) {
+  const timestamp = Number(timestampSeconds);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return '';
+  const date = new Date(timestamp * 1000);
+  if (!Number.isFinite(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Toronto',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function localDateKey(date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Toronto',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+export function departureDisplay(timestampSeconds, nowMs = Date.now()) {
+  const timestamp = Number(timestampSeconds);
+  const departure = new Date(timestamp * 1000);
+  if (!Number.isFinite(timestamp) || timestamp <= 0 || !Number.isFinite(departure.getTime())) {
+    return { primary: 'See schedule', secondary: '', state: 'unavailable' };
+  }
+
+  const differenceMs = departure.getTime() - nowMs;
+  if (differenceMs < -DEPARTURE_NOW_GRACE_MS) {
+    return { primary: 'See schedule', secondary: '', state: 'past' };
+  }
+
+  const scheduledTime = formatScheduledDeparture(timestamp);
+  const todayKey = localDateKey(new Date(nowMs));
+  const departureKey = localDateKey(departure);
+  if (departureKey === todayKey || differenceMs < COUNTDOWN_ACROSS_MIDNIGHT_MS) {
+    // Round down so riders are never told they have more time than they do.
+    const minutes = Math.max(0, Math.floor(differenceMs / 60000));
+    // Beyond an hour a clock time is easier to read than a large countdown.
+    if (minutes > COUNTDOWN_LIMIT_MINUTES) {
+      return { primary: scheduledTime, secondary: '', state: 'today' };
+    }
+    return {
+      primary: minutes === 0 ? 'Due' : `${minutes} min`,
+      secondary: scheduledTime,
+      state: minutes <= 10 ? 'soon' : 'today',
+    };
+  }
+
+  const tomorrowKey = localDateKey(new Date(nowMs + 24 * 60 * 60 * 1000));
+  if (departureKey === tomorrowKey) {
+    return {
+      primary: 'No more today',
+      secondary: `Next ${scheduledTime}`,
+      state: 'future-day',
+    };
+  }
+
+  const dayLabel = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Toronto',
+    weekday: 'short',
+  }).format(departure);
+  return {
+    primary: dayLabel,
+    secondary: scheduledTime,
+    state: 'future-day',
+  };
+}
+
+// ---------- Simulator base map ----------
+
+// Ground points map onto the tilted simulator capture through a homography
+// (see scripts/capture-platform-basemap.js). Returns image pixels.
+const coordinateNumber = (value) => (value === null || value === undefined || value === '' ? NaN : Number(value));
+
+export function basemapPixel(lat, lon, calibration) {
+  const numericLat = coordinateNumber(lat);
+  const numericLon = coordinateNumber(lon);
+  if (!calibration || !Number.isFinite(numericLat) || !Number.isFinite(numericLon)) return null;
+  const h = calibration.homography;
+  const u = (numericLon - calibration.center.lon) * calibration.input_scale;
+  const v = (numericLat - calibration.center.lat) * calibration.input_scale;
+  const w = h[6] * u + h[7] * v + 1;
+  if (!Number.isFinite(w) || w === 0) return null;
+  return { x: (h[0] * u + h[1] * v + h[2]) / w, y: (h[3] * u + h[4] * v + h[5]) / w };
+}
+
+// The base map fills the map plane, so pixels convert straight to plane percent.
+export function projectToBasemap(lat, lon, calibration) {
+  const pixel = basemapPixel(lat, lon, calibration);
+  if (!pixel) return null;
+  return { x: pixel.x / calibration.width * 100, y: pixel.y / calibration.height * 100 };
+}
+
+// ---------- GO track ----------
+
+const METRES_PER_DEGREE = 111195;
+
+function trackMetres(track, lat, lon) {
+  const [west] = track;
+  const kx = Math.cos(west[0] * Math.PI / 180) * METRES_PER_DEGREE;
+  return [(lon - west[1]) * kx, (lat - west[0]) * METRES_PER_DEGREE];
+}
+
+// Distance (m) east along a straight track from its west end, and how far off the track the point is.
+export function snapToTrack(track, lat, lon) {
+  const [ex, ey] = trackMetres(track, track[1][0], track[1][1]);
+  const [px, py] = trackMetres(track, Number(lat), Number(lon));
+  const length = Math.hypot(ex, ey);
+  if (!length || !Number.isFinite(px) || !Number.isFinite(py)) return null;
+  const along = (px * ex + py * ey) / length;
+  const offset = Math.abs(px * ey - py * ex) / length;
+  return { along, offset, length };
+}
+
+// Latitude/longitude of the point `metres` east of the track's west end.
+export function trackPoint(track, metres) {
+  const [west, east] = track;
+  const { length } = snapToTrack(track, east[0], east[1]);
+  const t = metres / length;
+  return [west[0] + (east[0] - west[0]) * t, west[1] + (east[1] - west[1]) * t];
 }

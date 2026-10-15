@@ -110,6 +110,8 @@ function localServiceDateKeys(nowMs, timeZone = TERMINAL_TIME_ZONE) {
 }
 
 function nextDepartureForStop(metadata, trip, stop, nowSeconds, serviceDateKeys) {
+  // Trips that end at Allandale only arrive here; riders cannot board them.
+  if (stop && stop.is_departure === false) return null;
   const departureTime = stop && (stop.departure_time || stop.arrival_time);
   if (!departureTime) return null;
   let nextDeparture = null;

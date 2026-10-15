@@ -10,7 +10,7 @@ const DEFAULT_STATIC_URL = 'https://metrolinx.tmix.se/gtfs/gtfs-simcoe.zip';
 // Tmix currently publishes Ontario vehicle positions in this shared feed.
 // Matching must therefore use the exact trip IDs from the Simcoe static feed.
 const DEFAULT_VEHICLES_URL = 'https://metrolinx.tmix.se/gtfs-realtime-belleville/vehiclepositions.pb';
-const DEFAULT_TRIP_UPDATES_URL = 'http://metrolinx.tmix.se/gtfs-realtime-simcoe/tripupdates.pb';
+const DEFAULT_TRIP_UPDATES_URL = 'https://metrolinx.tmix.se/gtfs-realtime-simcoe/tripupdates.pb';
 const DEFAULT_ALERTS_URL = 'http://metrolinx.tmix.se/gtfs-realtime-simcoe/alerts.pb';
 const REALTIME_CACHE_MS = 5_000;
 const AUXILIARY_REALTIME_CACHE_MS = 15_000;

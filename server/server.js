@@ -824,7 +824,9 @@ apiRouter.get('/departures', async (req, res) => {
       });
     }
     try {
-      const terminalPayload = await getDepartures({ limit: 30, board: 'allandale' });
+      const terminalPayload = await getDepartures({
+        limit: 30, board: 'allandale', platform: parsePlatformStopCode(stopCode).platform,
+      });
       const data = buildPlatformDeparturePayload({ stopCode, terminalPayload });
       res.setHeader('Cache-Control', 'public, max-age=5, stale-while-revalidate=5');
       return res.json(data);
@@ -1012,6 +1014,7 @@ router.get('/platform.map', (req, res, next) => {
   const platformPath = path.join(FRONTEND_DIR, 'platform.map.html');
   if (!fs.existsSync(platformPath)) return next();
   res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
+  res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(platformPath);
 });
 

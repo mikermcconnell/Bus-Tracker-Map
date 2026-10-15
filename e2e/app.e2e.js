@@ -556,7 +556,8 @@ test('platform map renders current assignments and updates markers in place', as
   });
 
   await page.goto('/platform.map');
-  await expect(page.locator('.vehicle-marker img')).toHaveCount(0);
+  // Only the Barrie Transit logo; no photo-style bus images.
+  await expect(page.locator('.vehicle-marker img:not(.vehicle-marker__logo)')).toHaveCount(0);
   await expect(page.locator('.vehicle-marker__route')).toHaveCount(3);
   await expect(page.locator('.vehicle-marker__route').first()).toHaveCSS('border-radius', '50%');
   await expect(page.locator('.vehicle-marker__route').first()).toContainText('8A');
@@ -568,19 +569,14 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(page.locator('.platform-card[data-platform="3"] .platform-card__state')).toHaveText('Arriving');
   const arrivingRow = page.locator('.platform-card[data-platform="3"] .platform-card__service[data-route-id="8A"]');
   await expect(arrivingRow).toHaveClass(/platform-card__service--active/);
-  await expect(arrivingRow.locator('.platform-card__service-countdown')).toHaveText('9 min');
+  await expect(arrivingRow.locator('.platform-card__service-countdown')).toHaveText('8 min');
   const inactiveRow = page.locator('.platform-card[data-platform="3"] .platform-card__service[data-route-id="8B"]');
-  const inactiveExpectedTime = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Toronto',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(new Date((nowSeconds + 1500) * 1000));
   await expect(inactiveRow).not.toHaveClass(/platform-card__service--active/);
   await expect(inactiveRow.locator('.platform-card__service-countdown'))
-    .toHaveText('25 min');
-  await expect(inactiveRow.locator('.platform-card__service-scheduled'))
-    .toHaveText(inactiveExpectedTime);
-  await expect(inactiveRow.locator('.platform-card__service-source')).toHaveText('Scheduled');
+    .toHaveText('24 min');
+  // One time per row: no secondary clock time and no "Scheduled" badge.
+  await expect(inactiveRow.locator('.platform-card__service-scheduled')).toHaveCount(0);
+  await expect(inactiveRow.locator('.platform-card__service-source')).toBeHidden();
   await expect(inactiveRow.locator('.platform-card__service-source'))
     .toHaveAttribute('data-source', 'scheduled');
   const longDwellCard = page.locator('.platform-card[data-platform="5"]');
@@ -588,8 +584,8 @@ test('platform map renders current assignments and updates markers in place', as
   await expect(longDwellCard).not.toHaveClass(/platform-card--occupied/);
   await expect(longDwellCard.locator('.platform-card__state')).toBeHidden();
   await expect(longDwellRow).not.toHaveClass(/platform-card__service--active/);
-  await expect(longDwellRow.locator('.platform-card__service-countdown')).toHaveText('21 min');
-  await expect(longDwellRow.locator('.platform-card__service-source')).toHaveText('Scheduled');
+  await expect(longDwellRow.locator('.platform-card__service-countdown')).toHaveText('20 min');
+  await expect(longDwellRow.locator('.platform-card__service-source')).toBeHidden();
   await expect(page.locator('.platform-card[data-platform="7"] .platform-card__state')).toHaveText('At platform');
   const trainRouteBadge = page.locator('.platform-card[data-platform="1"] .platform-card__route');
   await expect(trainRouteBadge).toHaveText('TRAIN');
@@ -616,20 +612,23 @@ test('platform map renders current assignments and updates markers in place', as
     .toHaveAttribute('src', './assets/agency-barrie-transit.png');
   await expect(page.locator('.map-connection-card[data-platform="9"]')).toContainText('Stop 900');
   const p9Connection = page.locator('.platform-connections .platform-connection[data-platform="9"]');
-  await expect(p9Connection).toBeHidden();
-  await page.evaluate(() => globalThis.window.__platformMapApp.showDeparturePage(1));
+  // Every platform is on one board; nothing waits for a page to rotate.
   await expect(p9Connection).toBeVisible();
+  await expect(page.locator('.platform-card[data-platform="1"]')).toBeVisible();
+  await expect(page.locator('.platform-card[data-platform="13"]')).toBeVisible();
   await expect(p9Connection).toContainText('On Demand');
   await expect(p9Connection).toContainText('Stop 900');
-  await expect(page.locator('#departure-page-label')).toHaveText('P7–P9 · P12–P13 · Stop 14');
+  await expect(page.locator('.departure-page-indicator')).toHaveCount(0);
   await expect(page.locator('.platform-card[data-platform="2"]')).toContainText('Wasaga Beach');
-  await expect(page.locator('#source-statuses .source-chip')).toHaveCount(1);
-  await expect(page.locator('#source-statuses .source-chip')).toContainText('LINX');
+  // Per-agency feed status is not shown to riders.
+  await expect(page.locator('#source-statuses')).toHaveCount(0);
   await expect(page.locator('#service-notice-text'))
     .toHaveText('Holiday service — Sunday schedule on Monday, August 3.');
   await expect(page.locator('#map-label-layer .map-dropoff-card')).toContainText('Passenger');
-  await expect(page.locator('.map-platform-card[data-platform="3"] .map-platform-card__status')).toHaveText('8A arriving');
-  await expect(page.locator('.map-platform-card[data-platform="7"] .map-platform-card__status')).toContainText('Departs');
+  // Map cards show platform and routes only; times live on the board.
+  await expect(page.locator('.map-platform-card__status')).toHaveCount(0);
+  await expect(page.locator('.map-platform-card[data-platform="3"]')).toHaveClass(/map-platform-card--approaching/);
+  await expect(page.locator('.map-platform-card[data-platform="7"]')).toHaveClass(/map-platform-card--occupied/);
   await expect(page.locator('.map-platform-card[data-platform="5"]')).not.toHaveClass(/map-platform-card--occupied/);
   await expect(page.locator('.map-platform-card[data-platform="7"] .map-platform-card__route')).toContainText('68');
   await expect(page.locator('.map-platform-card[data-platform="14"]')).toContainText('12B');
@@ -649,16 +648,16 @@ test('platform map renders current assignments and updates markers in place', as
     ).fontSize),
     insidePanel: card.getBoundingClientRect().right <= card.closest('.platform-directory').getBoundingClientRect().right,
   }));
-  expect(tvTypography.platform).toBeGreaterThanOrEqual(26);
-  expect(tvTypography.destination).toBeGreaterThanOrEqual(20);
-  expect(tvTypography.state).toBeGreaterThanOrEqual(16);
-  expect(tvTypography.scheduledTime).toBeGreaterThanOrEqual(20);
+  // Sizes for reading a 60-inch 1080p screen from several metres away.
+  expect(tvTypography.platform).toBeGreaterThanOrEqual(36);
+  expect(tvTypography.destination).toBeGreaterThanOrEqual(24);
+  expect(tvTypography.state).toBeGreaterThanOrEqual(18);
+  expect(tvTypography.scheduledTime).toBeGreaterThanOrEqual(38);
   expect(tvTypography.insidePanel).toBe(true);
   await expect(page.locator('.vehicle-marker')).toHaveCount(1);
   await expect(page.locator('.vehicle-marker__count')).toHaveText('3 vehicles');
   await expect(page.locator('.vehicle-marker__detail')).toHaveCount(0);
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.evaluate(() => globalThis.window.__platformMapApp.showDeparturePage(1));
   const compactDirectoryFits = await page.locator('.platform-directory').evaluate((directory) => {
     const visibleCards = Array.from(directory.querySelectorAll(
       '.platform-card:not([hidden]), .platform-connections:not([hidden])'
@@ -828,8 +827,8 @@ test('platform map hides vehicle icons when the live feed goes offline', async (
   await page.goto('/platform.map');
   await expect(page.locator('.vehicle-marker')).toHaveCount(1);
   await expect(page.locator('.vehicle-marker')).toHaveCount(0, { timeout: 3000 });
-  await expect(page.locator('#connection-label')).toHaveText('OFFLINE');
-  await expect(page.locator('#platform-status')).toContainText('Icons are hidden');
+  await expect(page.locator('#connection-label')).toHaveText('SCHEDULED TIMES');
+  await expect(page.locator('#platform-status')).toHaveText('Live bus tracking is unavailable. Times may not reflect delays.');
 });
 
 test('notice display renders a holding state', async ({ page }) => {
@@ -851,4 +850,186 @@ test('notice display renders a holding state', async ({ page }) => {
   await expect(page).toHaveTitle(/Service Notices/);
   await expect(page.locator('#holding-title')).toContainText(/No active .*service notices/i);
   expect(errors).toEqual([]);
+});
+
+function platformVehiclePayload(nowSeconds) {
+  return {
+    feed_timestamp: nowSeconds,
+    vehicles: [{
+      id: 'resilient-bus',
+      route_id: '7A',
+      route_label: '7A',
+      agency_id: 'barrie-transit',
+      lat: 44.373837,
+      lon: -79.689279,
+      last_reported: nowSeconds,
+    }],
+    sources: {
+      barrie_transit: { feed_status: 'live' },
+      go_transit: { feed_status: 'live' },
+      ontario_northland: { feed_status: 'live' },
+      simcoe_linx: { feed_status: 'live' },
+    },
+  };
+}
+
+test('platform map rides out brief poll failures and hung requests', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  let pollCount = 0;
+  await page.route('**/api/config', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ poll_ms: 750, feed_delayed_after_ms: 120000, feed_offline_after_ms: 900000, base_path: '/' }),
+  }));
+  await page.route('**/api/vehicles.json*', (route) => {
+    pollCount += 1;
+    if (pollCount === 2) return route.fulfill({ status: 500, body: 'upstream error' });
+    // Poll 3 never answers; the request timeout must free the loop.
+    if (pollCount === 3) return undefined;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(platformVehiclePayload(nowSeconds)),
+    });
+  });
+
+  await page.goto('/platform.map');
+  await expect(page.locator('#connection-label')).toHaveText('LIVE');
+  await expect.poll(() => pollCount).toBeGreaterThanOrEqual(3);
+  await expect(page.locator('#connection-label')).toHaveText('LIVE');
+  await expect(page.locator('.vehicle-marker')).toHaveCount(1);
+  await expect.poll(() => pollCount, { timeout: 15000 }).toBeGreaterThanOrEqual(4);
+  await expect(page.locator('#connection-label')).toHaveText('LIVE');
+});
+
+test('platform map starts its clock and polling when the network is down at boot', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  let configCalls = 0;
+  await page.route('**/api/config', (route) => {
+    configCalls += 1;
+    if (configCalls === 1) return route.abort('internetdisconnected');
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ poll_ms: 750, feed_delayed_after_ms: 120000, feed_offline_after_ms: 900000, base_path: '/' }),
+    });
+  });
+  await page.route('**/api/vehicles.json*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(platformVehiclePayload(nowSeconds)),
+  }));
+
+  await page.goto('/platform.map');
+  await expect(page.locator('#platform-clock')).not.toHaveText('--:--');
+  await expect(page.locator('.vehicle-marker')).toHaveCount(1);
+  await expect.poll(() => configCalls, { timeout: 10000 }).toBeGreaterThanOrEqual(2);
+});
+
+test('platform map draws a boarding GO train on the simulator map and marks P1 boarding', async ({ page }) => {
+  const errors = captureRuntimeErrors(page);
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.route('**/api/vehicles.json*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      feed_timestamp: nowSeconds,
+      vehicles: [{
+        id: 'go-transit:train-1',
+        agency_id: 'go-transit',
+        agency_name: 'GO Transit',
+        route_id: 'GO-TRAIN',
+        route_label: 'GO TRAIN',
+        route_mode: 'train',
+        trip_headsign: 'Union Station',
+        lat: 44.37352,
+        lon: -79.6878,
+        last_reported: nowSeconds,
+        terminal_progress_status: 'at_terminal',
+        terminal_stop_id: 'AD',
+        terminal_is_departure: true,
+        terminal_departure_time: nowSeconds + 600,
+      }],
+      sources: platformVehiclePayload(nowSeconds).sources,
+    }),
+  }));
+
+  await page.goto('/platform.map');
+  await expect(page.locator('.platform-basemap__image')).toHaveAttribute('src', './assets/allandale-sim-basemap.webp');
+  await expect(page.locator('.platform-basemap__attribution')).toContainText('OpenStreetMap');
+  await expect(page.locator('.map-here__dot')).toHaveCount(1);
+  await expect(page.locator('.map-legend')).toContainText('You are here');
+  await expect(page.locator('.map-go-train-layer .map-go-train')).toHaveCount(1);
+  await expect(page.locator('.map-go-train-tag')).toContainText('GO Train · Boarding');
+  await expect(page.locator('.map-go-train-tag')).toContainText('to Union Station');
+  // The train is drawn on the track, not also as a bubble marker.
+  await expect(page.locator('.vehicle-marker')).toHaveCount(0);
+  await expect(page.locator('.platform-card[data-platform="1"] .platform-card__state')).toHaveText('Boarding');
+  // The train sits inside the visible map, between the platforms and the bottom cards.
+  const placement = await page.evaluate(() => {
+    const stage = globalThis.document.querySelector('.map-stage').getBoundingClientRect();
+    const train = globalThis.document.querySelector('.map-go-train').getBoundingClientRect();
+    const tag = globalThis.document.querySelector('.map-go-train-tag').getBoundingClientRect();
+    const cards = globalThis.document.querySelector('.map-label-rail--bottom').getBoundingClientRect();
+    return {
+      trainVisible: train.left < stage.right && train.right > stage.left && train.top > stage.top && train.bottom < cards.top,
+      tagInside: tag.left >= stage.left && tag.right <= stage.right && tag.bottom <= cards.top,
+    };
+  });
+  expect(placement).toEqual({ trainVisible: true, tagInside: true });
+  expect(errors).toEqual([]);
+});
+
+test('platform map board rows and pointer labels fit in a shorter browser window', async ({ page }) => {
+  await page.setViewportSize({ width: 1760, height: 913 });
+  await page.goto('/platform.map');
+  await expect(page.locator('#platform-directory-title')).toHaveText('Next Departures');
+  await expect(page.locator('.map-platform-anchor__label')).not.toHaveCount(0);
+  const fit = await page.evaluate(() => {
+    const doc = globalThis.document;
+    const clippedRows = Array.from(doc.querySelectorAll('.platform-card, .platform-connections'))
+      .filter((row) => row.scrollHeight > row.clientHeight + 1).length;
+    const labels = Array.from(doc.querySelectorAll('.map-platform-anchor__label')).map((label) => label.getBoundingClientRect());
+    let overlaps = 0;
+    labels.forEach((a, index) => labels.slice(index + 1).forEach((b) => {
+      if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) overlaps += 1;
+    }));
+    const headerBottom = doc.querySelector('.platform-header').getBoundingClientRect().bottom;
+    const headerTextGap = Math.min(...['.platform-header h1', '#last-updated']
+      .map((selector) => headerBottom - doc.querySelector(selector).getBoundingClientRect().bottom));
+    const liveColumns = new Set(Array.from(doc.querySelectorAll('.platform-card__service-source'))
+      .filter((badge) => badge.offsetParent).map((badge) => Math.round(badge.getBoundingClientRect().left))).size;
+    return { clippedRows, overlaps, headerClearsLine: headerTextGap >= 10, liveColumns };
+  });
+  expect(fit).toMatchObject({ clippedRows: 0, overlaps: 0, headerClearsLine: true });
+  // Zero when no trip is live at test time; otherwise every badge shares one column.
+  expect(fit.liveColumns).toBeLessThanOrEqual(1);
+});
+
+test('platform map lines up every LIVE badge in one column', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  // Live trips 1 to 55 minutes away: time widths differ, badges must not.
+  await page.route('**/api/departures?*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      departures: [['3', '8A', 60], ['4', '8B', 18 * 60], ['5', '8A', 55 * 60]].map(([platform, route, seconds]) => ({
+        platform,
+        agency_id: 'barrie-transit',
+        route_id: route,
+        route_label: route,
+        scheduled_departure_time: nowSeconds + seconds,
+        expected_departure_time: nowSeconds + seconds,
+        departure_source: 'realtime',
+        live_vehicle_id: `bus-${platform}`,
+      })),
+    }),
+  }));
+  await page.goto('/platform.map');
+  await expect(page.locator('.platform-card__service-source:visible')).toHaveCount(3);
+  const lefts = await page.locator('.platform-card__service-source:visible')
+    .evaluateAll((badges) => badges.map((badge) => Math.round(badge.getBoundingClientRect().left)));
+  expect(new Set(lefts).size).toBe(1);
 });

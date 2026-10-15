@@ -22,6 +22,17 @@ function parseTripUpdates(feed, terminalStopIds) {
     const trip = update && update.trip;
     if (!update || !trip || !trip.tripId) continue;
     const canceled = isRelationship(trip.scheduleRelationship, 'CANCELED', 3);
+    if (canceled) {
+      // Cancellation is a trip-level event; publishers need not include stops.
+      updates.push({
+        trip_id: String(trip.tripId),
+        route_id: trip.routeId ? String(trip.routeId) : null,
+        start_date: trip.startDate ? String(trip.startDate) : null,
+        trip_level: true,
+        canceled: true,
+      });
+      continue;
+    }
     for (const stop of update.stopTimeUpdate || []) {
       const stopId = String(stop && stop.stopId || '');
       if (!terminalIds.has(stopId)) continue;
@@ -32,10 +43,13 @@ function parseTripUpdates(feed, terminalStopIds) {
         start_date: trip.startDate ? String(trip.startDate) : null,
         stop_id: stopId,
         stop_sequence: readNumber(stop.stopSequence),
-        departure_time: readNumber(departure.time),
-        delay_seconds: readNumber(departure.delay),
+        // Protobuf exposes prototype defaults (time=0, delay=0) even when the
+        // publisher sent neither field. Only an explicitly present zero counts.
+        departure_time: Object.prototype.hasOwnProperty.call(departure, 'time') ? readNumber(departure.time) : null,
+        delay_seconds: Object.prototype.hasOwnProperty.call(departure, 'delay') ? readNumber(departure.delay) : null,
         canceled,
         skipped: isRelationship(stop.scheduleRelationship, 'SKIPPED', 1),
+        no_data: isRelationship(stop.scheduleRelationship, 'NO_DATA', 2),
       });
     }
   }
@@ -45,7 +59,8 @@ function parseTripUpdates(feed, terminalStopIds) {
 async function fetchTripUpdates(url, terminalStopIds, options = {}) {
   if (!url) throw new Error('Trip updates feed is not configured');
   const now = Number(options.now || Date.now());
-  const cached = cache.get(url);
+  const cacheKey = JSON.stringify([url, [...(terminalStopIds || [])].map(String).sort()]);
+  const cached = cache.get(cacheKey);
   if (cached && now - cached.fetched_at < CACHE_MS) return cached.value;
   const response = await fetch(url, {
     timeout: 10_000,
@@ -58,7 +73,7 @@ async function fetchTripUpdates(url, terminalStopIds, options = {}) {
     feed_timestamp: readNumber(feed && feed.header && feed.header.timestamp),
     updates: parseTripUpdates(feed, terminalStopIds),
   };
-  cache.set(url, { fetched_at: now, value });
+  cache.set(cacheKey, { fetched_at: now, value });
   return value;
 }
 

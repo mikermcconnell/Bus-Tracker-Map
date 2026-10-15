@@ -600,7 +600,6 @@ function getNowContext(now = new Date(), timeZone = DEFAULT_MONITOR_TIMEZONE) {
  * Convenience wrapper: get expected buses right now.
  */
 async function getExpectedBuses(gtfsUrl, cachePath, maxAgeHours = 24, layoverGraceMin = 0, options = {}) {
-  const zip = await loadGtfsZip(gtfsUrl, cachePath, maxAgeHours);
   const serviceOverrides = normalizeServiceOverrides(
     options.serviceOverrides || loadServiceOverrides(cachePath)
   );
@@ -610,7 +609,23 @@ async function getExpectedBuses(gtfsUrl, cachePath, maxAgeHours = 24, layoverGra
   const { today, yesterday, nowSecs } = getNowContext(now, monitorTimeZone);
 
   const layoverGraceSecs = Math.max(0, Number(layoverGraceMin) || 0) * 60;
+  const context = { serviceOverrides, today, yesterday, nowSecs, layoverGraceSecs };
 
+  const result = computeExpectedBuses(await loadGtfsZip(gtfsUrl, cachePath, maxAgeHours), context);
+  if (!result.coverageIssue) return result;
+
+  // A cached ZIP can be an older or briefly published feed version. Confirm
+  // against a fresh download before reporting that the feed misses today.
+  console.warn(
+    '[schedule] GTFS ZIP does not cover %s (coverage: %s to %s); re-downloading to confirm.',
+    result.coverageIssue.date,
+    result.coverageIssue.feedCoverageStart || 'unknown',
+    result.coverageIssue.feedCoverageEnd || 'unknown'
+  );
+  return computeExpectedBuses(await loadGtfsZip(gtfsUrl, cachePath, 0), context);
+}
+
+function computeExpectedBuses(zip, { serviceOverrides, today, yesterday, nowSecs, layoverGraceSecs }) {
   // Today's service
   const todayServiceOverride = getServiceOverrideForDate(serviceOverrides, today);
   const todayServiceSelection = getActiveServiceSelection(zip, today, todayServiceOverride);

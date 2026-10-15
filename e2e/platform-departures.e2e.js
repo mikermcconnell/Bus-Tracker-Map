@@ -139,7 +139,9 @@ test('platform sign keeps the current board mounted across polls and restores it
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('.route-cell')).toHaveText('2 - Wasaga Beach 45th St');
   await expect(page.locator('.route-cell')).not.toHaveText('Departure information');
-  await expect(page.locator('#departure-status')).toContainText('temporarily unavailable');
+  await expect(page.locator('#departure-health')).toHaveText('Updates unavailable');
+  await expect(page.locator('#departure-health')).toBeVisible();
+  await expect(page.locator('.departure-cell')).not.toHaveAttribute('data-source', 'realtime');
 });
 
 test('platform sign does not rewrite unchanged clock and countdown text every second', async ({ page }) => {
@@ -287,4 +289,104 @@ test('departure sign fits a 320 by 80 platform display without clipping', async 
   if (process.env.CAPTURE_DEPARTURES_320 === '1') {
     await page.screenshot({ path: 'tmp/departures-320x80.png' });
   }
+});
+
+function reliabilityPayload(nowMs, changes = {}) {
+  return { stop_code: '9002', platform: '2', platform_display: '02',
+    generated_at: nowMs, horizon_hours: 72, status: 'ok',
+    departures: [{ agency_id: 'simcoe-linx', route_label: '2', destination: 'Wasaga Beach 45th St',
+      departure_time: nowMs / 1000 + 1200, scheduled_departure_time: nowMs / 1000 + 600,
+      departure_source: 'realtime', prediction_timestamp: nowMs, live_valid_until: nowMs + 120000 }],
+    ...changes };
+}
+
+test('compact sign visibly warns and drops LIVE during outages, then recovers', async ({ page }) => {
+  const nowMs = Date.parse('2026-10-02T16:00:00Z');
+  let available = true;
+  await page.clock.install({ time: nowMs });
+  await page.setViewportSize({ width: 320, height: 80 });
+  await page.route('**/api/departures?*', async (route) => available
+    ? route.fulfill({ json: reliabilityPayload(nowMs) }) : route.abort());
+  await page.goto('/departures/platform.aspx?stop=9002');
+  await expect(page.locator('.departure-cell')).toHaveAttribute('data-source', 'realtime');
+  available = false;
+  await page.clock.fastForward(10001);
+  await expect(page.locator('#departure-health')).toHaveText('Updates unavailable');
+  await expect(page.locator('#departure-health')).toBeVisible();
+  await expect(page.locator('.departure-cell')).toHaveAttribute('data-source', 'scheduled');
+  const layout = await page.locator('.departure-board').boundingBox();
+  expect(layout.width).toBeLessThanOrEqual(320);
+  expect(layout.height).toBeLessThanOrEqual(80);
+  available = true;
+  await page.clock.fastForward(10001);
+  await expect(page.locator('.departure-cell')).toHaveAttribute('data-source', 'realtime');
+  await expect(page.locator('#departure-health')).toBeHidden();
+});
+
+test('cached live rows are provisional and expire while the page remains open', async ({ page }) => {
+  const nowMs = Date.parse('2026-10-02T16:00:00Z');
+  await page.clock.install({ time: nowMs });
+  await page.setViewportSize({ width: 320, height: 80 });
+  await page.addInitScript(({ at, data }) => {
+    localStorage.setItem('platform-departures:v1:9002', JSON.stringify({ saved_at: at, payload: data }));
+  }, { at: nowMs, data: reliabilityPayload(nowMs) });
+  await page.route('**/api/departures?*', (route) => route.abort());
+  await page.goto('/departures/platform.aspx?stop=9002');
+  await expect(page.locator('.departure-cell')).toHaveAttribute('data-source', 'scheduled');
+  await expect(page.locator('#departure-health')).toBeVisible();
+  await page.clock.fastForward(30 * 60000 + 1);
+  await expect(page.locator('.route-cell')).toHaveText('Departures unavailable');
+  await expect(page.locator('[data-source="realtime"]')).toHaveCount(0);
+});
+
+test('a hanging request times out and the sign resumes polling without accepting a late result', async ({ page }) => {
+  const nowMs = Date.parse('2026-10-02T16:00:00Z');
+  let firstRequest;
+  let requests = 0;
+  await page.clock.install({ time: nowMs });
+  await page.setViewportSize({ width: 320, height: 80 });
+  await page.route('**/api/departures?*', (route) => {
+    requests += 1;
+    if (requests === 1) { firstRequest = route; return; }
+    return route.fulfill({ json: reliabilityPayload(nowMs) });
+  });
+  await page.goto('/departures/platform.aspx?stop=9002');
+  await expect.poll(() => requests).toBe(1);
+  await page.clock.fastForward(15001);
+  await expect(page.locator('#departure-health')).toHaveText('Updates unavailable');
+  await page.clock.fastForward(10001);
+  await expect(page.locator('.route-cell')).toHaveText('2 - Wasaga Beach 45th St');
+  expect(requests).toBeGreaterThanOrEqual(2);
+  await firstRequest.fulfill({ json: reliabilityPayload(nowMs, { departures: [{
+    route_label: 'WRONG', destination: 'Late response', departure_time: nowMs / 1000 + 2000,
+  }] }) }).catch(() => {});
+  await expect(page.locator('.route-cell')).toHaveText('2 - Wasaga Beach 45th St');
+});
+
+test('schedule outages are not described as an absence of service, and valid empty windows are explicit', async ({ page }) => {
+  const nowMs = Date.now();
+  await page.setViewportSize({ width: 320, height: 80 });
+  let state = 'schedule_unavailable';
+  await page.route('**/api/departures?*', (route) => route.fulfill({
+    json: reliabilityPayload(nowMs, { status: state, departures: [] }),
+  }));
+  await page.goto('/departures/platform.aspx?stop=9002');
+  await expect(page.locator('.route-cell')).toHaveText('Departures unavailable');
+  await expect(page.locator('#departure-health')).toHaveText('Schedule unavailable');
+  await expect(page.locator('#departure-health')).toBeVisible();
+  state = 'no_departures';
+  await page.reload();
+  await expect(page.locator('.route-cell')).toHaveText('No departures scheduled');
+  await expect(page.locator('.departure-cell')).toHaveText('In the next 72 hours');
+});
+
+test('fresh-looking responses cannot extend expired prediction evidence', async ({ page }) => {
+  const nowMs = Date.now();
+  const expired = reliabilityPayload(nowMs);
+  expired.departures[0].prediction_timestamp = nowMs - 180000;
+  expired.departures[0].live_valid_until = nowMs - 60000;
+  await page.setViewportSize({ width: 320, height: 80 });
+  await page.route('**/api/departures?*', (route) => route.fulfill({ json: expired }));
+  await page.goto('/departures/platform.aspx?stop=9002');
+  await expect(page.locator('.departure-cell')).toHaveAttribute('data-source', 'scheduled');
 });

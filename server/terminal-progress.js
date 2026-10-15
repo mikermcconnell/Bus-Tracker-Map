@@ -26,6 +26,7 @@ function normalizeTerminalStops(stops) {
       departure_time: stop && (stop.departure_time || stop.arrival_time)
         ? String(stop.departure_time || stop.arrival_time)
         : null,
+      is_departure: typeof (stop && stop.is_departure) === 'boolean' ? stop.is_departure : null,
     }))
     .filter((stop) => stop.stop_id && stop.stop_sequence !== null)
     .sort((a, b) => a.stop_sequence - b.stop_sequence);
@@ -264,6 +265,8 @@ function enrichTerminalProgress(vehicle, options = {}) {
     terminal_progress_status: progress.status,
     terminal_departure_time: departure.time,
     terminal_departure_source: departure.source,
+    // False when this trip ends at the terminal, so riders cannot board it.
+    terminal_is_departure: terminalStop ? terminalStop.is_departure : null,
   };
 }
 

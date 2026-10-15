@@ -170,6 +170,40 @@ describe('terminal platform layout', () => {
     ]));
   });
 
+  test('ignores arrival-only stops when choosing the next departure', () => {
+    const layout = buildTerminalLayout({
+      now: '2026-07-31T13:00:00Z',
+      barrie: {
+        terminal_stops: [{ id: '9003', platform_code: '3' }],
+        service_calendars: {
+          weekday: {
+            start_date: '20260701', end_date: '20260831',
+            monday: true, tuesday: true, wednesday: true, thursday: true,
+            friday: true, saturday: false, sunday: false,
+          },
+        },
+        service_exceptions: {},
+        trips: {
+          inbound: {
+            route_id: '8A', service_id: 'weekday',
+            terminal_stops: [{ stop_id: '9003', departure_time: '09:05:00', is_departure: false }],
+          },
+          outbound: {
+            route_id: '8A', service_id: 'weekday',
+            terminal_stops: [{ stop_id: '9003', departure_time: '09:20:00', is_departure: true }],
+          },
+        },
+      },
+    });
+
+    expect(layout.assignments).toEqual([
+      expect.objectContaining({
+        platform: '3', route_id: '8A',
+        next_departure_time: Date.parse('2026-07-31T13:20:00Z') / 1000,
+      }),
+    ]);
+  });
+
   test('honours service exceptions when advancing the scheduled departure', () => {
     const layout = buildTerminalLayout({
       now: '2026-07-31T13:00:00Z',

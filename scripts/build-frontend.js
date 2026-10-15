@@ -48,9 +48,6 @@ const entryPoints = [
     key: 'platformMap',
     entryPath: path.join(srcDir, 'platform-map', 'main.js'),
     cssPath: path.join(srcDir, 'platform-map', 'styles.css'),
-    includeLeafletCss: true,
-    includeMapboxCss: true,
-    skipLegacyDownlevel: true,
     templatePath: path.join(srcDir, 'platform-map', 'index.html'),
     outputHtml: 'platform.map.html'
   },
@@ -152,6 +149,10 @@ function copyPlatformMapAssets() {
   if (fs.existsSync(mapSource)) {
     fs.copyFileSync(mapSource, path.join(assetsDir, 'map.png'));
   }
+  const simulatorMapSource = path.join(srcDir, 'platform-map', 'allandale-sim-basemap.webp');
+  if (fs.existsSync(simulatorMapSource)) {
+    fs.copyFileSync(simulatorMapSource, path.join(assetsDir, 'allandale-sim-basemap.webp'));
+  }
   const vectorMapSource = path.join(srcDir, 'platform-map', 'allandale-basemap.svg');
   if (fs.existsSync(vectorMapSource)) {
     fs.copyFileSync(vectorMapSource, path.join(assetsDir, 'allandale-basemap.svg'));
@@ -174,7 +175,8 @@ function copySharedAssets() {
     'agency-barrie-transit.png',
     'agency-go-transit.svg',
     'agency-ontario-northland.png',
-    'agency-simcoe-linx.png'
+    'agency-simcoe-linx.png',
+    'barrie-sim-city.webp'
   ];
   if (!fs.existsSync(sharedAssetsDir)) return;
 

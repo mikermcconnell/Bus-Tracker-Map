@@ -1,10 +1,11 @@
-import L from 'leaflet';
-import mapboxgl from 'mapbox-gl';
 import { createDataClient } from '../data/client.js';
 import { BATT_COORDS, getTerminalListStatus } from '../map/nearby-vehicles.js';
 import { clusterVehicles, distanceBetweenMeters } from '../map/vehicle-groups.js';
 import feedFreshness from '../../../shared/feed-freshness.js';
 import {
+  DEPARTURE_NOW_GRACE_MS,
+  departureDisplay,
+  departureMatchesVehicle,
   departureSourceDisplay,
   getRouteEightDirection,
   getVehicleLabel,
@@ -14,26 +15,43 @@ import {
   isTerminalDisplayVehicle,
   normalizeDepartureBoard,
   normalizeBearing,
+  projectToBasemap,
   projectVehicleToImage,
+  basemapPixel,
+  snapToTrack,
+  trackPoint,
 } from './model.js';
+import {
+  GO_TRAIN_CAR_GAP_METRES,
+  GO_TRAIN_CONSIST,
+  describeGoTrain,
+  drawGoTrain,
+  isGoTrain,
+} from './go-train.js';
+import BASEMAP_CALIBRATION from './basemap-calibration.json';
+import {
+  fetchText,
+  isNewBuild,
+  isNightlyReloadDue,
+  isPollStalled,
+} from './kiosk.js';
 
 const { assessVehicleFeedFreshness, selectVehiclesForDisplay } = feedFreshness;
+const SVG_NS = 'http://www.w3.org/2000/svg';
 const DEFAULT_POLL_MS = 10000;
+const LIVE_TRACKING_UNAVAILABLE_MESSAGE = 'Live bus tracking is unavailable. Times may not reflect delays.';
+const REQUEST_TIMEOUT_MS = 8000;
+// Keep the last departure board through brief outages, then fall back to the
+// timetable so an old prediction is never shown as current.
+const DEPARTURES_RETENTION_MS = 2 * 60 * 1000;
+const CONFIG_RETRY_MAX_MS = 60 * 1000;
+const KIOSK_CHECK_INTERVAL_MS = 60 * 1000;
+const BUILD_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+// With no successful poll for this long, reload to clear any broken state.
+const NO_DATA_RELOAD_MS = 10 * 60 * 1000;
 const CLUSTER_DISTANCE_METERS = 8;
 const APPROACHING_WINDOW_MS = 5 * 60 * 1000;
 const APPROACHING_DISTANCE_METERS = 500;
-const DEPARTURE_NOW_GRACE_MS = 60 * 1000;
-const DEPARTURE_PAGE_ROTATION_SECONDS = 15;
-const PLATFORM_MAP_CENTER = Object.freeze([44.373974, -79.689423]);
-const PLATFORM_MAP_ZOOM = 18.1;
-const PLATFORM_MAPBOX_ZOOM = PLATFORM_MAP_ZOOM - 1;
-const PLATFORM_BASEMAP_LOAD_TIMEOUT_MS = 15000;
-const SOURCE_DEFINITIONS = Object.freeze([
-  Object.freeze({ key: 'barrie_transit', agencyId: 'barrie-transit', label: 'Barrie Transit', short: 'BT' }),
-  Object.freeze({ key: 'go_transit', agencyId: 'go-transit', label: 'GO Transit', short: 'GO' }),
-  Object.freeze({ key: 'ontario_northland', agencyId: 'ontario-northland', label: 'Ontario Northland', short: 'ON' }),
-  Object.freeze({ key: 'simcoe_linx', agencyId: 'simcoe-linx', label: 'Simcoe LINX', short: 'LINX' }),
-]);
 const AGENCY_BRANDING = Object.freeze({
   'barrie-transit': Object.freeze({
     id: 'barrie-transit',
@@ -67,10 +85,6 @@ const PLATFORM_DISPLAY_ORDER = Object.freeze([
   '1', '2', '3', '4', '5', '6', '7',
   '8', '9', '10', '11', '12', '13', '14',
 ]);
-const DEPARTURE_PAGES = Object.freeze([
-  Object.freeze({ label: 'P1–P6', platforms: Object.freeze(['1', '2', '3', '4', '5', '6']) }),
-  Object.freeze({ label: 'P7–P9 · P12–P13 · Stop 14', platforms: Object.freeze(['7', '8', '9', '10', '11', '12', '13', '14']) }),
-]);
 const PLATFORM_MAP_POSITIONS = Object.freeze({
   '1': Object.freeze({ left: 73.8, top: 54, scrubLeft: 75.6, scrubWidth: 13.4, scrubHeight: 5.5, wide: true }),
   '2': Object.freeze({ left: 60.6, top: 60.7, scrubLeft: 60.6, scrubTop: 60.5, scrubWidth: 10.2, scrubHeight: 6.6 }),
@@ -99,6 +113,9 @@ const PLATFORM_LABEL_RAILS = Object.freeze({
   '14': Object.freeze({ rail: 'bottom', order: 1 }),
 });
 const REVERSED_POINTER_LABEL_PLATFORMS = new Set(['2', '3', '4', '5', '6', '7', '8']);
+// Neighbouring pointers are only a label-width apart; these sit one row further out.
+const STAGGERED_POINTER_LABEL_PLATFORMS = new Set(['2', '4', '7']);
+const POINTER_LABEL_PLACEMENT_OVERRIDES = Object.freeze({ '12': 'left' });
 // User-confirmed physical pointer locations. Add platforms here one at a time;
 // do not substitute agency GTFS stop coordinates for these display anchors.
 const PLATFORM_POINTER_COORDINATES = Object.freeze({
@@ -119,11 +136,26 @@ const PICKUP_DROPOFF_POINTER_COORDINATES = Object.freeze({
   lat: 44.373639,
   lon: -79.687411,
 });
-// Center of the terminal building footprint identified on the display map.
-const TERMINAL_BUILDING_COORDINATES = Object.freeze({
-  lat: 44.374119,
-  lon: -79.690116,
-});
+// Terminal building footprint (OpenStreetMap way 1427393969, as used by the Barrie Simulator).
+const TERMINAL_BUILDING_FOOTPRINT = Object.freeze([
+  [44.374292, -79.690245], [44.374213, -79.690261], [44.374215, -79.690301], [44.37413, -79.690318],
+  [44.374138, -79.690352], [44.373951, -79.690395], [44.373914, -79.690081], [44.374092, -79.690042],
+  [44.374104, -79.690076], [44.374266, -79.690033],
+]);
+// GO Barrie line through the terminal: the GO shape's final segment into Allandale
+// Waterfront, extended west across Essa Rd. [west end, east end].
+const GO_TRACK = Object.freeze([[44.373855, -79.6925], [44.37316, -79.6835]]);
+// Only GPS positions this close to the track count as a train on this line.
+const GO_TRACK_MAX_OFFSET_METRES = 60;
+// A stopped train sits along the GO platform with its west end just west of the P1 pointer.
+const GO_TRAIN_STOPPED_FRONT_OFFSET_METRES = -30;
+// Street names drawn on the map (the simulator renders none). [start, end] along each street.
+const MAP_STREET_LABELS = Object.freeze([
+  Object.freeze({ name: 'Tiffin St', line: [[44.374399, -79.691263], [44.374518, -79.690551]] }),
+  Object.freeze({ name: 'Essa Rd', line: [[44.373327, -79.691097], [44.373135, -79.691228]] }),
+  Object.freeze({ name: 'Lakeshore Dr', line: [[44.374865, -79.688293], [44.374611, -79.687485]] }),
+  Object.freeze({ name: 'Gowan St', line: [[44.373412, -79.688251], [44.373286, -79.687196]] }),
+]);
 const MAP_CONNECTIONS = Object.freeze([
   Object.freeze({
     platform: '9',
@@ -150,13 +182,6 @@ const PLATFORM_BY_STOP_ID = Object.freeze({
   AD: '1',
 });
 
-const SOURCE_STATUS_LABELS = Object.freeze({
-  live: 'Live',
-  delayed: 'Locations delayed',
-  empty: 'No vehicles reported',
-  offline: 'Locations unavailable',
-  'not-tracked': 'Vehicle locations unavailable',
-});
 
 function sourceKeyForVehicle(vehicle) {
   if (!vehicle) return '';
@@ -186,198 +211,30 @@ function createElement(tag, className, text) {
   return element;
 }
 
-function tileHasVisiblePixels(tile) {
-  try {
-    const canvas = document.createElement('canvas');
-    canvas.width = 24;
-    canvas.height = 24;
-    const context = canvas.getContext('2d', { willReadFrequently: true });
-    if (!context) return true;
-    context.drawImage(tile, 0, 0, canvas.width, canvas.height);
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    for (let index = 3; index < pixels.length; index += 4) {
-      if (pixels[index] > 8) return true;
-    }
-    return false;
-  } catch (_err) {
-    // A provider without CORS-safe tiles can still be displayed; only pixel
-    // inspection is unavailable in that case.
-    return true;
+// The base map is a still image rendered from the Barrie Simulator. It needs no
+// network, WebGL or map library, so it shows immediately on the TV.
+function setupImageBasemap(container, mapPlane) {
+  if (!container || !mapPlane) return null;
+  const image = createElement('img', 'platform-basemap__image');
+  image.src = './assets/allandale-sim-basemap.webp';
+  image.alt = '';
+  image.decoding = 'async';
+  container.appendChild(image);
+  const stage = mapPlane.parentNode;
+  if (stage && !stage.querySelector('.platform-basemap__attribution')) {
+    stage.appendChild(createElement('span', 'platform-basemap__attribution', '© OpenStreetMap contributors'));
   }
-}
-
-function projectedPercent(container, point) {
-  const width = container.clientWidth;
-  const height = container.clientHeight;
-  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y) || width <= 0 || height <= 0) return null;
-  return { x: point.x / width * 100, y: point.y / height * 100 };
-}
-
-function setupLeafletBasemap(container, mapPlane, basemap, onProjectionChange) {
-  const map = L.map(container, {
-    attributionControl: true,
-    zoomControl: false,
-    dragging: false,
-    touchZoom: false,
-    scrollWheelZoom: false,
-    doubleClickZoom: false,
-    boxZoom: false,
-    keyboard: false,
-    tap: false,
-    zoomSnap: 0.1,
-    fadeAnimation: false,
-    zoomAnimation: false,
-  });
-  map.attributionControl.setPrefix(false);
-  map.setView(PLATFORM_MAP_CENTER, PLATFORM_MAP_ZOOM, { animate: false });
-
-  let activeLayer = null;
-  let tileErrors = 0;
-  let fallbackStarted = false;
-
-  function mountLayer(url, options = {}) {
-    const layer = L.tileLayer(url, {
-      tileSize: Number(options.tile_size) || 256,
-      zoomOffset: Number(options.zoom_offset) || 0,
-      maxZoom: Number(options.max_zoom) || 19,
-      opacity: Number.isFinite(Number(options.opacity)) ? Number(options.opacity) : 1,
-      attribution: options.attribution || '',
-      crossOrigin: true,
-    });
-    layer.on('tileload', (event) => {
-      if (tileHasVisiblePixels(event.tile)) {
-        mapPlane.classList.add('map-plane--live-basemap');
-        if (onProjectionChange) onProjectionChange();
-      }
-    });
-    layer.on('tileerror', () => {
-      tileErrors += 1;
-      if (fallbackStarted || tileErrors < 3 || !basemap.fallback_url) return;
-      fallbackStarted = true;
-      if (activeLayer) map.removeLayer(activeLayer);
-      activeLayer = mountLayer(basemap.fallback_url, {
-        attribution: basemap.fallback_attribution,
-      });
-    });
-    layer.addTo(map);
-    return layer;
-  }
-
-  activeLayer = mountLayer(basemap.url || basemap.fallback_url, basemap);
-  requestAnimationFrame(() => {
-    map.invalidateSize(false);
-    if (onProjectionChange) onProjectionChange();
-  });
+  mapPlane.classList.add('map-plane--live-basemap');
   return {
     project(lat, lon) {
-      return projectedPercent(container, map.latLngToContainerPoint([lat, lon]));
-    },
-    remove() { map.remove(); },
-    resize() {
-      map.invalidateSize(false);
-      if (onProjectionChange) onProjectionChange();
-    },
-  };
-}
-
-function setupPlatformBasemap(config, onProjectionChange) {
-  const container = document.getElementById('platform-basemap');
-  const mapPlane = container && container.closest('.map-plane');
-  const basemap = config && (config.platform_basemap || config.basemap);
-  if (!container || !mapPlane || !basemap) return null;
-
-  if (basemap.provider !== 'mapbox-gl') {
-    if (!basemap.url && !basemap.fallback_url) return null;
-    return setupLeafletBasemap(container, mapPlane, basemap, onProjectionChange);
-  }
-
-  let map = null;
-  let fallbackMap = null;
-  let fallbackStarted = false;
-  let styleLoaded = false;
-  let loadTimer = null;
-
-  function startFallback(reason) {
-    if (fallbackStarted || !basemap.fallback_url) return;
-    fallbackStarted = true;
-    if (loadTimer) clearTimeout(loadTimer);
-    if (reason) console.warn(`Platform Mapbox basemap unavailable (${reason}); using OpenStreetMap.`);
-    if (map) {
-      map.remove();
-      map = null;
-    }
-    container.replaceChildren();
-    mapPlane.classList.remove('map-plane--live-basemap');
-    fallbackMap = setupLeafletBasemap(container, mapPlane, {
-      url: basemap.fallback_url,
-      attribution: basemap.fallback_attribution,
-      tile_size: 256,
-      zoom_offset: 0,
-      max_zoom: 19,
-    }, onProjectionChange);
-  }
-
-  if (
-    !basemap.style_url || !basemap.access_token ||
-    typeof mapboxgl.supported !== 'function' ||
-    !mapboxgl.supported({ failIfMajorPerformanceCaveat: true })
-  ) {
-    startFallback('WebGL is not supported');
-    return fallbackMap;
-  }
-
-  mapboxgl.accessToken = basemap.access_token;
-  map = new mapboxgl.Map({
-    container,
-    style: basemap.style_url,
-    center: [PLATFORM_MAP_CENTER[1], PLATFORM_MAP_CENTER[0]],
-    zoom: PLATFORM_MAPBOX_ZOOM,
-    bearing: 0,
-    pitch: 0,
-    interactive: false,
-    attributionControl: true,
-    fadeDuration: 0,
-    renderWorldCopies: false,
-  });
-
-  loadTimer = setTimeout(() => startFallback('load timed out'), PLATFORM_BASEMAP_LOAD_TIMEOUT_MS);
-  map.once('load', () => {
-    styleLoaded = true;
-    if (loadTimer) clearTimeout(loadTimer);
-    mapPlane.classList.add('map-plane--live-basemap');
-    if (onProjectionChange) onProjectionChange();
-  });
-  map.on('error', (event) => {
-    const message = event && event.error && event.error.message || 'style failed to load';
-    if (!styleLoaded) startFallback(message);
-    else console.warn('Platform Mapbox resource error:', event.error || event);
-  });
-  map.getCanvas().addEventListener('webglcontextlost', () => startFallback('WebGL context was lost'), { once: true });
-  requestAnimationFrame(() => map && map.resize());
-
-  return {
-    project(lat, lon) {
-      if (fallbackMap) return fallbackMap.project(lat, lon);
-      if (!map) return null;
-      return projectedPercent(container, map.project([lon, lat]));
+      return projectToBasemap(lat, lon, BASEMAP_CALIBRATION);
     },
     remove() {
-      if (loadTimer) clearTimeout(loadTimer);
-      if (map) map.remove();
-      if (fallbackMap) fallbackMap.remove();
-    },
-    resize() {
-      if (map) map.resize();
-      if (fallbackMap) fallbackMap.resize();
-      if (onProjectionChange) onProjectionChange();
+      while (container.firstChild) container.removeChild(container.firstChild);
+      const credit = stage && stage.querySelector('.platform-basemap__attribution');
+      if (credit) credit.remove();
     },
   };
-}
-
-function formatFeedTime(timestampSeconds) {
-  const date = new Date(Number(timestampSeconds) * 1000);
-  if (!Number.isFinite(date.getTime())) return '';
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 function relativeAge(timestampSeconds) {
@@ -401,71 +258,6 @@ function platformForVehicle(vehicle) {
   return String(vehicle && vehicle.platform || '');
 }
 
-function formatScheduledDeparture(timestampSeconds) {
-  const timestamp = Number(timestampSeconds);
-  if (!Number.isFinite(timestamp) || timestamp <= 0) return '';
-  const date = new Date(timestamp * 1000);
-  if (!Number.isFinite(date.getTime())) return '';
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Toronto',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
-}
-
-function localDateKey(date) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Toronto',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
-}
-
-function departureDisplay(timestampSeconds, nowMs = Date.now()) {
-  const timestamp = Number(timestampSeconds);
-  const departure = new Date(timestamp * 1000);
-  if (!Number.isFinite(timestamp) || timestamp <= 0 || !Number.isFinite(departure.getTime())) {
-    return { primary: 'No time', secondary: '', state: 'unavailable' };
-  }
-
-  const differenceMs = departure.getTime() - nowMs;
-  if (differenceMs < -DEPARTURE_NOW_GRACE_MS) {
-    return { primary: 'No time', secondary: '', state: 'past' };
-  }
-
-  const scheduledTime = formatScheduledDeparture(timestamp);
-  const todayKey = localDateKey(new Date(nowMs));
-  const departureKey = localDateKey(departure);
-  if (departureKey === todayKey) {
-    const minutes = Math.max(0, Math.ceil(differenceMs / 60000));
-    return {
-      primary: minutes === 0 ? 'Due now' : `${minutes} min`,
-      secondary: scheduledTime,
-      state: minutes <= 10 ? 'soon' : 'today',
-    };
-  }
-
-  const tomorrowKey = localDateKey(new Date(nowMs + 24 * 60 * 60 * 1000));
-  if (departureKey === tomorrowKey) {
-    return {
-      primary: 'No more today',
-      secondary: `Next ${scheduledTime}`,
-      state: 'future-day',
-    };
-  }
-
-  const dayLabel = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Toronto',
-    weekday: 'short',
-  }).format(departure);
-  return {
-    primary: dayLabel,
-    secondary: scheduledTime,
-    state: 'future-day',
-  };
-}
-
 function normalizeServiceNotice(message) {
   const cleaned = String(message || '')
     .replace(/^Barrie Transit\s*(?:—|-|:)\s*/i, '')
@@ -480,6 +272,9 @@ function normalizeServiceNotice(message) {
 
 function terminalDisplayStatus(vehicle) {
   if (!vehicle) return '';
+  // A train is about 300 m long, so the bus geofence around the terminal says
+  // little about it. Use the train's own trip progress instead.
+  if (isGoTrain(vehicle)) return String(vehicle.terminal_progress_status || '').toLowerCase();
   const distance = distanceBetweenMeters(
     Number(vehicle.lat),
     Number(vehicle.lon),
@@ -516,16 +311,18 @@ function livePlatformState(vehicle, nowMs = Date.now()) {
   return '';
 }
 
-function activityCountdown(vehicle, state, concise = false) {
-  const departureMs = Number(vehicle && vehicle.terminal_departure_time) * 1000;
-  if (!Number.isFinite(departureMs) || departureMs <= 0) return '';
-  const differenceMs = departureMs - Date.now();
-  const minutes = Math.ceil(differenceMs / 60000);
-  if (concise) return minutes <= 0 ? 'Now' : `${minutes} min`;
-  if (state === 'approaching') {
-    return minutes <= 0 ? 'Due now' : `Due in ${minutes} min`;
+function sortServiceRowsByDeparture(container) {
+  if (!container) return;
+  const sortTime = (row) => Number(row.dataset.sortTime) || Number.POSITIVE_INFINITY;
+  const rows = Array.from(container.children);
+  const sorted = rows.slice().sort((a, b) => {
+    const first = sortTime(a);
+    const second = sortTime(b);
+    return first === second ? 0 : first < second ? -1 : 1;
+  });
+  if (sorted.some((row, index) => row !== rows[index])) {
+    sorted.forEach((row) => container.appendChild(row));
   }
-  return minutes <= 0 ? 'Departs now' : `Departs in ${minutes} min`;
 }
 
 function isSourceVehicleVisible(vehicle, sources) {
@@ -621,35 +418,57 @@ function terminalDepartureForRow(row, terminalDepartures) {
   const card = row.closest('.platform-card');
   const platform = String(card && card.dataset.platform || '');
   const agencyId = String(row.dataset.agencyId || '');
+  const earliestSeconds = (Date.now() - DEPARTURE_NOW_GRACE_MS) / 1000;
   return terminalDepartures.find((departure) => (
+    Number(departure && departure.departure_time) >= earliestSeconds &&
     String(departure && departure.platform || '') === platform &&
     String(departure && departure.agency_id || '') === agencyId &&
     serviceRowMatchesVehicle(row, departure)
   )) || null;
 }
 
+// Split-circle bus icon: the top half names the operator, the bottom half shows the
+// route. Barrie Transit uses its logo and route colours; regional agencies use theirs.
+const VEHICLE_AGENCY_TOPS = Object.freeze({
+  'go-transit': Object.freeze({ text: 'GO', top: '#ffffff', topText: '#00853f', color: '#00853f', textColor: '#ffffff' }),
+  'ontario-northland': Object.freeze({ text: 'ON', top: '#f1b900', topText: '#002a5c', color: '#002a5c', textColor: '#ffffff' }),
+  'simcoe-linx': Object.freeze({ text: 'LINX', top: '#f2a900', topText: '#062235', color: '#00549f', textColor: '#ffffff' }),
+});
+
 function vehicleMarkerStyle(vehicle, routeStyles) {
   const style = getVehicleStyle(vehicle, routeStyles);
-  const isGoBus = String(vehicle && vehicle.agency_id || '') === 'go-transit' &&
-    String(vehicle && vehicle.route_mode || '').toLowerCase() !== 'train';
-  return isGoBus ? { ...style, color: '#00843d', textColor: '#fff' } : style;
+  const agency = VEHICLE_AGENCY_TOPS[String(vehicle && vehicle.agency_id || '')];
+  return agency ? { ...style, color: agency.color, textColor: agency.textColor } : style;
 }
 
-function renderVehicleBubbleLabel(element, vehicle, includeDirection = false) {
+function renderVehicleIcon(marker, vehicle) {
+  const { top, bottom, badge } = marker.__parts;
+  while (top.firstChild) top.removeChild(top.firstChild);
+  const agency = VEHICLE_AGENCY_TOPS[String(vehicle && vehicle.agency_id || '')];
+  if (agency) {
+    top.textContent = agency.text;
+    top.style.setProperty('--top-color', agency.top);
+    top.style.setProperty('--top-text-color', agency.topText);
+  } else {
+    const logo = createElement('img', 'vehicle-marker__logo');
+    logo.src = AGENCY_BRANDING['barrie-transit'].logo;
+    logo.alt = 'Barrie Transit';
+    top.appendChild(logo);
+    top.style.setProperty('--top-color', '#ffffff');
+  }
+  top.classList.toggle('vehicle-marker__top--logo', !agency);
+  bottom.textContent = vehicleRouteCode(vehicle);
+  bottom.classList.toggle('vehicle-marker__bottom--long', bottom.textContent.length > 2);
+  const direction = getRouteEightDirection(vehicle);
+  badge.textContent = direction ? (direction === 'NORTHBOUND' ? 'N' : 'S') : '';
+  badge.hidden = !badge.textContent;
+}
+
+function renderVehicleBubbleLabel(element, vehicle) {
   while (element.firstChild) element.removeChild(element.firstChild);
   const agency = vehicleAgencyMark(vehicle);
   if (agency) element.appendChild(createElement('span', 'vehicle-marker__agency', agency));
   element.appendChild(createElement('span', 'vehicle-marker__route-text', vehicleRouteCode(vehicle)));
-  if (includeDirection) {
-    const direction = getRouteEightDirection(vehicle);
-    if (direction) {
-      element.appendChild(createElement(
-        'span',
-        'vehicle-marker__direction',
-        direction === 'NORTHBOUND' ? 'N' : 'S'
-      ));
-    }
-  }
 }
 
 function createMarker(key) {
@@ -657,15 +476,20 @@ function createMarker(key) {
   marker.dataset.markerKey = key;
   const arrow = createElement('span', 'vehicle-marker__arrow');
   const body = createElement('span', 'vehicle-marker__body');
-  const label = createElement('span', 'vehicle-marker__label');
-  body.appendChild(label);
+  const top = createElement('span', 'vehicle-marker__top');
+  const bottom = createElement('span', 'vehicle-marker__bottom');
+  body.appendChild(top);
+  body.appendChild(bottom);
+  const badge = createElement('span', 'vehicle-marker__badge');
+  badge.hidden = true;
   const labels = createElement('span', 'vehicle-marker__labels');
   marker.appendChild(arrow);
   marker.appendChild(body);
+  marker.appendChild(badge);
   marker.appendChild(labels);
   const count = createElement('span', 'vehicle-marker__count');
   marker.appendChild(count);
-  marker.__parts = { arrow, body, label, labels, count };
+  marker.__parts = { arrow, body, top, bottom, badge, labels, count };
   return marker;
 }
 
@@ -685,7 +509,7 @@ function updateMarker(marker, cluster, routeStyles, projectCoordinate) {
   const style = vehicleMarkerStyle(lead, routeStyles);
   marker.style.setProperty('--route-color', style.color);
   marker.style.setProperty('--route-text-color', style.textColor);
-  renderVehicleBubbleLabel(marker.__parts.label, lead, true);
+  renderVehicleIcon(marker, lead);
 
   while (marker.__parts.labels.firstChild) {
     marker.__parts.labels.removeChild(marker.__parts.labels.firstChild);
@@ -727,24 +551,33 @@ function setupPlatformApp() {
   let lastPayload = null;
   let lastDataTimestamp = null;
   let pollTimer = null;
+  let pollGeneration = 0;
+  let lastPollSettledAt = Date.now();
+  let lastHealthyPollAt = Date.now();
+  let lastDeparturesAt = 0;
   let layoutTimer = null;
-  let departurePageTimer = null;
+  let configRetryTimer = null;
+  const timers = [];
   let platformBasemap = null;
   let projectionFrame = null;
 
   const busLayer = document.getElementById('bus-layer');
+  const goTrainLayer = document.createElementNS(SVG_NS, 'svg');
+  goTrainLayer.setAttribute('class', 'map-go-train-layer');
+  goTrainLayer.setAttribute('viewBox', `0 0 ${BASEMAP_CALIBRATION.width} ${BASEMAP_CALIBRATION.height}`);
+  goTrainLayer.setAttribute('preserveAspectRatio', 'none');
+  goTrainLayer.setAttribute('aria-hidden', 'true');
+  busLayer.parentNode.insertBefore(goTrainLayer, busLayer);
+  platformBasemap = setupImageBasemap(
+    document.getElementById('platform-basemap'),
+    document.querySelector('.map-plane')
+  );
   const statusEl = document.getElementById('platform-status');
-  const emptyEl = document.getElementById('terminal-empty');
   const connectionEl = document.getElementById('connection-status');
   const connectionLabelEl = document.getElementById('connection-label');
   const clockEl = document.getElementById('platform-clock');
   const lastUpdatedEl = document.getElementById('last-updated');
-  const sourceStatusesEl = document.getElementById('source-statuses');
   const assignmentLayerEl = document.getElementById('assignment-layer');
-  const departurePageLabelEl = document.getElementById('departure-page-label');
-  const departurePageCountEl = document.getElementById('departure-page-count');
-  const departurePageCountdownEl = document.getElementById('departure-page-countdown');
-  const departurePageIndicatorEl = document.querySelector('.departure-page-indicator');
   const mapStageEl = document.querySelector('.map-stage');
   const mapPlaneEl = document.querySelector('.map-plane');
   const mapPlatformLayerEl = document.getElementById('map-platform-layer');
@@ -757,11 +590,8 @@ function setupPlatformApp() {
   const serviceNoticeEl = document.getElementById('service-notice');
   const serviceNoticeTextEl = document.getElementById('service-notice-text');
   const displayLegendEl = document.getElementById('display-legend');
-  let feedDisplayState = 'connecting';
   let lastVisibleVehicles = [];
   let lastTerminalDepartures = [];
-  let activeDeparturePage = 0;
-  let departurePageSecondsRemaining = DEPARTURE_PAGE_ROTATION_SECONDS;
 
   function projectCoordinate(lat, lon) {
     const numericLat = Number(lat);
@@ -834,9 +664,12 @@ function setupPlatformApp() {
     anchor.dataset.agencyId = agencyId;
     anchorLabel.dataset.pointerLabel = pointerLabel;
     const defaultLabelPlacement = labelRail === 'top' ? 'below' : labelRail === 'bottom' ? 'above' : 'left';
-    anchorLabel.dataset.labelPlacement = REVERSED_POINTER_LABEL_PLATFORMS.has(String(platform))
-      ? defaultLabelPlacement === 'above' ? 'below' : 'above'
-      : defaultLabelPlacement;
+    anchorLabel.dataset.labelPlacement = POINTER_LABEL_PLACEMENT_OVERRIDES[String(platform)] || (
+      REVERSED_POINTER_LABEL_PLATFORMS.has(String(platform))
+        ? defaultLabelPlacement === 'above' ? 'below' : 'above'
+        : defaultLabelPlacement
+    );
+    if (STAGGERED_POINTER_LABEL_PLATFORMS.has(String(platform))) anchorLabel.dataset.labelStagger = 'true';
     anchorLabel.dataset.agencyId = agencyId;
     if (card.classList.contains('map-dropoff-card')) {
       anchor.classList.add('map-platform-anchor--pickup-dropoff');
@@ -852,22 +685,6 @@ function setupPlatformApp() {
     if (!pointerPosition) return;
     if (card.dataset.geographicCard !== 'true' && (!card.__platformAnchor || !card.__platformAnchorLabel)) return;
     positionManualPointer(card, pointerPosition);
-  }
-
-  function positionMapLandmark(landmark) {
-    const position = projectCoordinate(landmark.dataset.lat, landmark.dataset.lon);
-    if (!position) return;
-    const stageRect = mapStageEl.getBoundingClientRect();
-    const planeRect = mapPlaneEl.getBoundingClientRect();
-    landmark.style.left = `${planeRect.left - stageRect.left + planeRect.width * position.x / 100}px`;
-    landmark.style.top = `${planeRect.top - stageRect.top + planeRect.height * position.y / 100}px`;
-  }
-
-  function positionMapPlaneLandmark(landmark) {
-    const position = projectCoordinate(landmark.dataset.lat, landmark.dataset.lon);
-    if (!position) return;
-    landmark.style.left = `${position.x}%`;
-    landmark.style.top = `${position.y}%`;
   }
 
   function positionMapPlatformCard(card) {
@@ -886,10 +703,6 @@ function setupPlatformApp() {
       .forEach(positionMapConnectionCard);
     mapLabelLayerEl.querySelectorAll('.map-dropoff-card[data-manual-pointer="true"]')
       .forEach(refreshManualPointer);
-    mapLabelLayerEl.querySelectorAll('.map-terminal-building')
-      .forEach(positionMapLandmark);
-    mapPlatformLayerEl.querySelectorAll('.map-terminal-building__footprint--map')
-      .forEach(positionMapPlaneLandmark);
     if (lastPayload) renderPayload(lastPayload);
   }
 
@@ -901,53 +714,7 @@ function setupPlatformApp() {
     });
   }
 
-  function departurePageForPlatform(platform) {
-    return DEPARTURE_PAGES.findIndex((page) => page.platforms.includes(String(platform)));
-  }
-
-  function showDeparturePage(pageIndex) {
-    const normalizedPage = ((Number(pageIndex) || 0) + DEPARTURE_PAGES.length) % DEPARTURE_PAGES.length;
-    activeDeparturePage = normalizedPage;
-    const page = DEPARTURE_PAGES[activeDeparturePage];
-    assignmentLayerEl.querySelectorAll('[data-departure-page]').forEach((item) => {
-      const isActive = Number(item.dataset.departurePage) === activeDeparturePage;
-      item.hidden = !isActive;
-      item.setAttribute('aria-hidden', isActive ? 'false' : 'true');
-    });
-    assignmentLayerEl.dataset.activePage = String(activeDeparturePage);
-    assignmentLayerEl.setAttribute('aria-label', `Scheduled platform assignments, ${page.label}`);
-    departurePageLabelEl.textContent = page.label;
-    departurePageCountEl.textContent = `${activeDeparturePage + 1} / ${DEPARTURE_PAGES.length}`;
-    departurePageIndicatorEl.setAttribute(
-      'aria-label',
-      `Departure page ${activeDeparturePage + 1} of ${DEPARTURE_PAGES.length}: ${page.label}`
-    );
-    departurePageIndicatorEl.querySelectorAll('.departure-page-indicator__dot').forEach((dot) => {
-      dot.classList.toggle('departure-page-indicator__dot--active', Number(dot.dataset.page) === activeDeparturePage);
-    });
-  }
-
-  function renderDeparturePageCountdown() {
-    departurePageCountdownEl.textContent = `Next page in ${departurePageSecondsRemaining}s`;
-  }
-
-  function startDeparturePageRotation() {
-    if (departurePageTimer) clearInterval(departurePageTimer);
-    departurePageSecondsRemaining = DEPARTURE_PAGE_ROTATION_SECONDS;
-    showDeparturePage(activeDeparturePage);
-    renderDeparturePageCountdown();
-    departurePageTimer = setInterval(() => {
-      departurePageSecondsRemaining -= 1;
-      if (departurePageSecondsRemaining <= 0) {
-        showDeparturePage(activeDeparturePage + 1);
-        departurePageSecondsRemaining = DEPARTURE_PAGE_ROTATION_SECONDS;
-      }
-      renderDeparturePageCountdown();
-    }, 1000);
-  }
-
   function setConnection(state, label) {
-    feedDisplayState = state;
     connectionEl.className = `connection-status status-${state}`;
     connectionLabelEl.textContent = label;
   }
@@ -956,29 +723,6 @@ function setupPlatformApp() {
     statusEl.textContent = message || '';
     statusEl.dataset.state = state;
     statusEl.hidden = !message;
-  }
-
-  function renderSourceStatuses(sources) {
-    while (sourceStatusesEl.firstChild) {
-      sourceStatusesEl.removeChild(sourceStatusesEl.firstChild);
-    }
-    const problemDefinitions = SOURCE_DEFINITIONS.map((definition) => {
-      const source = definition.key && sources && sources[definition.key];
-      const status = definition.untracked ? 'not-tracked' : normalizedSourceStatus(source);
-      return { definition, status };
-    }).filter((entry) => entry.status !== 'live');
-    problemDefinitions.forEach(({ definition, status }) => {
-      const statusLabel = SOURCE_STATUS_LABELS[status] || 'Locations unavailable';
-      const chip = createElement('div', 'source-chip');
-      chip.dataset.status = status;
-      chip.title = `${definition.label}: ${statusLabel}`;
-      chip.setAttribute('aria-label', `${definition.label}: ${statusLabel}`);
-      chip.appendChild(createElement('strong', 'source-chip__agency', definition.short));
-      chip.appendChild(createElement('span', 'source-chip__dot'));
-      chip.appendChild(createElement('span', 'source-chip__status', statusLabel));
-      sourceStatusesEl.appendChild(chip);
-    });
-    sourceStatusesEl.hidden = problemDefinitions.length === 0;
   }
 
   function updatePlatformActivity(vehicles, terminalDepartures = lastTerminalDepartures) {
@@ -1008,46 +752,54 @@ function setupPlatformApp() {
       card.querySelectorAll('.platform-card__service').forEach((row) => {
         const active = Boolean(activeVehicle && serviceRowMatchesVehicle(row, activeVehicle));
         const terminalDeparture = terminalDepartureForRow(row, terminalDepartures);
+        const boardTimestamp = terminalDeparture && terminalDeparture.departure_time;
+        // A bus still at the platform after the board has moved on to the next
+        // trip is boardable now, so its own departure time wins.
+        const activeVehicleTimestamp = active && state && activeVehicle.terminal_is_departure !== false
+          ? Number(activeVehicle.terminal_departure_time) || null
+          : null;
+        const vehicleTimestamp = activeVehicleTimestamp && (
+          !boardTimestamp ||
+          state === 'occupied' && activeVehicleTimestamp * 1000 <= activityNow
+        )
+          ? activeVehicleTimestamp
+          : null;
+        // A route match only proves the same route is nearby. The vehicle is
+        // live evidence for this row only when it runs the displayed trip.
+        const vehicleRunsDisplayedTrip = Boolean(vehicleTimestamp) ||
+          Boolean(active && state && departureMatchesVehicle(terminalDeparture, activeVehicle));
         const departureSource = departureSourceDisplay(
-          terminalDeparture,
-          Boolean(active && state)
+          vehicleTimestamp ? null : terminalDeparture,
+          vehicleRunsDisplayedTrip
         );
         const hasRealtimeDeparture = departureSource.key === 'live';
         row.classList.toggle('platform-card__service--active', active);
         row.setAttribute('aria-current', active ? 'true' : 'false');
         const countdown = row.querySelector('.platform-card__service-countdown');
-        const scheduled = row.querySelector('.platform-card__service-scheduled');
         const source = row.querySelector('.platform-card__service-source');
+        const displayTimestamp = vehicleTimestamp || boardTimestamp || row.dataset.nextDepartureTime;
+        const departure = row.dataset.departureLabel && !hasRealtimeDeparture && !terminalDeparture
+          ? { primary: row.dataset.departureLabel, secondary: '', state: 'unavailable' }
+          : departureDisplay(displayTimestamp);
+        const hasTime = departure.state !== 'unavailable' && departure.state !== 'past';
+        row.dataset.sortTime = hasTime ? String(Number(displayTimestamp)) : '';
         if (source) {
           source.textContent = departureSource.label;
           source.dataset.source = departureSource.key;
+          source.hidden = !hasTime || !hasRealtimeDeparture;
         }
         if (countdown) {
-          const displayTimestamp = terminalDeparture && terminalDeparture.departure_time
-            ? terminalDeparture.departure_time
-            : active && state && activeVehicle.terminal_departure_time
-              ? activeVehicle.terminal_departure_time
-              : row.dataset.nextDepartureTime;
-          const departure = row.dataset.departureLabel && !hasRealtimeDeparture && !terminalDeparture
-            ? { primary: row.dataset.departureLabel, secondary: '', state: 'unavailable' }
-            : departureDisplay(displayTimestamp);
-          const physicalStatus = active && state === 'occupied'
-            ? activityCountdown(activeVehicle, state, true)
-            : '';
-          countdown.textContent = physicalStatus || departure.primary;
+          countdown.textContent = departure.primary;
           countdown.dataset.live = hasRealtimeDeparture ? 'true' : 'false';
           countdown.dataset.departureState = departure.state;
           countdown.hidden = !countdown.textContent;
-          if (scheduled) {
-            scheduled.textContent = departure.secondary;
-            scheduled.hidden = !scheduled.textContent;
-          }
         }
       });
+      sortServiceRowsByDeparture(card.querySelector('.platform-card__services'));
       const badge = card.querySelector('.platform-card__state');
       if (!badge) return;
       badge.textContent = state === 'occupied'
-        ? 'At platform'
+        ? (isGoTrain(activity.vehicle) ? 'Boarding' : 'At platform')
         : state === 'approaching'
           ? 'Arriving'
           : '';
@@ -1067,7 +819,7 @@ function setupPlatformApp() {
       if (anchor) anchor.dataset.liveState = state;
       if (anchorLabel) {
         const liveStateLabel = state === 'occupied'
-          ? 'At platform'
+          ? (isGoTrain(activeVehicle) ? 'Boarding' : 'At platform')
           : state === 'approaching'
             ? 'Arriving'
             : '';
@@ -1089,25 +841,6 @@ function setupPlatformApp() {
           Boolean(activeVehicle && serviceRowMatchesVehicle(route, activeVehicle))
         );
       });
-      const status = card.querySelector('.map-platform-card__status');
-      if (!status) return;
-      if (state === 'occupied') {
-        const departureMs = Number(activeVehicle && activeVehicle.terminal_departure_time) * 1000;
-        const differenceMs = departureMs - Date.now();
-        const minutes = Number.isFinite(departureMs)
-          ? Math.ceil(differenceMs / 60000)
-          : null;
-        status.textContent = minutes === null
-          ? 'At platform'
-          : differenceMs < -DEPARTURE_NOW_GRACE_MS
-            ? 'At platform'
-            : `Departs ${minutes <= 0 ? 'now' : `${minutes}m`}`;
-      } else if (state === 'approaching') {
-        status.textContent = `${vehicleRouteCode(activeVehicle)} arriving`;
-      } else {
-        status.textContent = card.dataset.hasSchedule === 'true' ? '' : 'No schedule';
-      }
-      status.hidden = !status.textContent;
     });
   }
 
@@ -1158,13 +891,6 @@ function setupPlatformApp() {
     });
     const body = createElement('div', 'map-platform-card__body');
     body.appendChild(routes);
-    const mapStatus = createElement(
-      'div',
-      'map-platform-card__status',
-      assignments.length ? '' : 'No schedule'
-    );
-    mapStatus.hidden = !mapStatus.textContent;
-    body.appendChild(mapStatus);
     card.appendChild(body);
     mountManualPointer(card, platform);
     appendCardToRail(card, PLATFORM_LABEL_RAILS[platform]);
@@ -1216,38 +942,69 @@ function setupPlatformApp() {
     positionMapConnectionCard(card);
   }
 
+  // "You are here": the terminal building outlined in red with a red dot; the legend explains it.
+  function renderTerminalMarker() {
+    const points = TERMINAL_BUILDING_FOOTPRINT.map(([lat, lon]) => projectCoordinate(lat, lon));
+    if (points.some((point) => !point)) return;
+    const outline = document.createElementNS(SVG_NS, 'svg');
+    outline.setAttribute('class', 'map-here__outline');
+    outline.setAttribute('viewBox', '0 0 100 100');
+    outline.setAttribute('preserveAspectRatio', 'none');
+    outline.setAttribute('aria-hidden', 'true');
+    const polygon = document.createElementNS(SVG_NS, 'polygon');
+    polygon.setAttribute('points', points.map((point) => `${point.x},${point.y}`).join(' '));
+    outline.appendChild(polygon);
+    mapPlatformLayerEl.appendChild(outline);
+    const centre = {
+      x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+      y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+    };
+    const dot = createElement('span', 'map-here__dot');
+    dot.setAttribute('role', 'img');
+    dot.setAttribute('aria-label', 'You are here: Allandale Terminal Building');
+    dot.style.left = `${centre.x}%`;
+    dot.style.top = `${centre.y}%`;
+    mapPlatformLayerEl.appendChild(dot);
+  }
+
+  function renderStreetLabels() {
+    const planeWidth = mapPlaneEl.clientWidth || BASEMAP_CALIBRATION.width;
+    const planeHeight = mapPlaneEl.clientHeight || BASEMAP_CALIBRATION.height;
+    MAP_STREET_LABELS.forEach((street) => {
+      const start = projectCoordinate(street.line[0][0], street.line[0][1]);
+      const end = projectCoordinate(street.line[1][0], street.line[1][1]);
+      if (!start || !end) return;
+      let angle = Math.atan2((end.y - start.y) * planeHeight, (end.x - start.x) * planeWidth) * 180 / Math.PI;
+      // Keep text upright.
+      if (angle > 90) angle -= 180;
+      if (angle < -90) angle += 180;
+      const label = createElement('span', 'map-street-label', street.name);
+      label.style.left = `${(start.x + end.x) / 2}%`;
+      label.style.top = `${(start.y + end.y) / 2}%`;
+      label.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+      mapPlatformLayerEl.appendChild(label);
+    });
+  }
+
+  function renderMapLegend() {
+    const legend = createElement('section', 'map-legend');
+    legend.setAttribute('aria-label', 'Map legend');
+    [['here', 'You are here'], ['train', 'GO train'], ['bus', 'Live bus']].forEach(([key, text]) => {
+      const item = createElement('span', 'map-legend__item');
+      item.appendChild(createElement('i', `map-legend__symbol map-legend__symbol--${key}`));
+      item.appendChild(createElement('span', '', text));
+      legend.appendChild(item);
+    });
+    mapLabelLayerEl.appendChild(legend);
+  }
+
   function renderMapLandmarks() {
     mapPlatformLayerEl.appendChild(createElement('span', 'map-edge-mask map-edge-mask--left'));
     MAP_CONNECTIONS.forEach(renderMapConnection);
 
-    const terminalBuilding = createElement('section', 'map-terminal-building');
-    terminalBuilding.dataset.lat = String(TERMINAL_BUILDING_COORDINATES.lat);
-    terminalBuilding.dataset.lon = String(TERMINAL_BUILDING_COORDINATES.lon);
-    terminalBuilding.setAttribute('aria-label', 'Allandale Terminal Building. You are here.');
-    const footprint = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    footprint.setAttribute('class', 'map-terminal-building__footprint map-terminal-building__footprint--map');
-    footprint.setAttribute('viewBox', '0 0 200 140');
-    footprint.setAttribute('aria-hidden', 'true');
-    footprint.dataset.lat = String(TERMINAL_BUILDING_COORDINATES.lat);
-    footprint.dataset.lon = String(TERMINAL_BUILDING_COORDINATES.lon);
-    const buildingShape = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-    buildingShape.setAttribute('points', '66,10 122,19 118,96 111,107 64,98 53,57');
-    footprint.appendChild(buildingShape);
-    mapPlatformLayerEl.appendChild(footprint);
-    positionMapPlaneLandmark(footprint);
-    const callout = createElement('span', 'map-terminal-building__callout');
-    callout.appendChild(createElement(
-      'strong',
-      'map-terminal-building__name',
-      'Allandale Terminal Building'
-    ));
-    terminalBuilding.appendChild(callout);
-    const here = createElement('span', 'map-terminal-building__here');
-    here.appendChild(createElement('span', 'map-terminal-building__pin'));
-    here.appendChild(createElement('strong', '', 'You Are Here'));
-    terminalBuilding.appendChild(here);
-    mapLabelLayerEl.appendChild(terminalBuilding);
-    positionMapLandmark(terminalBuilding);
+    renderTerminalMarker();
+    renderStreetLabels();
+    renderMapLegend();
 
     const scrub = createElement('span', 'map-landmark-scrub map-landmark-scrub--dropoff');
     mapPlatformLayerEl.appendChild(scrub);
@@ -1263,11 +1020,80 @@ function setupPlatformApp() {
     refreshManualPointer(dropoff);
   }
 
+  // Where a GO train sits on the track, in metres east of the track's west end.
+  function goTrainFrontMetres(vehicle) {
+    const snapped = snapToTrack(GO_TRACK, vehicle.lat, vehicle.lon);
+    if (!snapped || snapped.offset > GO_TRACK_MAX_OFFSET_METRES) return null;
+    if (String(vehicle.terminal_progress_status || '').toLowerCase() === 'at_terminal') {
+      const platform = PLATFORM_POINTER_COORDINATES['1'];
+      const stop = snapToTrack(GO_TRACK, platform.lat, platform.lon);
+      return stop.along + GO_TRAIN_STOPPED_FRONT_OFFSET_METRES;
+    }
+    // Moving: centre the drawing on the reported position.
+    const length = GO_TRAIN_CONSIST.reduce((sum, car) => sum + car.metres + GO_TRAIN_CAR_GAP_METRES, 0);
+    return snapped.along - length / 2;
+  }
+
+  // Returns the GO trains drawn on the track, so they are not also drawn as bubbles.
+  function renderGoTrains(vehicles) {
+    goTrainLayer.textContent = '';
+    mapLabelLayerEl.querySelectorAll('.map-go-train-tag').forEach((tag) => tag.remove());
+    mapPlatformLayerEl.querySelectorAll('.map-street-label').forEach((label) => { label.style.visibility = ''; });
+    const drawn = new Set();
+    vehicles.filter(isGoTrain).forEach((vehicle) => {
+      const front = goTrainFrontMetres(vehicle);
+      if (front === null) return;
+      let cursor = front;
+      const cars = GO_TRAIN_CONSIST.map((car) => {
+        const start = basemapPixel(...trackPoint(GO_TRACK, cursor), BASEMAP_CALIBRATION);
+        const end = basemapPixel(...trackPoint(GO_TRACK, cursor + car.metres), BASEMAP_CALIBRATION);
+        cursor += car.metres + GO_TRAIN_CAR_GAP_METRES;
+        return { kind: car.kind, start, end };
+      });
+      if (cars.some((car) => !car.start || !car.end)) return;
+      drawGoTrain(goTrainLayer, cars);
+      drawn.add(vehicle);
+      const status = describeGoTrain(vehicle);
+      if (status) renderGoTrainTag(status, trackPoint(GO_TRACK, Math.max(front, 0)));
+    });
+    return drawn;
+  }
+
+  function renderGoTrainTag(status, [lat, lon]) {
+    const position = projectCoordinate(lat, lon);
+    if (!position) return;
+    const tag = createElement('section', `map-go-train-tag map-go-train-tag--${status.state}`);
+    tag.setAttribute('role', 'status');
+    tag.appendChild(createAgencyLogo(AGENCY_BRANDING['go-transit'], 'map-go-train-tag__logo'));
+    const copy = createElement('span', 'map-go-train-tag__copy');
+    copy.appendChild(createElement('strong', '', status.title));
+    if (status.detail) copy.appendChild(createElement('span', '', status.detail));
+    tag.appendChild(copy);
+    mapLabelLayerEl.appendChild(tag);
+    // Below the track, starting near the front of the train, kept inside the map.
+    const stageRect = mapStageEl.getBoundingClientRect();
+    const planeRect = mapPlaneEl.getBoundingClientRect();
+    const x = planeRect.left - stageRect.left + planeRect.width * position.x / 100;
+    const y = planeRect.top - stageRect.top + planeRect.height * position.y / 100;
+    const width = tag.offsetWidth;
+    tag.style.left = `${Math.max(12, Math.min(stageRect.width - width - 12, x - 20))}px`;
+    tag.style.top = `${y + 50}px`;
+    // A street name under the label would show as stray letters; hide it while the train is here.
+    const tagRect = tag.getBoundingClientRect();
+    mapPlatformLayerEl.querySelectorAll('.map-street-label').forEach((label) => {
+      const rect = label.getBoundingClientRect();
+      const overlaps = rect.left < tagRect.right && rect.right > tagRect.left &&
+        rect.top < tagRect.bottom && rect.bottom > tagRect.top;
+      if (overlaps) label.style.visibility = 'hidden';
+    });
+  }
+
   function renderVehicles(vehicles, terminalDepartures = null) {
     lastVisibleVehicles = Array.isArray(vehicles) ? vehicles : [];
     if (Array.isArray(terminalDepartures)) lastTerminalDepartures = terminalDepartures;
+    const drawnTrains = renderGoTrains(lastVisibleVehicles);
     const clusters = clusterVehicles(
-      lastVisibleVehicles.filter(isTerminalDisplayVehicle),
+      lastVisibleVehicles.filter((vehicle) => !drawnTrains.has(vehicle) && isTerminalDisplayVehicle(vehicle)),
       CLUSTER_DISTANCE_METERS
     );
     const seen = new Set();
@@ -1289,10 +1115,6 @@ function setupPlatformApp() {
       markerIndex.delete(key);
     });
     updatePlatformActivity(lastVisibleVehicles, lastTerminalDepartures);
-    emptyEl.hidden = clusters.length !== 0 ||
-      feedDisplayState === 'offline' ||
-      feedDisplayState === 'warning' ||
-      !statusEl.hidden;
   }
 
   function renderAssignments(layout) {
@@ -1303,20 +1125,22 @@ function setupPlatformApp() {
       mapPlatformLayerEl.removeChild(mapPlatformLayerEl.firstChild);
     }
     mapLabelLayerEl.querySelectorAll('.map-platform-anchor__label').forEach((label) => label.remove());
-    mapLabelLayerEl.querySelectorAll('.map-terminal-building').forEach((landmark) => landmark.remove());
+    mapLabelLayerEl.querySelectorAll('.map-legend').forEach((legend) => legend.remove());
+    mapLabelLayerEl.querySelectorAll('.map-go-train-tag').forEach((tag) => tag.remove());
     mapLabelLayerEl.querySelectorAll('.map-dropoff-card[data-geographic-card="true"]').forEach((card) => card.remove());
-    Object.values(mapLabelRails).forEach((rail) => rail.replaceChildren());
+    Object.values(mapLabelRails).forEach((rail) => {
+      while (rail.firstChild) rail.removeChild(rail.firstChild);
+    });
     const grouped = groupPlatformAssignments(layout && layout.assignments);
     const assignmentsForPlatform = (platform) => grouped[platform] || [];
     const orderedPlatforms = PLATFORM_DISPLAY_ORDER
-      .filter((platform) => departurePageForPlatform(platform) >= 0 && assignmentsForPlatform(platform).length);
+      .filter((platform) => assignmentsForPlatform(platform).length);
 
     orderedPlatforms.forEach((platform) => {
       const assignments = assignmentsForPlatform(platform);
       const card = createElement('section', 'platform-card');
       if (assignments.length > 1) card.classList.add('platform-card--multi-service');
       card.dataset.platform = platform;
-      card.dataset.departurePage = String(departurePageForPlatform(platform));
       card.setAttribute('aria-label', platformDisplayName(platform));
       const heading = createElement('header', 'platform-card__heading');
       heading.appendChild(createElement('h2', 'platform-card__title', platformDisplayName(platform)));
@@ -1362,14 +1186,10 @@ function setupPlatformApp() {
         countdown.dataset.departureState = departure.state;
         countdown.hidden = !countdown.textContent;
         departureBlock.appendChild(countdown);
-        const departureMeta = createElement('span', 'platform-card__departure-meta');
-        const scheduled = createElement('span', 'platform-card__service-scheduled', departure.secondary);
-        scheduled.hidden = !scheduled.textContent;
-        departureMeta.appendChild(scheduled);
-        const source = createElement('span', 'platform-card__service-source', 'Scheduled');
+        const source = createElement('span', 'platform-card__service-source', 'Live');
         source.dataset.source = 'scheduled';
-        departureMeta.appendChild(source);
-        departureBlock.appendChild(departureMeta);
+        source.hidden = true;
+        departureBlock.appendChild(source);
         row.appendChild(departureBlock);
         services.appendChild(row);
       });
@@ -1378,7 +1198,6 @@ function setupPlatformApp() {
     });
 
     const connections = createElement('section', 'platform-connections');
-    connections.dataset.departurePage = String(departurePageForPlatform('9'));
     connections.setAttribute('aria-label', 'Other terminal connections');
     MAP_CONNECTIONS.forEach((connection) => {
       const row = createElement('article', 'platform-connection');
@@ -1404,12 +1223,10 @@ function setupPlatformApp() {
       row.appendChild(copy);
       connections.appendChild(row);
     });
-    assignmentLayerEl.appendChild(connections);
 
     if (!grouped['14'] || !grouped['14'].length) {
       const retired = createElement('section', 'platform-card platform-card--inactive');
       retired.dataset.platform = '14';
-      retired.dataset.departurePage = String(departurePageForPlatform('14'));
       const heading = createElement('header', 'platform-card__heading');
       heading.appendChild(createElement('h2', 'platform-card__title', 'Stop 14'));
       heading.appendChild(createElement('span', 'platform-card__state', 'Assignment unavailable'));
@@ -1423,61 +1240,41 @@ function setupPlatformApp() {
       retired.appendChild(createElement('div', 'platform-card__inactive-text', 'Scheduled service data is unavailable'));
       assignmentLayerEl.appendChild(retired);
     }
+    assignmentLayerEl.appendChild(connections);
     Object.keys(PLATFORM_MAP_POSITIONS).forEach((platform) => {
       renderMapPlatformCard(platform, grouped[platform] || []);
     });
     renderMapLandmarks();
-    showDeparturePage(activeDeparturePage);
     updatePlatformActivity(lastVisibleVehicles, lastTerminalDepartures);
     scheduleProjectionRefresh();
   }
 
   function refreshTerminalLayout() {
-    return dataClient.fetchTerminalLayout()
+    return dataClient.fetchTerminalLayout({ timeoutMs: REQUEST_TIMEOUT_MS })
       .then((layout) => renderAssignments(layout))
       .catch((err) => {
         console.warn('Platform assignment refresh unavailable; keeping current times:', err);
       });
   }
 
+  // Riders only need to know when live times may be wrong. Feed details for
+  // each agency stay in the console and the monitor, not on the public screen.
   function applyFeedState(payload, freshness) {
-    const sources = payload && payload.sources || null;
     const status = freshness.feed_status;
-    const reportedAt = formatFeedTime(freshness.latest_data_timestamp);
-    const sourceProblems = SOURCE_DEFINITIONS
-      .filter((definition) => definition.key)
-      .map((definition) => ({
-        label: definition.label,
-        status: normalizedSourceStatus(sources && sources[definition.key]),
-      }))
-      .filter((entry) => entry.status === 'offline' || entry.status === 'delayed');
-
-    renderSourceStatuses(sources);
     lastDataTimestamp = freshness.latest_data_timestamp || lastDataTimestamp;
-
     if (status === 'offline') {
-      setConnection('offline', 'OFFLINE');
-      setStatus(
-        reportedAt
-          ? `Live vehicle feeds are offline. Icons are hidden. Last data: ${reportedAt}.`
-          : 'Live vehicle feeds are offline. Icons are hidden; retrying automatically.',
-        'offline'
-      );
-      return;
-    }
-    if (status === 'empty') {
-      setConnection('warning', 'NO VEHICLES');
-      setStatus('No vehicles are currently reporting live locations. Retrying automatically.');
-      return;
-    }
-    if (sourceProblems.length) {
-      setConnection('warning', 'PARTIAL');
-      setStatus(sourceProblems.map((entry) => `${entry.label} is ${entry.status}`).join(' · '));
+      setConnection('offline', 'SCHEDULED TIMES');
+      setStatus(LIVE_TRACKING_UNAVAILABLE_MESSAGE, 'offline');
       return;
     }
     if (status === 'delayed') {
       setConnection('warning', 'DELAYED');
-      setStatus(`Live vehicle locations are delayed${reportedAt ? ` · Last data ${reportedAt}` : ''}.`);
+      setStatus('Live bus tracking is delayed. Times may not reflect recent changes.');
+      return;
+    }
+    if (status === 'empty') {
+      setConnection('warning', 'SCHEDULED TIMES');
+      setStatus('');
       return;
     }
     setConnection('live', 'LIVE');
@@ -1498,29 +1295,56 @@ function setupPlatformApp() {
   }
 
   function pollVehicles() {
+    // A watchdog restart bumps the generation, so a late reply from a stalled
+    // request cannot start a second polling loop.
+    const generation = ++pollGeneration;
     Promise.all([
-      dataClient.fetchVehicles(),
-      dataClient.fetchDepartures(30, { board: 'allandale' }).catch((err) => {
-        console.warn('Platform departures poll failed; using scheduled layout times:', err);
+      dataClient.fetchVehicles({ timeoutMs: REQUEST_TIMEOUT_MS }),
+      dataClient.fetchDepartures(30, { board: 'allandale', timeoutMs: REQUEST_TIMEOUT_MS }).catch((err) => {
+        console.warn('Platform departures poll failed:', err);
         return null;
       }),
     ])
       .then(([payload, departuresPayload]) => {
+        if (generation !== pollGeneration) return;
         if (!payload || !Array.isArray(payload.vehicles)) throw new Error('Invalid vehicle response');
         lastPayload = payload;
-        renderPayload(payload, departuresPayload);
+        lastHealthyPollAt = Date.now();
+        if (departuresPayload) {
+          lastDeparturesAt = lastHealthyPollAt;
+          renderPayload(payload, departuresPayload);
+        } else {
+          // Keep the last board briefly, then use timetable times instead.
+          const keepBoard = lastHealthyPollAt - lastDeparturesAt < DEPARTURES_RETENTION_MS;
+          renderPayload(payload, keepBoard ? undefined : null);
+        }
       })
       .catch((err) => {
-        lastPayload = null;
-        setConnection('offline', 'OFFLINE');
-        setStatus('Live vehicle feeds are offline. Icons are hidden; retrying automatically.', 'offline');
-        renderVehicles([], []);
-        renderSourceStatuses(null);
+        if (generation !== pollGeneration) return;
         console.warn('Platform vehicle poll failed:', err);
+        if (lastPayload) {
+          // One failed poll is not an outage. The freshness rules mark the
+          // data delayed or offline as the last good payload ages.
+          renderPayload(lastPayload);
+          return;
+        }
+        setConnection('offline', 'SCHEDULED TIMES');
+        setStatus(LIVE_TRACKING_UNAVAILABLE_MESSAGE, 'offline');
+        renderVehicles([], []);
       })
       .then(() => {
+        if (generation !== pollGeneration) return;
+        lastPollSettledAt = Date.now();
         pollTimer = setTimeout(pollVehicles, pollMs);
       });
+  }
+
+  function restartPollingIfStalled() {
+    if (!isPollStalled(lastPollSettledAt, Date.now(), pollMs)) return;
+    console.warn('Platform poll loop stalled; restarting it.');
+    if (pollTimer) clearTimeout(pollTimer);
+    lastPollSettledAt = Date.now();
+    pollVehicles();
   }
 
   function updateClock() {
@@ -1535,7 +1359,7 @@ function setupPlatformApp() {
   }
 
   function loadServiceNotice() {
-    dataClient.fetchServiceStatus()
+    dataClient.fetchServiceStatus(undefined, { timeoutMs: REQUEST_TIMEOUT_MS })
       .then((status) => {
         const upcoming = status && status.upcoming_warning && status.upcoming_warning.message;
         const special = status && status.is_special_service && status.today;
@@ -1551,59 +1375,127 @@ function setupPlatformApp() {
       });
   }
 
+  // 1 at the TV's 1920x1080; smaller when the map is drawn smaller.
+  function updateMapScale() {
+    const scale = mapPlaneEl.clientHeight / BASEMAP_CALIBRATION.height;
+    if (scale > 0) mapStageEl.style.setProperty('--map-scale', String(Math.min(1.2, scale)));
+  }
+  updateMapScale();
+
   const handleResize = () => {
-    if (platformBasemap) platformBasemap.resize();
+    updateMapScale();
     scheduleProjectionRefresh();
   };
   window.addEventListener('resize', handleResize);
 
-  dataClient.fetchConfig()
-    .then((config) => {
-      if (config && config.base_path) dataClient.setBasePath(config.base_path);
-      if (Number(config && config.poll_ms) > 0) pollMs = Number(config.poll_ms);
-      if (Number(config && config.feed_delayed_after_ms) > 0) delayedAfterMs = Number(config.feed_delayed_after_ms);
-      if (Number(config && config.feed_offline_after_ms) > 0) offlineAfterMs = Number(config.feed_offline_after_ms);
-      platformBasemap = setupPlatformBasemap(config, scheduleProjectionRefresh);
-    })
-    .catch((err) => {
-      console.warn('Using default platform-map configuration:', err);
-    })
+  function applyConfig(config) {
+    if (config && config.base_path) dataClient.setBasePath(config.base_path);
+    if (Number(config && config.poll_ms) > 0) pollMs = Number(config.poll_ms);
+    if (Number(config && config.feed_delayed_after_ms) > 0) delayedAfterMs = Number(config.feed_delayed_after_ms);
+    if (Number(config && config.feed_offline_after_ms) > 0) offlineAfterMs = Number(config.feed_offline_after_ms);
+  }
+
+  // After a power cut the TV can start before the network does. Keep trying
+  // so the feed settings are picked up once the connection is back.
+  function loadConfigWithRetry(delayMs = 5000) {
+    return dataClient.fetchConfig({ timeoutMs: REQUEST_TIMEOUT_MS })
+      .then(applyConfig)
+      .catch((err) => {
+        console.warn(`Platform-map configuration unavailable; retrying in ${delayMs / 1000}s:`, err);
+        configRetryTimer = setTimeout(
+          () => loadConfigWithRetry(Math.min(delayMs * 2, CONFIG_RETRY_MAX_MS)),
+          delayMs
+        );
+      });
+  }
+
+  const startedAt = Date.now();
+  const buildIdMeta = document.querySelector('meta[name="app-build-id"]');
+  const currentBuildId = buildIdMeta ? buildIdMeta.getAttribute('content') || '' : '';
+  let lastBuildCheckAt = startedAt;
+  let reloadPending = false;
+
+  // Only reload when the server answers; a reload while it is down would
+  // leave the TV on a browser error page with nothing to recover it.
+  function reloadWhenServerReachable(reason) {
+    if (reloadPending) return;
+    reloadPending = true;
+    dataClient.fetchConfig({ timeoutMs: REQUEST_TIMEOUT_MS })
+      .then(() => {
+        console.warn(`Reloading platform map: ${reason}.`);
+        window.location.reload();
+      })
+      .catch(() => {
+        reloadPending = false;
+      });
+  }
+
+  function runKioskChecks() {
+    const now = Date.now();
+    restartPollingIfStalled();
+    if (isNightlyReloadDue(now, startedAt)) {
+      reloadWhenServerReachable('nightly refresh');
+      return;
+    }
+    if (now - lastHealthyPollAt > NO_DATA_RELOAD_MS) {
+      reloadWhenServerReachable('no data received for 10 minutes');
+      return;
+    }
+    if (currentBuildId && now - lastBuildCheckAt >= BUILD_CHECK_INTERVAL_MS) {
+      lastBuildCheckAt = now;
+      fetchText(window.location.href, REQUEST_TIMEOUT_MS)
+        .then((html) => {
+          if (isNewBuild(currentBuildId, html)) reloadWhenServerReachable('new version deployed');
+        })
+        .catch(() => {});
+    }
+  }
+
+  function startTimers() {
+    updateClock();
+    timers.push(setInterval(updateClock, 1000));
+    timers.push(setInterval(() => {
+      if (lastPayload) renderPayload(lastPayload);
+    }, 5000));
+    loadServiceNotice();
+    timers.push(setInterval(loadServiceNotice, 5 * 60 * 1000));
+    layoutTimer = setInterval(refreshTerminalLayout, 60 * 1000);
+    timers.push(setInterval(runKioskChecks, KIOSK_CHECK_INTERVAL_MS));
+    pollVehicles();
+  }
+
+  loadConfigWithRetry()
     .then(() => Promise.all([
-      dataClient.fetchRoutes().catch((err) => {
+      dataClient.fetchRoutes({ timeoutMs: REQUEST_TIMEOUT_MS }).catch((err) => {
         console.warn('Platform route styles unavailable:', err);
         return null;
       }),
-      dataClient.fetchTerminalLayout().catch((err) => {
+      dataClient.fetchTerminalLayout({ timeoutMs: REQUEST_TIMEOUT_MS }).catch((err) => {
         console.warn('Platform assignments unavailable:', err);
         return { assignments: [] };
       }),
-    ]).then(([routes, layout]) => {
+    ]))
+    .then(([routes, layout]) => {
       routeStyles = routeStyleIndex(routes);
       renderAssignments(layout);
-    }))
-    .then(() => {
-      updateClock();
-      setInterval(updateClock, 1000);
-      setInterval(() => {
-        if (lastPayload) renderPayload(lastPayload);
-      }, 5000);
-      loadServiceNotice();
-      setInterval(loadServiceNotice, 5 * 60 * 1000);
-      layoutTimer = setInterval(refreshTerminalLayout, 60 * 1000);
-      startDeparturePageRotation();
-      pollVehicles();
-    });
+    })
+    .catch((err) => {
+      // Never let a render error stop the clock, polling and recovery checks.
+      console.error('Platform map startup render failed:', err);
+    })
+    .then(startTimers);
 
   return {
     destroy() {
       if (pollTimer) clearTimeout(pollTimer);
+      pollGeneration += 1;
+      if (configRetryTimer) clearTimeout(configRetryTimer);
+      timers.forEach((timer) => clearInterval(timer));
       if (layoutTimer) clearInterval(layoutTimer);
-      if (departurePageTimer) clearInterval(departurePageTimer);
       if (projectionFrame) cancelAnimationFrame(projectionFrame);
       window.removeEventListener('resize', handleResize);
       if (platformBasemap) platformBasemap.remove();
     },
-    showDeparturePage,
   };
 }
 

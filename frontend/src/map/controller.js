@@ -14,10 +14,18 @@ import {
   resolveTerminalAssignment
 } from './terminal-platforms.js';
 import feedFreshness from '../../../shared/feed-freshness.js';
+import {
+  SIM_BASEMAP,
+  TV_STOP_HIGHLIGHT_OVERRIDES,
+  getSimBasemapBounds,
+  getSimFocusBounds,
+  getTvRouteColorOverride,
+  pickRoadLabelCandidates
+} from '../tv-layout.js';
 
 const { assessVehicleFeedFreshness, selectVehiclesForDisplay } = feedFreshness;
 
-export function createMapController({ dataClient, ui }) {
+export function createMapController({ dataClient, ui, tvLayout = false }) {
   var map, routesGroup, vehicleLayer, highlightLayer;
   // Retained only for the dormant legacy helper functions below. The custom
   // road overlay is intentionally never initialized now that Mapbox owns roads.
@@ -100,6 +108,12 @@ export function createMapController({ dataClient, ui }) {
       offsetPx: { x: 0, y: 0 }
     }
   };
+
+  if (tvLayout) {
+    Object.keys(TV_STOP_HIGHLIGHT_OVERRIDES).forEach(function (key) {
+      stopHighlightOverrides[key] = Object.assign({}, stopHighlightOverrides[key], TV_STOP_HIGHLIGHT_OVERRIDES[key]);
+    });
+  }
 
   var routeLaneOverrides = {};
 
@@ -323,8 +337,11 @@ export function createMapController({ dataClient, ui }) {
         return Promise.all([
           loadRoutes(),
           loadStopHighlights(),
-          loadTerminalLayout()
-        ]);
+          loadTerminalLayout(),
+          loadMajorRoads()
+        ]).then(function () {
+          scheduleMajorRoadLabelDeclutter();
+        });
       })
       .catch(function (err) {
         console.error('Failed to load initial map overlays:', err && err.message ? err.message : err);
@@ -462,9 +479,14 @@ export function createMapController({ dataClient, ui }) {
   }
 
   function setupMap() {
-    map = L.map('map', { zoomControl: true, zoomSnap: 0.5, zoomDelta: 0.5 })
-      .setView([DEFAULT_MAP_CENTER.lat, DEFAULT_MAP_CENTER.lng], DEFAULT_MAP_ZOOM);
-    map.zoomControl.setPosition('bottomright');
+    if (tvLayout) {
+      // Fractional zoom lets the simulator image fill the map area exactly.
+      map = L.map('map', { zoomControl: false, zoomSnap: 0, attributionControl: true });
+    } else {
+      map = L.map('map', { zoomControl: true, zoomSnap: 0.5, zoomDelta: 0.5 })
+        .setView([DEFAULT_MAP_CENTER.lat, DEFAULT_MAP_CENTER.lng], DEFAULT_MAP_ZOOM);
+      map.zoomControl.setPosition('bottomright');
+    }
 
     map.createPane('routeOutlinePane');
     map.getPane('routeOutlinePane').style.zIndex = 420;
@@ -489,9 +511,22 @@ export function createMapController({ dataClient, ui }) {
     map.getPane('stopHighlightPane').style.zIndex = 500;
     map.getPane('stopHighlightPane').style.pointerEvents = 'none';
 
-    tileLayer = createBasemapLayer(basemapConfig).addTo(map);
-    tileLayer.on('tileerror', handleBasemapTileError);
-    updateDebugState('basemap', basemapConfig.provider);
+    if (tvLayout) {
+      setupSimulatorBasemap();
+      // Roads sit under the routes; their labels sit above routes but under buses.
+      map.createPane('majorRoadPane');
+      map.getPane('majorRoadPane').style.zIndex = 410;
+      map.getPane('majorRoadPane').style.pointerEvents = 'none';
+      map.createPane('majorRoadLabelPane');
+      map.getPane('majorRoadLabelPane').style.zIndex = 440;
+      map.getPane('majorRoadLabelPane').style.pointerEvents = 'none';
+      majorRoadLineLayer = L.layerGroup().addTo(map);
+      majorRoadLabelLayer = L.layerGroup();
+    } else {
+      tileLayer = createBasemapLayer(basemapConfig).addTo(map);
+      tileLayer.on('tileerror', handleBasemapTileError);
+      updateDebugState('basemap', basemapConfig.provider);
+    }
     routesGroup = L.layerGroup().addTo(map);
     vehicleLayer = L.layerGroup().addTo(map);
     highlightLayer = L.layerGroup().addTo(map);
@@ -762,16 +797,27 @@ export function createMapController({ dataClient, ui }) {
         majorRoadLabelLayer.clearLayers();
         geojson = appendManualMajorRoads(geojson);
 
+        if (tvLayout) {
+          // White streets with a grey edge stand out on the pale simulator basemap.
+          L.geoJSON(geojson, {
+            pane: 'majorRoadPane',
+            style: function () {
+              return { color: '#a7afc2', weight: 9, opacity: 1, lineCap: 'round', lineJoin: 'round' };
+            }
+          }).addTo(majorRoadLineLayer);
+        }
         L.geoJSON(geojson, {
           pane: 'majorRoadPane',
           style: function () {
-            return {
-              color: '#4a4a4a',
-              weight: 2.5,
-              opacity: 0.85,
-              lineCap: 'round',
-              lineJoin: 'round'
-            };
+            return tvLayout
+              ? { color: '#ffffff', weight: 5.5, opacity: 1, lineCap: 'round', lineJoin: 'round' }
+              : {
+                color: '#4a4a4a',
+                weight: 2.5,
+                opacity: 0.85,
+                lineCap: 'round',
+                lineJoin: 'round'
+              };
           }
         }).addTo(majorRoadLineLayer);
 
@@ -985,6 +1031,13 @@ export function createMapController({ dataClient, ui }) {
       }
     }
 
+    if (tvLayout) {
+      // Candidates on the on-screen part of the road; declutter shows one per road.
+      return pickRoadLabelCandidates(lineLatLngs.map(function (line) {
+        return line.map(function (latLng) { return [latLng.lat, latLng.lng]; });
+      }), getSimFocusBounds());
+    }
+
     var totalLength = 0;
     for (var j = 0; j < lineLatLngs.length; j++) {
       totalLength += computeLineLengthMeters(lineLatLngs[j]);
@@ -1181,6 +1234,7 @@ export function createMapController({ dataClient, ui }) {
       return Number(b.dataset.roadPriority || 0) - Number(a.dataset.roadPriority || 0);
     });
 
+    var shownRoads = Object.create(null);
     labelElements.forEach(function (element) {
       var rect = element.getBoundingClientRect();
       var insideMap = rect.left >= mapRect.left && rect.right <= mapRect.right &&
@@ -1189,9 +1243,13 @@ export function createMapController({ dataClient, ui }) {
       var collides = occupied.some(function (candidate) {
         return screenRectsOverlap(paddedRect, candidate);
       });
-      element.style.visibility = insideMap && !collides ? 'visible' : 'hidden';
-      if (insideMap && !collides) {
+      // TV labels are alternative spots for one name: keep the first that fits.
+      var alreadyShown = tvLayout && shownRoads[element.dataset.roadKey];
+      var show = insideMap && !collides && !alreadyShown;
+      element.style.visibility = show ? 'visible' : 'hidden';
+      if (show) {
         occupied.push(paddedRect);
+        shownRoads[element.dataset.roadKey] = true;
       }
     });
   }
@@ -2184,6 +2242,27 @@ export function createMapController({ dataClient, ui }) {
     return fallback;
   }
 
+  function setupSimulatorBasemap() {
+    var focus = L.latLngBounds(getSimFocusBounds());
+    map.getContainer().style.background = SIM_BASEMAP.edgeColor;
+    L.imageOverlay(SIM_BASEMAP.url, L.latLngBounds(getSimBasemapBounds()), {
+      attribution: 'Map data &copy; OpenStreetMap contributors &middot; rendered by Barrie Simulator'
+    }).addTo(map);
+    // Always show the whole focus area; the larger image fills whatever is left.
+    var fit = function () {
+      map.fitBounds(focus, { animate: false });
+      scheduleMajorRoadLabelDeclutter();
+    };
+    fit();
+    map.on('resize', fit);
+    // Leaflet only re-measures on window resize. The legend under the map appears
+    // after routes load and shrinks the map box, so watch the box itself.
+    if (typeof ResizeObserver === 'function') {
+      new ResizeObserver(function () { map.invalidateSize({ animate: false }); }).observe(map.getContainer());
+    }
+    updateDebugState('basemap', 'barrie-simulator');
+  }
+
   function getRouteMeta(routeId, props) {
     var id = routeId || 'route';
     var normalizedId = normalizeRouteKey(id);
@@ -2194,6 +2273,11 @@ export function createMapController({ dataClient, ui }) {
     var color = normalizeHexColor(colorSource) || colorSource || pickRouteColor(id);
     var textColorSource = props && props.route_text_color ? props.route_text_color : existing && existing.textColor;
     var textColor = normalizeHexColor(textColorSource) || computeTextColor(color);
+    var tvColor = tvLayout ? getTvRouteColorOverride(id) : null;
+    if (tvColor) {
+      color = tvColor;
+      textColor = computeTextColor(tvColor);
+    }
     var displayName = (props ? getRouteDisplayName(props, id) : existing && existing.displayName) || getRouteDisplayName({}, id);
     var longName = (props && props.route_long_name) || (existing && existing.longName) || null;
     var agencyId = (props && props.agency_id) || (existing && existing.agencyId) || 'barrie-transit';

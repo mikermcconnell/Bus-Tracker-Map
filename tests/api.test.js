@@ -34,6 +34,7 @@ describe('API smoke tests', () => {
     process.env.ONTARIO_NORTHLAND_ENABLED = 'false';
     process.env.SIMCOE_LINX_ENABLED = 'false';
     process.env.GO_TRANSIT_ENABLED = 'false';
+    process.env.LINX_ENABLED = 'false';
     process.env.METROLINX_API_KEY = '';
     process.env.MAPBOX_ACCESS_TOKEN = '';
     process.env.MAPBOX_USERNAME = '';
@@ -104,6 +105,7 @@ describe('API smoke tests', () => {
     delete process.env.ONTARIO_NORTHLAND_ENABLED;
     delete process.env.SIMCOE_LINX_ENABLED;
     delete process.env.GO_TRANSIT_ENABLED;
+    delete process.env.LINX_ENABLED;
     delete process.env.METROLINX_API_KEY;
     delete process.env.MAPBOX_ACCESS_TOKEN;
     delete process.env.MAPBOX_USERNAME;
@@ -125,6 +127,31 @@ describe('API smoke tests', () => {
     const stopsRes = await request(app).get('/api/stops.geojson');
     expect(stopsRes.status).toBe(200);
     expect(stopsRes.body.features[0].properties.stop_name).toBe('Terminal');
+  });
+
+  test('platform 9002 fails closed when LINX schedule data is missing', async () => {
+    writeJson(path.join(cacheDir, 'barrie-transit.json'), { trips: { other: { terminal_stops: [] } } });
+    const app = await initApp();
+    const response = await request(app).get('/api/departures?view=platform&stop=9002');
+    expect(response.status).toBe(503);
+    expect(response.body.error).toBe('DEPARTURES_UNAVAILABLE');
+  });
+
+  test('platform 9002 returns a platform-specific 72-hour schedule with health information', async () => {
+    writeJson(path.join(cacheDir, 'linx.json'), {
+      feed_start_date: '20260101', feed_end_date: '20271231', terminal_stop_ids: ['SCSTOP210'],
+      service_calendars: { daily: { start_date: '20260101', end_date: '20271231',
+        sunday: true, monday: true, tuesday: true, wednesday: true, thursday: true, friday: true, saturday: true } },
+      trips: { outbound: { service_id: 'daily', route_id: '2', headsign: 'Wasaga Beach',
+        terminal_stops: [{ stop_id: 'SCSTOP210', departure_time: '12:00:00', is_departure: true }] } },
+    });
+    const app = await initApp();
+    const response = await request(app).get('/api/departures?view=platform&stop=9002');
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ stop_code: '9002', platform_display: '02', horizon_hours: 72,
+      status: 'ok', source: { schedule_status: 'available' } });
+    expect(response.body.departures).toHaveLength(1);
+    expect(response.body.departures[0].departure_source).toBe('scheduled');
   });
 
   test('merges Ontario Northland route segments when the source is enabled', async () => {

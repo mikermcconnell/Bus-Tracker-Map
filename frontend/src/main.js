@@ -2,23 +2,31 @@ import L from 'leaflet';
 import { createDataClient } from './data/client.js';
 import { createMapController } from './map/controller.js';
 import { createUiController } from './ui/controller.js';
+import { isTvLayout, startPixelShift } from './tv-layout.js';
 
 window.L = L;
 
 document.addEventListener('DOMContentLoaded', function () {
   setupDebugPanel();
 
+  var tvLayout = isTvLayout(window.location.search);
+  if (tvLayout) {
+    document.body.classList.add('layout-tv');
+    startPixelShift(document.body);
+  }
+
   var dataClient = createDataClient({
     // baseUrl: 'http://localhost:3000' // Removed to allow relative path (works on any port)
   });
 
-  var ui = createUiController();
+  var ui = createUiController({ tvLayout: tvLayout });
   ui.init();
 
   var mapController = createMapController({
     containerId: 'map',
     dataClient: dataClient,
-    ui: ui
+    ui: ui,
+    tvLayout: tvLayout
   });
 
   // Start everything
