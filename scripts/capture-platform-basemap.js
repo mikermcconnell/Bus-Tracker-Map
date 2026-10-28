@@ -6,9 +6,11 @@
 // The simulator is a separate project (mike_apps/Barrie-Simulator). Start its
 // dev server first (`npm run dev` there), then run:
 //
-//   node scripts/capture-platform-basemap.js [--url http://localhost:5173/] [--heading 0]
+//   node scripts/capture-platform-basemap.js [--url http://localhost:5173/] [--heading 0] [--tilt 0]
 //
 // heading = compass direction shown at the top of the map (0 = north up).
+// tilt = camera angle from straight down, in degrees, for a 3D view (0 = as far down as the
+// simulator allows; it clamps to about 20). The calibration is a perspective fit either way.
 // The script only moves the simulator's camera and hides its own buses, routes
 // and stops in the browser; it changes nothing in the simulator project.
 //
@@ -30,13 +32,15 @@ const option = (name, fallback) => {
 const WIDTH = 1428;
 const HEIGHT = 1104;
 // About 14% closer than the former Leaflet zoom 18.1 (0.3985 m/px). Closer than
-// this pushes Stop 14 or the passenger pick-up point off the visible map.
+// this pushes Stop 14 or the passenger pick-up point off the visible map (they are
+// about 300 m apart east to west), in the top-down and the 3D (--tilt 40) view alike.
 const METRES_PER_PIXEL = 0.35;
 // Plane centre. Shifted slightly east of the platforms so Stop 14 (west) and the
 // pick-up point (east) both stay inside the visible part of the plane.
 const CENTER = { lat: 44.373974, lon: -79.689174 };
 const SIM_URL = option('url', 'http://localhost:5173/');
 const HEADING = Number(option('heading', '0'));
+const TILT = Number(option('tilt', '0'));
 const OUT_DIR = path.join(__dirname, '..', 'frontend', 'src', 'platform-map');
 
 // Inputs are offsets from the map centre scaled by INPUT_SCALE (about 10 m per unit)
@@ -99,7 +103,7 @@ function applyHomography(h, u, v) {
   await page.waitForFunction(() => window.__controls && window.__controls.current && window.__store, null, { timeout: 90000 });
   await page.waitForTimeout(6000);
   await page.evaluate(() => window.__store.setState((state) => ({
-    layers: { ...state.layers, buses: false, transit: false, stops: false, designRoutes: false, changes: false, landmarks: true },
+    layers: { ...state.layers, buses: false, transit: false, stops: false, designRoutes: false, changes: false, landmarks: true, streetNames: false },
   })));
   await page.addStyleTag({ content: 'body * { visibility: hidden !important; } canvas { visibility: visible !important; }' });
 
@@ -119,7 +123,7 @@ function applyHomography(h, u, v) {
     await page.waitForTimeout(1500);
   }
 
-  await page.evaluate(({ center, mpp, height, headingDeg }) => {
+  await page.evaluate(({ center, mpp, height, headingDeg, tiltDeg }) => {
     const R = 6371008.8;
     const DEG = Math.PI / 180;
     const origin = { lat: 44.3835, lon: -79.685 }; // Barrie-Simulator pipeline/area.ts CITY_ORIGIN
@@ -128,8 +132,8 @@ function applyHomography(h, u, v) {
     const controls = window.__controls.current;
     const camera = controls.object;
     const distance = (height * mpp / 2) / Math.tan((camera.fov * DEG) / 2);
-    // Straight down; the tiny tilt only sets which compass direction is "up".
-    const polar = 0.0001;
+    // A tiny tilt still sets which compass direction is "up" when looking straight down.
+    const polar = Math.max(0.0001, tiltDeg * DEG);
     const theta = -headingDeg * DEG;
     controls.target.set(tx, 0, tz);
     camera.position.set(
@@ -139,7 +143,7 @@ function applyHomography(h, u, v) {
     );
     camera.lookAt(tx, 0, tz);
     controls.update();
-  }, { center: CENTER, mpp: METRES_PER_PIXEL, height: HEIGHT, headingDeg: HEADING });
+  }, { center: CENTER, mpp: METRES_PER_PIXEL, height: HEIGHT, headingDeg: HEADING, tiltDeg: TILT });
   await page.waitForTimeout(8000);
 
   // Project a grid of points through the simulator's own camera for an exact calibration.
@@ -181,6 +185,7 @@ function applyHomography(h, u, v) {
     height: HEIGHT,
     metres_per_pixel: METRES_PER_PIXEL,
     heading: HEADING,
+    tilt: TILT,
     center: CENTER,
     // See fitHomography: u = (lon - center.lon) * input_scale, v = (lat - center.lat) * input_scale.
     input_scale: INPUT_SCALE,

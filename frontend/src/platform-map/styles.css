@@ -313,24 +313,7 @@ body {
   box-shadow: 0 3px 7px rgba(19, 48, 62, 0.24);
 }
 
-/* "You are here": the terminal building outlined in red, with a red dot. */
-.map-here__outline {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-  pointer-events: none;
-}
-
-.map-here__outline polygon {
-  fill: rgba(212, 38, 44, 0.14);
-  stroke: #d4262c;
-  stroke-width: 4;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-
+/* "You are here": a red dot on the terminal building. */
 .map-here__dot {
   position: absolute;
   width: clamp(18px, 3cqw, 30px);
@@ -989,7 +972,37 @@ body {
   z-index: 5;
   width: clamp(138px, 16cqw, 170px);
   min-height: 58px;
-  transform: translate(-100%, -50%);
+  transform: translate(-50%, -100%);
+}
+
+/* Stem from the card's bottom edge down to a dot on the pick-up point. */
+.map-dropoff-card__stem {
+  display: none;
+}
+
+.map-dropoff-card[data-geographic-card="true"] .map-dropoff-card__stem {
+  position: absolute;
+  top: 100%;
+  left: calc(50% + var(--stem-x, 0px));
+  display: block;
+  width: 3px;
+  height: var(--stem-length, 0px);
+  background: #006fb9;
+  transform: translateX(-50%);
+}
+
+.map-dropoff-card[data-geographic-card="true"] .map-dropoff-card__stem::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #006fb9;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  transform: translate(-50%, 50%);
 }
 
 .map-dropoff-card__icon {

@@ -136,6 +136,8 @@ const PICKUP_DROPOFF_POINTER_COORDINATES = Object.freeze({
   lat: 44.373639,
   lon: -79.687411,
 });
+// How far above its point the pick-up card sits (screen px).
+const GEOGRAPHIC_CARD_GAP_PX = 70;
 // Terminal building footprint (OpenStreetMap way 1427393969, as used by the Barrie Simulator).
 const TERMINAL_BUILDING_FOOTPRINT = Object.freeze([
   [44.374292, -79.690245], [44.374213, -79.690261], [44.374215, -79.690301], [44.37413, -79.690318],
@@ -611,8 +613,14 @@ function setupPlatformApp() {
         const anchorY = planeRect.top - stageRect.top + planeRect.height * anchor.y / 100;
         const cardWidth = card.getBoundingClientRect().width;
         const cardHeight = card.getBoundingClientRect().height;
-        card.style.left = `${Math.max(cardWidth + 8, Math.min(stageRect.width - 8, anchorX))}px`;
-        card.style.top = `${Math.max(cardHeight / 2 + 8, Math.min(stageRect.height - cardHeight / 2 - 8, anchorY))}px`;
+        // The card sits above its point, so the lay-by lane under it stays in view; a stem
+        // runs down from the card to a dot on the point.
+        const left = Math.max(cardWidth / 2 + 8, Math.min(stageRect.width - cardWidth / 2 - 8, anchorX));
+        const top = Math.max(cardHeight + 8, anchorY - GEOGRAPHIC_CARD_GAP_PX);
+        card.style.left = `${left}px`;
+        card.style.top = `${top}px`;
+        card.style.setProperty('--stem-x', `${anchorX - left}px`);
+        card.style.setProperty('--stem-length', `${Math.max(0, anchorY - top)}px`);
       });
       return;
     }
@@ -942,19 +950,11 @@ function setupPlatformApp() {
     positionMapConnectionCard(card);
   }
 
-  // "You are here": the terminal building outlined in red with a red dot; the legend explains it.
+  // "You are here": a red dot on the terminal building; the legend explains it. The 3D base map
+  // shows the building itself, so it is not outlined (a ground outline sits beside the walls).
   function renderTerminalMarker() {
     const points = TERMINAL_BUILDING_FOOTPRINT.map(([lat, lon]) => projectCoordinate(lat, lon));
     if (points.some((point) => !point)) return;
-    const outline = document.createElementNS(SVG_NS, 'svg');
-    outline.setAttribute('class', 'map-here__outline');
-    outline.setAttribute('viewBox', '0 0 100 100');
-    outline.setAttribute('preserveAspectRatio', 'none');
-    outline.setAttribute('aria-hidden', 'true');
-    const polygon = document.createElementNS(SVG_NS, 'polygon');
-    polygon.setAttribute('points', points.map((point) => `${point.x},${point.y}`).join(' '));
-    outline.appendChild(polygon);
-    mapPlatformLayerEl.appendChild(outline);
     const centre = {
       x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
       y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
@@ -1016,6 +1016,7 @@ function setupPlatformApp() {
     copy.appendChild(createElement('strong', '', 'Passenger'));
     copy.appendChild(createElement('span', '', 'Pick-up / drop-off'));
     dropoff.appendChild(copy);
+    dropoff.appendChild(createElement('span', 'map-dropoff-card__stem'));
     mountManualPointer(dropoff, null, PICKUP_DROPOFF_POINTER_COORDINATES);
     refreshManualPointer(dropoff);
   }
