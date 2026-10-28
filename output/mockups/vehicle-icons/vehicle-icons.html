@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Allandale Terminal TV – regional bus icons (mockup)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { --ink: #062235; --muted: #4b5d6e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 60px; color: var(--ink); background: #eef1f5; font: 16px/1.4 "Segoe UI", Arial, sans-serif; }
+  h1 { margin: 0 0 4px; font-size: 30px; }
+  .lead { margin: 0 0 20px; color: var(--muted); max-width: 1150px; }
+  .card { margin-bottom: 26px; overflow: hidden; border-radius: 14px; background: #fff; box-shadow: 0 6px 22px rgba(20, 40, 60, .12); }
+  .card header { padding: 16px 20px 8px; }
+  .card h2 { margin: 0; font-size: 22px; }
+  .card h2 small { margin-left: 8px; padding: 2px 8px; border-radius: 999px; color: #fff; background: #00853f; font-size: 13px; vertical-align: middle; }
+  .card p { margin: 6px 0 0; color: var(--muted); }
+  .panes { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #e3e8ee; }
+  .pane { position: relative; min-height: 300px; }
+  .pane__label { position: absolute; left: 12px; top: 10px; z-index: 5; padding: 3px 9px; border-radius: 999px; color: #fff; background: rgba(6, 34, 53, .78);
+    font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+  .lineup { display: flex; align-items: flex-end; justify-content: space-around; gap: 10px; padding: 64px 20px 26px; background: #e9edf3; border-right: 1px solid #e3e8ee; }
+  .lineup figure { margin: 0; display: grid; justify-items: center; gap: 14px; }
+  .lineup figcaption { color: var(--muted); font-size: 14px; font-weight: 700; text-align: center; }
+  .lineup .scale { transform: scale(1.6); transform-origin: bottom center; margin-top: 30px; }
+  .map { position: relative; overflow: hidden; background: #e8ebf3 url("assets/map-crop.png") 0 0 / 760px 420px no-repeat; }
+  .map .stage { position: absolute; left: -40px; top: -60px; width: 760px; height: 420px; }
+  .ptr { position: absolute; padding: 5px 8px; border: 2px solid #fff; border-radius: 7px; color: #fff; background: var(--c, #075f86);
+    box-shadow: 0 3px 8px rgba(0,0,0,.4); font: 900 20px/1 "Segoe UI", Arial, sans-serif; transform: translate(-50%, -50%); }
+  .notes { padding: 4px 20px 16px; color: var(--muted); font-size: 14px; }
+  .notes b { color: var(--ink); }
+
+  /* ---------- Shared marker frame (same size as today's Barrie marker on the TV: 58 px) ---------- */
+  .veh { position: relative; width: 58px; height: 58px; flex: none; }
+  .map .veh { position: absolute; transform: translate(-50%, -50%); }
+  .veh__arrow { position: absolute; top: -24px; left: 50%; width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent;
+    border-bottom: 16px solid #071827; filter: drop-shadow(0 0 2px #fff); transform: translateX(-50%) rotate(var(--bearing, 0deg)); transform-origin: 50% 53px; }
+  .veh__body { position: absolute; inset: 0; display: grid; place-items: center; border: 3px solid #fff; border-radius: 50%;
+    color: var(--fg, #fff); background: var(--bg, #050505); box-shadow: 0 6px 16px rgba(0,0,0,.42); font-weight: 900; line-height: .92; text-align: center; }
+  .veh__body::after { content: ""; position: absolute; inset: 12%; border: 1.5px solid rgba(255,255,255,.42); border-radius: 50%; }
+  .veh__route { font-size: 20px; letter-spacing: -.02em; }
+  .veh__dir { display: block; font-size: 11px; letter-spacing: .08em; }
+
+  /* ---------- A. Agency colour ring ---------- */
+  .a .veh__body { border: 5px solid var(--ring, #fff); box-shadow: 0 0 0 2px #fff, 0 6px 16px rgba(0,0,0,.42); }
+  .a .veh__body::after { display: none; }
+
+  /* ---------- B. Logo tab on top ---------- */
+  .b .veh__tab { position: absolute; z-index: 3; left: 50%; top: -15px; height: 20px; min-width: 38px; padding: 2px 6px; display: grid; place-items: center;
+    border: 2px solid #fff; border-radius: 6px; background: var(--tab-bg, #fff); box-shadow: 0 2px 6px rgba(0,0,0,.35); transform: translateX(-50%); }
+  .b .veh__tab img { display: block; height: 13px; width: auto; }
+  .b .veh__arrow { top: auto; bottom: -24px; transform: translateX(-50%) rotate(calc(var(--bearing, 0deg) + 180deg)); transform-origin: 50% -29px; }
+  .b .veh--barrie .veh__arrow { top: -24px; bottom: auto; transform: translateX(-50%) rotate(var(--bearing, 0deg)); transform-origin: 50% 53px; }
+
+  /* ---------- C. Split circle ---------- */
+  .c .veh__body { overflow: hidden; grid-template-rows: 42% 58%; place-items: stretch; }
+  .c .veh__body::after { display: none; }
+  .c .veh__top { display: grid; place-items: center; padding-top: 4px; color: var(--top-fg, #fff); background: var(--top-bg, #00853f); font-size: 11px; letter-spacing: .06em; }
+  .c .veh__bottom { display: grid; place-items: center; padding-bottom: 4px; font-size: 19px; }
+</style>
+</head>
+<body>
+  <h1>Regional bus icons – options</h1>
+  <p class="lead">Barrie Transit buses keep today's round icon (route colour, route number, direction letter and travel arrow) and the GO train keeps its own drawing. These options give GO buses, Ontario Northland and Simcoe LINX a matching round icon that says which agency it is at a glance. Left: the four icons side by side, enlarged. Right: the same icons on the map at the TV's real size.</p>
+  <div id="cards"></div>
+
+<script>
+  const LOGO = { go: 'assets/agency-go-transit.svg', on: 'assets/agency-ontario-northland.png', linx: 'assets/agency-simcoe-linx.png' };
+  // Brand colours: GO green; Ontario Northland navy with gold; Simcoe LINX blue with gold.
+  const VEHICLES = [
+    { key: 'barrie', name: 'Barrie Transit 8B', route: '8B', dir: 'N', bg: '#050505', fg: '#fff', at: [262, 232], bearing: 80 },
+    { key: 'go', name: 'GO bus 68', route: '68', bg: '#00853f', fg: '#fff', ring: '#ffffff', top: 'GO', topBg: '#ffffff', topFg: '#00853f', tabBg: '#ffffff', at: [317, 171], bearing: 260 },
+    { key: 'on', name: 'Ontario Northland 201', route: '201', bg: '#002a5c', fg: '#fff', ring: '#f1b900', top: 'ON', topBg: '#f1b900', topFg: '#002a5c', tabBg: '#ffffff', at: [470, 187], bearing: 100 },
+    { key: 'linx', name: 'Simcoe LINX 2', route: '2', bg: '#00549f', fg: '#fff', ring: '#f2a900', top: 'LINX', topBg: '#f2a900', topFg: '#062235', tabBg: '#ffffff', at: [492, 282], bearing: 270 },
+  ];
+  const POINTERS = [['P7', '#007a33', 317, 130], ['P8', '#002a5c', 400, 146], ['P2', '#00549f', 420, 336], ['P3', '#075f86', 348, 330]];
+
+  const OPTIONS = [
+    { cls: 'a', title: 'A. Agency colour ring', badge: 'Recommended',
+      text: 'The circle is the agency\'s colour with the route number in white, and a thick outer ring in the agency\'s second colour: white for GO, gold for Ontario Northland and LINX. Same size and travel arrow as Barrie buses.',
+      notes: '<b>For:</b> cleanest; reads from far away; colour pairs match each agency\'s signs. <b>Against:</b> relies on riders knowing the agency colours (the board and map cards show the same colours next to the logos).' },
+    { cls: 'b', title: 'B. Logo tab on top', badge: '',
+      text: 'Today\'s round icon in the agency colour, with a small white tab above it carrying the real agency logo. The travel arrow moves below so it does not collide with the tab.',
+      notes: '<b>For:</b> no guessing: the logo is right there. <b>Against:</b> logos are tiny at TV size (about 13 px tall), and the icon gets taller, so close buses overlap more.' },
+    { cls: 'c', title: 'C. Split circle', badge: '',
+      text: 'The top of the circle names the agency (GO, ON, LINX) on its accent colour; the bottom shows the route number on the agency colour.',
+      notes: '<b>For:</b> agency and route both in words. <b>Against:</b> the route number gets smaller (19 px vs 20 px) and the text is busier at a distance.' },
+  ];
+
+  const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html !== undefined) n.innerHTML = html; return n; };
+
+  function icon(option, v) {
+    const veh = el('div', `veh veh--${v.key}`);
+    veh.style.setProperty('--bg', v.bg);
+    veh.style.setProperty('--fg', v.fg);
+    veh.style.setProperty('--bearing', `${v.bearing}deg`);
+    veh.appendChild(el('span', 'veh__arrow'));
+    const body = el('span', 'veh__body');
+    const regional = v.key !== 'barrie';
+    if (option === 'c' && regional) {
+      body.style.setProperty('--top-bg', v.topBg);
+      body.style.setProperty('--top-fg', v.topFg);
+      body.appendChild(el('span', 'veh__top', v.top));
+      body.appendChild(el('span', 'veh__bottom', v.route));
+    } else {
+      body.innerHTML = `<span class="veh__route">${v.route}${v.dir ? `<span class="veh__dir">${v.dir}</span>` : ''}</span>`;
+    }
+    if (option === 'a' && regional) body.style.setProperty('--ring', v.ring);
+    veh.appendChild(body);
+    if (option === 'b' && regional) {
+      const tab = el('span', 'veh__tab');
+      tab.style.setProperty('--tab-bg', v.tabBg);
+      tab.appendChild(Object.assign(document.createElement('img'), { src: LOGO[v.key], alt: '' }));
+      veh.appendChild(tab);
+    }
+    return veh;
+  }
+
+  const cards = document.getElementById('cards');
+  OPTIONS.forEach((option) => {
+    const card = el('section', `card ${option.cls}`);
+    const header = el('header');
+    header.appendChild(el('h2', '', `${option.title}${option.badge ? ` <small>${option.badge}</small>` : ''}`));
+    header.appendChild(el('p', '', option.text));
+    card.appendChild(header);
+    const panes = el('div', 'panes');
+    const lineup = el('div', 'pane lineup');
+    lineup.appendChild(el('span', 'pane__label', 'Enlarged 1.6×'));
+    VEHICLES.forEach((v) => {
+      const fig = el('figure');
+      const wrap = el('div', 'scale');
+      // Enlarged row: every arrow points up so the shapes compare side by side.
+      wrap.appendChild(icon(option.cls, { ...v, bearing: 0 }));
+      fig.appendChild(wrap);
+      fig.appendChild(el('figcaption', '', v.name));
+      lineup.appendChild(fig);
+    });
+    panes.appendChild(lineup);
+    const map = el('div', 'pane map');
+    map.appendChild(el('span', 'pane__label', 'On the map · TV size'));
+    const stage = el('div', 'stage');
+    POINTERS.forEach(([name, colour, x, y]) => {
+      const p = el('div', 'ptr', name);
+      p.style.setProperty('--c', colour);
+      p.style.left = `${x}px`; p.style.top = `${y}px`;
+      stage.appendChild(p);
+    });
+    VEHICLES.forEach((v) => {
+      const veh = icon(option.cls, v);
+      veh.style.left = `${v.at[0]}px`; veh.style.top = `${v.at[1] + 30}px`;
+      stage.appendChild(veh);
+    });
+    map.appendChild(stage);
+    panes.appendChild(map);
+    card.appendChild(panes);
+    card.appendChild(el('div', 'notes', option.notes));
+    cards.appendChild(card);
+  });
+</script>
+</body>
+</html>

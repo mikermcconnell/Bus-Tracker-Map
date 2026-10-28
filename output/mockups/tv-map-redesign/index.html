@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Allandale TV Map – Redesign Mockup</title>
+<style>
+  :root {
+    --navy: #004e80;
+    --deep-navy: #071827;
+    --ink: #10202e;
+    --muted: #5b6b78;
+    --line: #dfe5ea;
+    --live: #4ade80;
+    --amber: #fbbf24;
+    --yah: #e11d2e;
+    --stage-w: 1920px;
+    --stage-h: 1080px;
+    --safe-x: 48px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1b2530; font-family: "Segoe UI", Arial, sans-serif; }
+
+  /* ---------- Review chrome (outside the TV stage) ---------- */
+  .review-bar {
+    position: fixed; inset: 0 0 auto 0; height: 48px; z-index: 10;
+    display: flex; align-items: center; gap: 18px; padding: 0 16px;
+    background: #0d141b; color: #cfd8e0; font-size: 13px; border-bottom: 1px solid #2a3642;
+  }
+  .review-bar strong { color: #fff; font-size: 14px; margin-right: 8px; }
+  .review-bar label { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  .review-bar .spacer { flex: 1; }
+  .review-bar .hint { color: #7f8e9b; }
+  body.kiosk .review-bar, body.kiosk .notes { display: none; }
+
+  .viewport { position: fixed; top: 48px; left: 0; right: 0; bottom: 0; }
+  body.kiosk .viewport { top: 0; }
+  body.show-notes .viewport { right: 420px; }
+
+  .notes {
+    position: fixed; top: 48px; right: 0; bottom: 0; width: 420px; z-index: 9;
+    overflow-y: auto; background: #f7f9fb; color: var(--ink); padding: 18px 20px 40px;
+    display: none; font-size: 14px; line-height: 1.45;
+  }
+  body.show-notes .notes { display: block; }
+  .notes h2 { margin: 4px 0 4px; font-size: 18px; }
+  .notes p.lede { margin: 0 0 14px; color: var(--muted); }
+  .notes h3 { margin: 18px 0 8px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .notes ol { list-style: none; margin: 0; padding: 0; }
+  .notes li { display: grid; grid-template-columns: 30px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .notes li .n { width: 26px; height: 26px; border-radius: 50%; background: #7c3aed; color: #fff; font-weight: 700; display: grid; place-items: center; font-size: 13px; }
+  .notes li.future .n { background: #0f766e; }
+  .notes li b { display: block; }
+  .notes li span.tag { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: 1px; }
+  .notes li.patch span.tag { background: #ede9fe; color: #5b21b6; }
+  .notes li.future span.tag { background: #ccfbf1; color: #115e59; }
+
+  /* ---------- TV stage: fixed 1920x1080, scaled to fit ---------- */
+  .stage {
+    position: absolute; top: 0; left: 0; width: var(--stage-w); height: var(--stage-h);
+    transform-origin: 0 0; overflow: hidden; background: #eef2f4;
+    display: grid; grid-template-rows: 88px 1fr 88px;
+    transition: filter .6s;
+  }
+  .stage-inner { display: contents; }
+  body.night .stage { filter: brightness(.62) contrast(1.05); }
+
+  .safe-guide {
+    position: absolute; inset: 27px var(--safe-x); border: 3px dashed #ff00aa; pointer-events: none; z-index: 50; display: none;
+  }
+  .safe-guide::after { content: "TV-safe area (2.5% inset)"; position: absolute; top: 6px; left: 10px; background: #ff00aa; color: #fff; font: 700 16px "Segoe UI"; padding: 2px 8px; }
+  body.show-safe .safe-guide { display: block; }
+
+  /* Header */
+  .tv-header {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    padding: 0 var(--safe-x); background: var(--navy); color: #fff; border-bottom: 4px solid #00a8c8;
+  }
+  .live-pill {
+    justify-self: start; display: inline-flex; align-items: center; gap: 12px;
+    padding: 8px 20px 8px 16px; border-radius: 999px; background: rgba(255,255,255,.12);
+    font-weight: 800; font-size: 26px; letter-spacing: .06em;
+  }
+  .live-pill .dot { width: 16px; height: 16px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 0 rgba(74,222,128,.7); animation: pulse 2s infinite; }
+  .tv-title { font-size: 40px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+  .tv-title span { font-weight: 400; opacity: .8; }
+  .clock-wrap { justify-self: end; display: flex; align-items: center; gap: 18px; }
+  .clock { font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .fresh { font-size: 20px; font-weight: 700; padding: 6px 14px; border-radius: 8px; background: rgba(74,222,128,.18); color: #bbf7d0; }
+
+  /* Body: two columns, nothing floats over the map */
+  .tv-body { display: grid; grid-template-columns: 1156px 1fr; min-height: 0; }
+
+  .map-pane { position: relative; overflow: hidden; background: #e9eef1; display: grid; grid-template-rows: 1fr auto; min-height: 0; }
+  .map-pane > svg { display: block; width: 100%; height: 100%; min-height: 0; }
+  .stale-banner {
+    position: absolute; bottom: 76px; left: 50%; transform: translateX(-50%); display: none;
+    background: #78350f; color: #fff; font-size: 22px; font-weight: 700; padding: 8px 20px; white-space: nowrap; z-index: 2; border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.25);
+  }
+  body.stale .stale-banner { display: block; }
+  body.stale .fresh { background: var(--amber); color: #3a2600; }
+  body.stale .live-pill .dot { background: var(--amber); animation: none; }
+
+  .legend {
+    display: flex; flex-wrap: nowrap; align-items: center; gap: 15px; height: 60px;
+    padding: 0 20px 0 var(--safe-x); background: #fff; border-top: 1px solid #c9d3da;
+    font-size: 18px; font-weight: 700; color: var(--ink); white-space: nowrap;
+  }
+  .legend .title { font-size: 15px; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+  .legend .item { display: inline-flex; align-items: center; gap: 8px; }
+  .legend .swatch { width: 26px; height: 8px; border-radius: 4px; }
+  .legend .swatch.rail { height: 6px; background: repeating-linear-gradient(90deg, #333 0 10px, #fff 10px 16px); border: 1px solid #333; }
+  .legend .sep { width: 2px; height: 30px; background: var(--line); }
+
+  /* Departures column */
+  .departures { display: flex; flex-direction: column; background: #fff; border-left: 1px solid #c9d3da; padding-right: calc(var(--safe-x) - 16px); min-height: 0; }
+  .dep-head { padding: 20px 24px 14px 28px; border-bottom: 3px solid var(--navy); }
+  .dep-head h2 { margin: 0; font-size: 38px; font-weight: 800; color: var(--navy); }
+  .dep-head .sub { font-size: 20px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+  .dep-cols { display: grid; grid-template-columns: 84px 1fr 136px 112px; gap: 0 14px; padding: 8px 24px 6px 28px; font-size: 15px; font-weight: 800; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+  .dep-cols .r { text-align: right; } .dep-cols .c { text-align: center; }
+  .dep-list { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .dep {
+    display: grid; grid-template-columns: 84px 1fr 136px 112px; gap: 0 14px; align-items: center;
+    padding: 0 24px 0 28px; height: 104px; border-bottom: 1px solid var(--line);
+  }
+  .dep.boarding { background: #ecfdf3; box-shadow: inset 8px 0 0 #16a34a; }
+  .dep .dest { min-width: 0; }
+  .dep .dest b { display: block; font-size: 33px; font-weight: 800; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.15; }
+  .dep .dest small { display: block; font-size: 19px; color: var(--muted); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dep .mins { text-align: right; line-height: 1; color: var(--ink); }
+  .dep .mins .num { font-size: 58px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .dep .mins .unit { font-size: 22px; font-weight: 700; margin-left: 4px; }
+  .dep .mins .word { font-size: 30px; font-weight: 800; color: #15803d; }
+  .dep .mins .sched { display: none; font-size: 15px; font-weight: 700; color: #92400e; margin-top: 4px; letter-spacing: .04em; }
+  body.stale .dep .mins .sched { display: block; }
+  body.stale .dep .mins .num::before { content: "~"; font-size: .55em; font-weight: 400; vertical-align: .35em; }
+  .plat { justify-self: center; width: 108px; height: 84px; border-radius: 12px; background: var(--navy); color: #fff; display: grid; place-items: center; align-content: center; line-height: 1; position: relative; }
+  .plat .lbl { font-size: 13px; font-weight: 800; letter-spacing: .03em; }
+  .plat .no { font-size: 46px; font-weight: 800; }
+  .plat.street { background: #fff; color: var(--navy); border: 4px solid var(--navy); }
+  .plat .arrow { position: absolute; right: -16px; top: -16px; width: 34px; height: 34px; border-radius: 50%; background: #0f766e; color: #fff; font-size: 22px; font-weight: 900; display: none; place-items: center; border: 3px solid #fff; }
+  body.future .plat .arrow { display: grid; }
+
+  .qr-card { display: none; align-items: center; gap: 22px; margin: 12px 24px 16px 28px; padding: 14px 18px; border-radius: 14px; background: #f1f6f9; border: 2px dashed #0f766e; }
+  body.future .qr-card { display: flex; }
+  .qr-card svg { width: 112px; height: 112px; flex: none; background: #fff; padding: 6px; border-radius: 8px; }
+  .qr-card b { display: block; font-size: 28px; color: var(--ink); }
+  .qr-card span { font-size: 19px; color: var(--muted); font-weight: 600; }
+  .qr-card em { display: block; font-style: normal; font-size: 14px; color: #0f766e; font-weight: 800; letter-spacing: .08em; margin-top: 6px; }
+
+  /* Badges (route shape carries meaning too, not just colour) */
+  .badge { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; font-size: 32px; line-height: 1; box-shadow: 0 2px 6px rgba(0,0,0,.18); }
+  .badge.sq { border-radius: 14px; flex-direction: column; font-size: 30px; }
+  .badge.sq small { display: block; font-size: 14px; letter-spacing: .1em; margin-bottom: 2px; }
+  .badge.ring { box-shadow: 0 0 0 5px #f1b900, 0 2px 6px rgba(0,0,0,.18); }
+
+  /* Alert banner */
+  .tv-alert { display: flex; align-items: center; gap: 24px; padding: 0 var(--safe-x); background: var(--amber); color: #2b1d00; }
+  .tv-alert .chip { flex: none; font-size: 20px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; background: #2b1d00; color: var(--amber); padding: 8px 16px; border-radius: 8px; }
+  .tv-alert .msg { font-size: 38px; font-weight: 800; transition: opacity .5s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tv-alert .pager { margin-left: auto; display: flex; gap: 10px; }
+  .tv-alert .pager i { width: 14px; height: 14px; border-radius: 50%; background: rgba(43,29,0,.25); }
+  .tv-alert .pager i.on { background: #2b1d00; }
+
+  /* Annotation markers on the stage */
+  .anno { position: absolute; z-index: 40; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: #7c3aed; color: #fff; font: 800 22px "Segoe UI"; display: none; place-items: center; border: 3px solid #fff; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+  .anno.future { background: #0f766e; }
+  body.show-notes .anno { display: grid; }
+  body.show-notes:not(.future) .anno.future { display: none; }
+
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(74,222,128,.7); } 70% { box-shadow: 0 0 0 14px rgba(74,222,128,0); } 100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); } }
+  @keyframes yah-ring { 0% { r: 22; opacity: .7; } 100% { r: 70; opacity: 0; } }
+  .yah-ring { animation: yah-ring 2.4s ease-out infinite; transform-box: fill-box; }
+</style>
+</head>
+<body>
+
+<div class="review-bar">
+  <strong>TV map redesign · review mockup</strong>
+  <label><input type="checkbox" id="t-notes" checked> Review notes</label>
+  <label><input type="checkbox" id="t-future" checked> Future features</label>
+  <label><input type="checkbox" id="t-stale"> Stale data</label>
+  <label><input type="checkbox" id="t-night"> Night dim</label>
+  <label><input type="checkbox" id="t-shift"> Pixel shift (fast demo)</label>
+  <label><input type="checkbox" id="t-safe"> TV-safe area</label>
+  <span class="spacer"></span>
+  <span class="hint">Basemap: Barrie Simulator · routes: real GTFS shapes · sample buses &amp; times · add <code>?kiosk</code> for full screen</span>
+</div>
+
+<div class="viewport" id="viewport">
+  <div class="stage" id="stage">
+    <div class="safe-guide"></div>
+
+    <header class="tv-header">
+      <div class="live-pill"><span class="dot"></span>LIVE</div>
+      <div class="tv-title">Find your bus <span>· live map</span></div>
+      <div class="clock-wrap"><span class="clock" id="clock">1:27 PM</span><span class="fresh" id="fresh">Updated just now</span></div>
+    </header>
+
+    <main class="tv-body">
+      <section class="map-pane" aria-label="Live map">
+        <svg id="map" viewBox="0 0 1156 844" preserveAspectRatio="xMidYMid slice"></svg>
+        <div class="legend" id="legend"></div>
+        <div class="stale-banner">Live tracking paused · showing scheduled times</div>
+      </section>
+
+      <aside class="departures">
+        <div class="dep-head">
+          <h2>Next departures</h2>
+          <div class="sub">From Allandale Transit Terminal</div>
+        </div>
+        <div class="dep-cols"><span>Route</span><span>Destination</span><span class="r">Leaves in</span><span class="c">Board at</span></div>
+        <div class="dep-list" id="deps"></div>
+        <div class="qr-card">
+          <svg id="qr" viewBox="0 0 29 29" shape-rendering="crispEdges"></svg>
+          <div><b>Take these times with you</b><span>Scan for live departures on your phone</span><em>FUTURE · QR IS A PLACEHOLDER</em></div>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="tv-alert">
+      <span class="chip" id="alert-chip">Holiday service</span>
+      <span class="msg" id="alert-msg"></span>
+      <span class="pager" id="alert-pager"></span>
+    </footer>
+
+    <!-- Review annotation markers (stage coordinates) -->
+    <div class="anno" style="left:1868px;top:118px">1</div>
+    <div class="anno" style="left:28px;top:930px">2</div>
+    <div class="anno" style="left:480px;top:600px">3</div>
+    <div class="anno" style="left:1165px;top:212px">4</div>
+    <div class="anno" style="left:250px;top:300px">5</div>
+    <div class="anno" style="left:760px;top:112px">6</div>
+    <div class="anno" style="left:1156px;top:600px">7</div>
+    <div class="anno" style="left:560px;top:930px">8</div>
+    <div class="anno" style="left:640px;top:44px">9</div>
+    <div class="anno" style="left:1440px;top:44px">10</div>
+    <div class="anno" style="left:320px;top:996px">11</div>
+    <div class="anno future" style="left:1230px;top:982px">12</div>
+    <div class="anno future" style="left:1838px;top:240px">13</div>
+    <div class="anno future" style="left:1040px;top:128px">14</div>
+  </div>
+</div>
+
+<aside class="notes">
+  <h2>What changed and why</h2>
+  <p class="lede">Each number matches a marker on the screen. Purple = fixes from the review. Teal = future features (turn on "Future features" to see them).</p>
+
+  <h3>Patches</h3>
+  <ol>
+    <li class="patch"><span class="n">1</span><div><b>No scrollbar, TV-safe edges<span class="tag">PATCH</span></b>The stage is a fixed 1920×1080 box with <code>overflow: hidden</code>. Text stays inside a 2.5% inset, so TV overscan cannot cut it off. Turn on "TV-safe area" to check this.</div></li>
+    <li class="patch"><span class="n">2</span><div><b>Staff panel replaced by a real legend<span class="tag">PATCH</span></b>"32 tracked · 15 on map" is gone. The legend is built from the same route list that draws the lines, so the two cannot get out of sync.</div></li>
+    <li class="patch"><span class="n">3</span><div><b>Clear "You Are Here"<span class="tag">PATCH</span></b>A large red pin with a white outline, a pulse ring and a red label. Bus bubbles fade when they pass close to it, so the pin always stays visible.</div></li>
+    <li class="patch"><span class="n">4</span><div><b>Departure rows put minutes first<span class="tag">PATCH</span></b>The order is route → destination → minutes → platform. Minutes are 58px (readable from about 11 ft). Distance is small grey text. The operator logo column is gone. Headsigns are shortened ("Crosstown N"). A street stop has an outlined box, so nobody looks for "Platform 14".</div></li>
+    <li class="patch"><span class="n">5</span><div><b>Readable bus bubbles<span class="tag">PATCH</span></b>Each bubble uses its route colour. Direction is an arrow on the edge of the bubble, not an 8px "N" or "S". Every route has its own colour. GTFS colours 8A and 8B both black, so 8B is shown in a proposed blue. GTFS 12 pink (#F8A1BE) is too pale on a light basemap, so it is deepened.</div></li>
+    <li class="patch"><span class="n">6</span><div><b>Barrie Simulator basemap, real routes, rider landmarks<span class="tag">PATCH</span></b>The basemap is a top-down Barrie Simulator render (10.8 m per pixel, no labels). Route lines are the real GTFS shapes, projected with the same maths, so they sit on the right streets. Landmark dots sit on real stop locations, including RVH, Georgian College and Park Place. The blank area at the top right and the straight edge across the bay are the city limits: the simulator has no data past them.</div></li>
+    <li class="patch"><span class="n">7</span><div><b>Two columns: nothing covers the map<span class="tag">PATCH</span></b>The map gets 1156px and departures get 764px. The legend is a strip under the map, not a box on top of it. The old floating panels hid about 30% of the routes.</div></li>
+    <li class="patch"><span class="n">8</span><div><b>Shape as well as colour<span class="tag">PATCH</span></b>GO uses a square badge and LINX uses a circle with a yellow ring. Line colours are only a second cue. This helps riders with red-green colour blindness.</div></li>
+    <li class="patch"><span class="n">9</span><div><b>Quieter header, bigger clock<span class="tag">PATCH</span></b>The title is smaller (40px, half in light weight), so it competes less with the departures. The clock and freshness chip are bigger, because riders check them.</div></li>
+    <li class="patch"><span class="n">10</span><div><b>Freshness you can trust<span class="tag">PATCH</span></b>The "Updated just now" chip turns amber when the data is stale. Turn on "Stale data": buses go grey and stop moving, and the times change to "~15 · scheduled".</div></li>
+    <li class="patch"><span class="n">11</span><div><b>Static amber alert banner<span class="tag">PATCH</span></b>The banner does not scroll. Alerts change every 8 s, and dots show how many there are. The wording is shorter: "Thanksgiving Monday, Oct 12: No Barrie Transit service." Amber sets alerts apart from the navy header.</div></li>
+    <li class="patch"><span class="n">–</span><div><b>Burn-in protection and night mode<span class="tag">PATCH</span></b>The whole stage moves by up to 4px every few minutes (the demo moves every 2 s). Night dim lowers brightness after hours. Use the toolbar to try both.</div></li>
+  </ol>
+
+  <h3>Future features</h3>
+  <ol>
+    <li class="future"><span class="n">12</span><div><b>QR code: take the times with you<span class="tag">FUTURE</span></b>It links to this stop's live departures on a phone. The code shown is a placeholder.</div></li>
+    <li class="future"><span class="n">13</span><div><b>Walk-direction arrows on platform boxes<span class="tag">FUTURE</span></b>Each TV knows where it is mounted, so it can show which way to walk to each platform. These arrows are examples.</div></li>
+    <li class="future"><span class="n">14</span><div><b>North arrow, scale and heading-up<span class="tag">FUTURE</span></b>The map shows a north arrow and scale now. Later, rotate the map to match the direction the viewer faces at each TV.</div></li>
+    <li class="future"><span class="n">–</span><div><b>Service status only when something is wrong<span class="tag">FUTURE</span></b>Replace "0 live on map" with an alert only when there is a real problem, for example the third alert in the banner.</div></li>
+  </ol>
+</aside>
+
+<script src="assets/city-data.js"></script>
+<script>
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const params = new URLSearchParams(location.search);
+  if (params.has('kiosk')) document.body.classList.add('kiosk');
+
+  // ---------- Route data: drives lines, legend, bubbles, and badges ----------
+  // Paths are real GTFS shapes projected onto the Barrie Simulator render (assets/city-data.js).
+  // Colours: GTFS where it works; 8B blue and a deeper 12 pink are proposed changes (see note 5).
+  const CITY = window.CITY;
+  const ROUTES = {
+    '7':  { color: '#F58220', text: '#111', label: '7A / 7B', shapes: CITY.routes['7'].paths },
+    '8A': { color: '#1f1f1f', text: '#fff', shapes: CITY.routes['8A'].paths },
+    '8B': { color: '#2563c9', text: '#fff', shapes: CITY.routes['8B'].paths },
+    '12': { color: '#e0569b', text: '#111', label: '12A / 12B', shapes: CITY.routes['12'].paths },
+    '2':  { color: '#006747', text: '#fff', ring: true, label: 'LINX 2', shapes: CITY.routes.LINX2.paths },
+    'GO': { color: '#00853f', text: '#fff', square: true, label: 'GO 68', shapes: CITY.routes.GO68.paths },
+  };
+  const TERMINAL = { x: CITY.terminal[0], y: CITY.terminal[1] };
+  // The dot sits on the real stop; the label is nudged [dx, dy] clear of the routes.
+  const LABEL_OFFSETS = { 'Georgian Mall': [-20, -40], 'Georgian College': [-60, 44], 'RVH': [70, 0], 'Downtown': [110, -30], 'Park Place': [125, 4], 'Barrie South GO': [20, 44] };
+
+  const svg = document.getElementById('map');
+  const el = (name, attrs = {}, parent = svg) => {
+    const node = document.createElementNS(NS, name);
+    Object.entries(attrs).forEach(([k, v]) => node.setAttribute(k, v));
+    parent.appendChild(node);
+    return node;
+  };
+
+  // ---------- Basemap: Barrie Simulator top-down render (no labels) ----------
+  el('image', { href: `assets/${CITY.image}`, x: 0, y: 0, width: CITY.width, height: CITY.height });
+  el('text', { x: 640, y: 360, 'font-size': 24, 'font-style': 'italic', 'font-weight': 600, fill: '#4f6fa0', 'text-anchor': 'middle' }).textContent = 'Kempenfelt Bay';
+
+  // ---------- Route lines ----------
+  const lines = el('g', { fill: 'none', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+  CITY.routes.TRAIN.paths.forEach((d) => {
+    el('path', { d, stroke: '#fff', 'stroke-width': 9 }, lines);
+    el('path', { d, stroke: '#333', 'stroke-width': 5, 'stroke-dasharray': '12 7' }, lines);
+  });
+  const pathEls = {};
+  // 8A and 8B share most streets: 8B is drawn wide underneath and 8A thin on top,
+  // so a shared street reads as a black core with blue edges.
+  const WIDTH = { '8B': 11, '8A': 4.5 };
+  ['GO', '2', '12', '7', '8B', '8A'].forEach((id) => {
+    const r = ROUTES[id];
+    const w = WIDTH[id] || 6;
+    if (id !== '8A') r.shapes.forEach((d) => el('path', { d, stroke: '#fff', 'stroke-width': w + 4, opacity: 0.9 }, lines));
+    r.shapes.forEach((d, i) => {
+      const p = el('path', { d, stroke: r.color, 'stroke-width': w }, lines);
+      if (i === 0) pathEls[id] = p;
+    });
+  });
+
+  // ---------- Landmark labels ----------
+  CITY.landmarks.forEach(({ name, xy: [x, y] }) => {
+    const [dx, dy] = LABEL_OFFSETS[name] || [0, -36];
+    el('circle', { cx: x, cy: y, r: 7, fill: '#004e80', stroke: '#fff', 'stroke-width': 3 });
+    const g = el('g', { transform: `translate(${x + dx} ${y + dy})` });
+    const box = el('rect', { y: -19, height: 38, rx: 8, fill: '#004e80' }, g);
+    const label = el('text', { x: 0, y: 8, 'font-size': 21, 'font-weight': 800, fill: '#fff', 'text-anchor': 'middle', 'letter-spacing': '.04em' }, g);
+    label.textContent = name.toUpperCase();
+    const w = label.getComputedTextLength() + 30;
+    box.setAttribute('x', -w / 2); box.setAttribute('width', w);
+  });
+
+  // ---------- North arrow + scale (true scale from the render) ----------
+  const compass = el('g', { transform: 'translate(1090 80)' });
+  el('circle', { r: 36, fill: 'rgba(255,255,255,.94)', stroke: '#c9d3da', 'stroke-width': 2 }, compass);
+  el('path', { d: 'M 0 -26 L 12 10 L 0 4 L -12 10 Z', fill: '#10202e' }, compass);
+  el('text', { y: 28, 'font-size': 16, 'font-weight': 800, 'text-anchor': 'middle', fill: '#10202e' }, compass).textContent = 'N';
+  const km = 1000 / CITY.mpp;
+  const scale = el('g', { transform: `translate(${1090 - km / 2 - 14} 150)` });
+  el('rect', { x: 0, y: -22, width: km + 28, height: 40, rx: 8, fill: 'rgba(255,255,255,.94)' }, scale);
+  el('path', { d: `M 14 4 L 14 10 L ${14 + km} 10 L ${14 + km} 4`, stroke: '#10202e', 'stroke-width': 3, fill: 'none' }, scale);
+  el('text', { x: 14 + km / 2, y: 0, 'font-size': 16, 'font-weight': 700, 'text-anchor': 'middle', fill: '#10202e' }, scale).textContent = '1 km';
+
+  // ---------- Buses (sample positions along real shapes) ----------
+  const busLayer = el('g');
+  const BUSES = [
+    ['8A', 0.10, 1], ['8A', 0.62, -1], ['8B', 0.08, 1], ['8B', 0.80, -1], ['12', 0.70, 1, '12A'], ['12', 0.35, -1, '12B'],
+    ['7', 0.30, 1, '7B'], ['7', 0.80, -1, '7A'], ['2', 0.35, 1, '2'], ['GO', 0.45, -1, '68'],
+  ].map(([route, t, dir, label]) => {
+    const path = pathEls[route];
+    const len = path.getTotalLength();
+    const r = ROUTES[route];
+    const g = el('g', {}, busLayer);
+    const arrow = el('path', { d: 'M 0 -46 L 13 -27 L -13 -27 Z', fill: r.color, stroke: '#fff', 'stroke-width': 3 }, g);
+    if (r.square) el('rect', { x: -30, y: -30, width: 60, height: 60, rx: 10, fill: r.color, stroke: '#fff', 'stroke-width': 4 }, g);
+    else el('circle', { r: 30, fill: r.color, stroke: r.ring ? '#f1b900' : '#fff', 'stroke-width': r.ring ? 6 : 4 }, g);
+    const text = label || route;
+    el('text', { y: 9, 'font-size': text.length > 2 ? 22 : 26, 'font-weight': 900, fill: r.text, 'text-anchor': 'middle' }, g).textContent = text;
+    return { g, arrow, path, len, s: t * len, dir, speed: 9 + Math.random() * 6 };
+  });
+
+  // ---------- You Are Here (drawn last, always on top) ----------
+  const yah = el('g', { transform: `translate(${TERMINAL.x} ${TERMINAL.y})` });
+  el('circle', { class: 'yah-ring', r: 22, fill: 'none', stroke: '#e11d2e', 'stroke-width': 6 }, yah);
+  el('path', { d: 'M 0 0 C -6 -14 -24 -26 -24 -44 A 24 24 0 1 1 24 -44 C 24 -26 6 -14 0 0 Z', fill: '#e11d2e', stroke: '#fff', 'stroke-width': 5 }, yah);
+  el('circle', { cy: -44, r: 9, fill: '#fff' }, yah);
+  const yl = el('g', { transform: 'translate(-300 -120)' }, yah);
+  el('rect', { width: 250, height: 74, rx: 10, fill: '#e11d2e', stroke: '#fff', 'stroke-width': 4 }, yl);
+  el('text', { x: 18, y: 34, 'font-size': 28, 'font-weight': 900, fill: '#fff', 'letter-spacing': '.04em' }, yl).textContent = 'YOU ARE HERE';
+  el('text', { x: 18, y: 60, 'font-size': 18, 'font-weight': 700, fill: '#ffe4e6' }, yl).textContent = 'Allandale Transit Terminal';
+
+  // ---------- Legend (same data as the lines) ----------
+  const legend = document.getElementById('legend');
+  legend.innerHTML = '<span class="title">Routes</span>' +
+    Object.entries(ROUTES).map(([id, r]) => `<span class="item"><span class="swatch" style="background:${r.color}"></span>${r.label || id}</span>`).join('') +
+    '<span class="item"><span class="swatch rail"></span>GO train</span><span class="sep"></span>' +
+    '<span class="item"><svg width="30" height="34" viewBox="-22 -50 44 76"><path d="M 0 -46 L 13 -27 L -13 -27 Z" fill="#1f1f1f" stroke="#fff" stroke-width="3"/><circle r="22" fill="#1f1f1f" stroke="#fff" stroke-width="4"/></svg>Live bus + direction</span>';
+
+  // ---------- Departures (sample data from the reviewed screenshot) ----------
+  const badge = (route, label) => {
+    const r = ROUTES[route];
+    if (r.square) return `<div class="badge sq" style="background:${r.color};color:${r.text}"><small>GO</small>${label}</div>`;
+    return `<div class="badge${r.ring ? ' ring' : ''}" style="background:${r.color};color:${r.text}">${label}</div>`;
+  };
+  const DEPS = [
+    { route: '2', label: '2', dest: 'Wasaga Beach', sub: 'Simcoe County LINX', mins: 3, word: 'Boarding', plat: 2, arrow: '←', boarding: true },
+    { route: '12', label: '12B', dest: 'Barrie South GO', sub: 'Simcoe St · 200 m away', word: 'Now', street: 14, arrow: '↑' },
+    { route: '8A', label: '8A', dest: 'RVH North', sub: '3.3 km away', mins: 15, plat: 5, arrow: '→' },
+    { route: '8B', label: '8B', dest: 'Crosstown N', sub: '3.3 km away', mins: 15, plat: 12, arrow: '→' },
+    { route: '8A', label: '8A', dest: 'Yonge South', sub: '4.1 km away', mins: 26, plat: 3, arrow: '←' },
+    { route: 'GO', label: '68', dest: 'Toronto Union', sub: 'GO Transit · scheduled', mins: 31, plat: 9, arrow: '→' },
+  ];
+  document.getElementById('deps').innerHTML = DEPS.map((d) => {
+    const mins = d.word && !d.mins ? `<span class="word">${d.word}</span>`
+      : `<span class="num">${d.mins}</span><span class="unit">min</span>${d.boarding ? '<div class="word" style="font-size:20px;margin-top:4px">BOARDING</div>' : ''}`;
+    const plat = d.street
+      ? `<div class="plat street"><span class="lbl">STREET</span><span class="no">${d.street}</span><span class="arrow">${d.arrow}</span></div>`
+      : `<div class="plat"><span class="lbl">PLATFORM</span><span class="no">${d.plat}</span><span class="arrow">${d.arrow}</span></div>`;
+    return `<div class="dep${d.boarding ? ' boarding' : ''}">${badge(d.route, d.label)}
+      <div class="dest"><b>${d.dest}</b><small>${d.sub}</small></div>
+      <div class="mins">${mins}<div class="sched">SCHEDULED</div></div>${plat}</div>`;
+  }).join('');
+
+  // ---------- Placeholder QR ----------
+  const qr = document.getElementById('qr');
+  let seed = 7;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const finder = (x, y) => [[0, 7, '#000'], [1, 5, '#fff'], [2, 3, '#000']].forEach(([o, s, f]) => el('rect', { x: x + o, y: y + o, width: s, height: s, fill: f }, qr));
+  for (let y = 0; y < 29; y++) for (let x = 0; x < 29; x++) {
+    const inFinder = (x < 8 && y < 8) || (x > 20 && y < 8) || (x < 8 && y > 20);
+    if (!inFinder && rand() > 0.52) el('rect', { x, y, width: 1, height: 1, fill: '#000' }, qr);
+  }
+  finder(0, 0); finder(22, 0); finder(0, 22);
+
+  // ---------- Alerts: static, rotating ----------
+  const ALERTS = [
+    ['Holiday service', 'Thanksgiving Monday, Oct 12: No Barrie Transit service.'],
+    ['Detour', 'Route 8A: Bayfield St. closed at Grove. Use the Livingstone stop.'],
+    ['Service status', 'Barrie Line: no trains between Barrie and Bradford today.'],
+  ];
+  const chip = document.getElementById('alert-chip');
+  const msg = document.getElementById('alert-msg');
+  const pager = document.getElementById('alert-pager');
+  pager.innerHTML = ALERTS.map(() => '<i></i>').join('');
+  let alertIdx = 0;
+  const showAlert = () => {
+    msg.style.opacity = 0;
+    setTimeout(() => {
+      chip.textContent = ALERTS[alertIdx][0];
+      msg.textContent = ALERTS[alertIdx][1];
+      [...pager.children].forEach((dot, i) => dot.classList.toggle('on', i === alertIdx));
+      msg.style.opacity = 1;
+      alertIdx = (alertIdx + 1) % ALERTS.length;
+    }, 400);
+  };
+  showAlert();
+  setInterval(showAlert, 8000);
+
+  // ---------- Clock ----------
+  const clock = document.getElementById('clock');
+  const tick = () => { clock.textContent = new Date().toLocaleTimeString('en-CA', { hour: 'numeric', minute: '2-digit', hour12: true }).replace(/\./g, '').toUpperCase(); };
+  tick(); setInterval(tick, 10000);
+
+  // ---------- Animate buses; fade any that crowd the YAH pin ----------
+  let last = performance.now();
+  const frame = (now) => {
+    const dt = Math.min((now - last) / 1000, 0.1);
+    last = now;
+    const stale = document.body.classList.contains('stale');
+    BUSES.forEach((b) => {
+      if (!stale) {
+        b.s += b.speed * b.dir * dt;
+        if (b.s > b.len - 4 || b.s < 4) { b.dir *= -1; b.s = Math.max(4, Math.min(b.len - 4, b.s)); }
+      }
+      const p = b.path.getPointAtLength(b.s);
+      const q = b.path.getPointAtLength(Math.max(0, Math.min(b.len, b.s + b.dir * 3)));
+      const angle = Math.atan2(q.y - p.y, q.x - p.x) * 180 / Math.PI + 90;
+      const nearYah = Math.hypot(p.x - TERMINAL.x, p.y - TERMINAL.y) < 90;
+      b.g.setAttribute('transform', `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`);
+      b.arrow.setAttribute('transform', `rotate(${angle.toFixed(1)})`);
+      b.arrow.style.display = stale ? 'none' : '';
+      b.g.style.filter = stale ? 'grayscale(1)' : '';
+      b.g.style.opacity = stale ? 0.45 : nearYah ? 0.25 : 1;
+    });
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+
+  // ---------- Review toggles ----------
+  const fresh = document.getElementById('fresh');
+  const bind = (id, cls, onChange) => {
+    const box = document.getElementById(id);
+    const apply = () => { document.body.classList.toggle(cls, box.checked); onChange && onChange(box.checked); fit(); };
+    box.addEventListener('change', apply);
+    apply();
+  };
+  let shiftTimer = null;
+  const stage = document.getElementById('stage');
+  const shift = { x: 0, y: 0 };
+
+  // ---------- Fit the 1920x1080 stage into the viewport ----------
+  const viewport = document.getElementById('viewport');
+  function fit() {
+    const w = viewport.clientWidth, h = viewport.clientHeight;
+    const s = Math.min(w / 1920, h / 1080);
+    const ox = (w - 1920 * s) / 2 + shift.x * s, oy = (h - 1080 * s) / 2 + shift.y * s;
+    stage.style.transform = `translate(${ox}px, ${oy}px) scale(${s})`;
+  }
+  window.addEventListener('resize', fit);
+
+  bind('t-notes', 'show-notes');
+  bind('t-future', 'future');
+  bind('t-stale', 'stale', (on) => { fresh.textContent = on ? 'Updated 4 min ago' : 'Updated just now'; });
+  bind('t-night', 'night');
+  bind('t-safe', 'show-safe');
+  bind('t-shift', 'shift', (on) => {
+    clearInterval(shiftTimer);
+    if (!on) { shift.x = shift.y = 0; return; }
+    shiftTimer = setInterval(() => { shift.x = Math.round(Math.random() * 8 - 4); shift.y = Math.round(Math.random() * 8 - 4); fit(); }, 2000);
+  });
+  if (params.has('kiosk')) { document.body.classList.remove('show-notes'); fit(); }
+})();
+</script>
+</body>
+</html>

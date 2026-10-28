@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Allandale Terminal TV – split-circle vehicle icons (mockup)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 60px; color: #062235; background: #eef1f5; font: 16px/1.4 "Segoe UI", Arial, sans-serif; }
+  h1 { margin: 0 0 4px; font-size: 30px; }
+  .lead { margin: 0 0 20px; color: #4b5d6e; max-width: 1150px; }
+  section { margin-bottom: 26px; padding: 18px 22px 22px; border-radius: 14px; background: #fff; box-shadow: 0 6px 22px rgba(20, 40, 60, .12); }
+  h2 { margin: 0 0 4px; font-size: 21px; }
+  section > p { margin: 0 0 16px; color: #4b5d6e; }
+  .row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-around; gap: 40px 24px; padding: 34px 24px 18px; border-radius: 10px; background: #e9edf3; }
+  figure { margin: 0; display: grid; justify-items: center; gap: 12px; }
+  figcaption { color: #4b5d6e; font-size: 14px; font-weight: 700; text-align: center; line-height: 1.25; }
+  figcaption small { display: block; font-weight: 600; }
+  .big { padding-top: 84px; }
+  .big .veh { --s: 2.4; }
+  .map { position: relative; width: 680px; height: 360px; overflow: hidden; border-radius: 10px; background: #e8ebf3 url("assets/map-crop.png") -40px -60px / 760px 420px no-repeat; }
+  .ptr { position: absolute; padding: 5px 8px; border: 2px solid #fff; border-radius: 7px; color: #fff; background: var(--c); box-shadow: 0 3px 8px rgba(0,0,0,.4);
+    font: 900 20px/1 "Segoe UI", Arial, sans-serif; transform: translate(-50%, -50%); }
+  .map .veh { position: absolute; transform: translate(-50%, -50%); }
+
+  /* ---------- Split-circle icon. --s scales the whole icon (1 = TV size, 58 px). ---------- */
+  .veh { --s: 1; position: relative; width: calc(58px * var(--s)); height: calc(58px * var(--s)); flex: none; }
+  .veh__arrow { position: absolute; top: calc(-24px * var(--s)); left: 50%; width: 0; height: 0;
+    border-left: calc(9px * var(--s)) solid transparent; border-right: calc(9px * var(--s)) solid transparent;
+    border-bottom: calc(16px * var(--s)) solid #071827; filter: drop-shadow(0 0 2px #fff);
+    transform: translateX(-50%) rotate(var(--bearing, 0deg)); transform-origin: 50% calc(53px * var(--s)); }
+  .veh__body { position: absolute; inset: 0; overflow: hidden; display: grid; grid-template-rows: 44% 56%;
+    border: calc(3px * var(--s)) solid #fff; border-radius: 50%; box-shadow: 0 calc(6px * var(--s)) calc(16px * var(--s)) rgba(0,0,0,.42); }
+  .veh__top { display: grid; place-items: end center; padding-bottom: calc(2px * var(--s)); background: var(--top-bg);
+    color: var(--top-fg); font-weight: 900; font-size: calc(11px * var(--s)); letter-spacing: .06em; line-height: 1; }
+  .veh__top img { display: block; width: calc(36px * var(--s)); height: calc(16px * var(--s)); object-fit: contain; }
+  .veh__bottom { display: grid; place-content: start center; justify-items: center; padding-top: calc(3px * var(--s));
+    color: var(--fg); background: var(--bg); font-weight: 900; line-height: .9; }
+  .veh__route { font-size: calc(18px * var(--s)); letter-spacing: -.02em; }
+  .veh__dir { font-size: calc(9px * var(--s)); letter-spacing: .08em; margin-top: calc(1px * var(--s)); }
+  .veh--long .veh__route { font-size: calc(15px * var(--s)); }
+  /* ---------- Direction options for routes 8A / 8B ---------- */
+  .dir-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .dir-card { padding: 14px 16px 16px; border-radius: 10px; background: #e9edf3; }
+  .dir-card h3 { margin: 0 0 2px; font-size: 18px; }
+  .dir-card p { margin: 0 0 12px; color: #4b5d6e; font-size: 14px; }
+  .dir-card .pair { display: flex; justify-content: space-around; align-items: flex-end; padding-top: 70px; }
+  .dir-card .pair.tv { padding-top: 26px; margin-top: 14px; border-top: 1px solid #cfd8e2; }
+  .dir-card .pair.big .veh { --s: 2.2; }
+  .dir-card small { display: block; margin-top: 8px; color: #4b5d6e; font-size: 12px; text-align: center; }
+  /* 1. Badge on the rim */
+  .veh__badge { position: absolute; z-index: 3; right: calc(-8px * var(--s)); bottom: calc(-6px * var(--s));
+    width: calc(26px * var(--s)); height: calc(26px * var(--s)); display: grid; place-items: center;
+    border: calc(2.5px * var(--s)) solid #fff; border-radius: 50%; color: #fff; background: #d4262c;
+    box-shadow: 0 calc(2px * var(--s)) calc(5px * var(--s)) rgba(0,0,0,.4); font-weight: 900; font-size: calc(15px * var(--s)); line-height: 1; }
+  /* 2. Letter beside the route, same size */
+  .veh--inline .veh__route { font-size: calc(17px * var(--s)); }
+  .veh--inline .veh__route b { margin-left: calc(1px * var(--s)); padding: 0 calc(2px * var(--s)); border-radius: calc(3px * var(--s));
+    color: #050505; background: #fff; font-size: .8em; vertical-align: .08em; }
+  /* 3. Direction replaces the logo */
+  .veh__top--dir { color: #062235; font-size: calc(12px * var(--s)) !important; letter-spacing: .04em; }
+</style>
+</head>
+<body>
+  <h1>Split-circle vehicle icons (option C, revised)</h1>
+  <p class="lead">Every bus gets the same icon: the top of the circle says who runs it, the bottom shows the route. Barrie Transit now carries its own logo in the top half on white, with the route colour below. Regional buses name the agency on its accent colour. The travel arrow and the N/S direction letter for routes 8A/8B are kept.</p>
+
+  <section>
+    <h2>The complete icons, enlarged 2.4×</h2>
+    <p>Every icon, at the size details can be checked. Arrows all point up here.</p>
+    <div class="row big" id="big"></div>
+  </section>
+
+  <section>
+    <h2>At the TV's real size</h2>
+    <p>58 px across, the same as today's Barrie icon. This is how big they appear on the 60-inch screen.</p>
+    <div class="row" id="actual"></div>
+  </section>
+
+  <section>
+    <h2>Making N / S readable on routes 8A and 8B</h2>
+    <p>Today the letter sits under the route at 9 px, which is too small to read from a distance. Three ways to make it clear. Each card shows 8A southbound and 8B northbound, enlarged and at TV size.</p>
+    <div class="dir-grid" id="dirs"></div>
+  </section>
+
+  <section>
+    <h2>On the map</h2>
+    <p>A mix of agencies near the platforms, as riders would see it.</p>
+    <div class="map" id="map"></div>
+  </section>
+
+<script>
+  const BARRIE = { topBg: '#ffffff', logo: 'assets/agency-barrie-transit.png' };
+  const ICONS = [
+    { name: 'Barrie Transit 8A', note: 'route colour black', route: '8A', dir: 'S', bg: '#050505', fg: '#fff', ...BARRIE },
+    { name: 'Barrie Transit 7A', note: 'route colour orange', route: '7A', bg: '#f58220', fg: '#111', ...BARRIE },
+    { name: 'Barrie Transit 12B', note: 'route colour pink', route: '12B', bg: '#f49ac1', fg: '#111', ...BARRIE },
+    { name: 'Barrie Transit 2A', note: 'route colour green', route: '2A', bg: '#006837', fg: '#fff', ...BARRIE },
+    { name: 'GO bus 68', note: 'GO green', route: '68', bg: '#00853f', fg: '#fff', top: 'GO', topBg: '#ffffff', topFg: '#00853f' },
+    { name: 'Ontario Northland 201', note: 'navy and gold', route: '201', bg: '#002a5c', fg: '#fff', top: 'ON', topBg: '#f1b900', topFg: '#002a5c' },
+    { name: 'Simcoe LINX 2', note: 'blue and gold', route: '2', bg: '#00549f', fg: '#fff', top: 'LINX', topBg: '#f2a900', topFg: '#062235' },
+  ];
+
+  const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html !== undefined) n.innerHTML = html; return n; };
+
+  function icon(v, bearing = 0) {
+    const veh = el('div', `veh${v.route.length > 2 ? ' veh--long' : ''}`);
+    veh.style.setProperty('--bearing', `${bearing}deg`);
+    veh.appendChild(el('span', 'veh__arrow'));
+    const body = el('span', 'veh__body');
+    const top = el('span', 'veh__top');
+    top.style.setProperty('--top-bg', v.topBg);
+    top.style.setProperty('--top-fg', v.topFg || '#062235');
+    if (v.logo) top.appendChild(Object.assign(document.createElement('img'), { src: v.logo, alt: 'Barrie Transit' }));
+    else top.textContent = v.top;
+    const bottom = el('span', 'veh__bottom', `<span class="veh__route">${v.route}</span>${v.dir ? `<span class="veh__dir">${v.dir}</span>` : ''}`);
+    bottom.style.setProperty('--bg', v.bg);
+    bottom.style.setProperty('--fg', v.fg);
+    body.appendChild(top);
+    body.appendChild(bottom);
+    veh.appendChild(body);
+    return veh;
+  }
+
+  ['big', 'actual'].forEach((id) => {
+    const row = document.getElementById(id);
+    ICONS.forEach((v) => {
+      const fig = el('figure');
+      fig.appendChild(icon(v));
+      fig.appendChild(el('figcaption', '', `${v.name}<small>${v.note}</small>`));
+      row.appendChild(fig);
+    });
+  });
+
+  const DIR_OPTIONS = [
+    { key: 'badge', title: '1. Red badge on the rim', badge: 'Recommended',
+      text: 'A bold N or S in a red disc on the lower-right edge, 15 px on the TV (was 9 px). The logo and route stay as they are.' },
+    { key: 'inline', title: '2. Letter beside the route', badge: '',
+      text: 'The letter sits next to the route number in a white box: "8A S". No extra parts, but the route text gets slightly smaller.' },
+    { key: 'top', title: '3. Direction in the top half', badge: '',
+      text: 'For 8A/8B only, the top half reads NORTH or SOUTH instead of the logo. Clearest wording, but these buses lose the Barrie logo.' },
+  ];
+  const DIR_ICONS = [
+    { ...ICONS[0], route: '8A', dir: 'S', word: 'SOUTH', label: '8A southbound' },
+    { ...ICONS[0], route: '8B', dir: 'N', word: 'NORTH', label: '8B northbound' },
+  ];
+
+  function dirIcon(option, v) {
+    const base = { ...v, dir: '' };
+    if (option === 'top') { delete base.logo; base.top = v.word; base.topFg = '#062235'; }
+    const veh = icon(base);
+    if (option === 'top') veh.querySelector('.veh__top').classList.add('veh__top--dir');
+    if (option === 'badge') veh.appendChild(el('span', 'veh__badge', v.dir));
+    if (option === 'inline') {
+      veh.classList.add('veh--inline');
+      veh.querySelector('.veh__route').innerHTML = `${v.route}<b>${v.dir}</b>`;
+    }
+    return veh;
+  }
+
+  const dirs = document.getElementById('dirs');
+  DIR_OPTIONS.forEach((option) => {
+    const card = el('div', 'dir-card');
+    card.appendChild(el('h3', '', `${option.title}${option.badge ? ` <span style="margin-left:6px;padding:1px 7px;border-radius:999px;color:#fff;background:#00853f;font-size:12px;vertical-align:middle">${option.badge}</span>` : ''}`));
+    card.appendChild(el('p', '', option.text));
+    ['big', 'tv'].forEach((size) => {
+      const pair = el('div', `pair ${size}`);
+      DIR_ICONS.forEach((v) => {
+        const fig = el('figure');
+        fig.appendChild(dirIcon(option.key, v));
+        if (size === 'tv') fig.appendChild(el('small', '', `${v.label} · TV size`));
+        pair.appendChild(fig);
+      });
+      card.appendChild(pair);
+    });
+    dirs.appendChild(card);
+  });
+
+  const map = document.getElementById('map');
+  [['P7', '#007a33', 277, 70], ['P8', '#002a5c', 360, 86], ['P5', '#075f86', 200, 270], ['P3', '#075f86', 308, 270], ['P2', '#00549f', 380, 276]]
+    .forEach(([name, colour, x, y]) => { const p = el('div', 'ptr', name); p.style.setProperty('--c', colour); p.style.left = `${x}px`; p.style.top = `${y}px`; map.appendChild(p); });
+  [[ICONS[0], 120, 300, 20], [ICONS[1], 230, 150, 80], [ICONS[4], 300, 140, 260], [ICONS[5], 470, 120, 100], [ICONS[6], 520, 250, 270], [ICONS[2], 620, 330, 90]]
+    .forEach(([v, x, y, bearing]) => { const veh = icon(v, bearing); veh.style.left = `${x}px`; veh.style.top = `${y}px`; map.appendChild(veh); });
+</script>
+</body>
+</html>
