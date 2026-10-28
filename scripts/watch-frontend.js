@@ -123,6 +123,10 @@ function copyPlatformMapAssets() {
   if (fs.existsSync(mapSource)) {
     fs.copyFileSync(mapSource, path.join(assetsDir, 'map.png'));
   }
+  const simulatorMapSource = path.join(srcDir, 'platform-map', 'allandale-sim-basemap.webp');
+  if (fs.existsSync(simulatorMapSource)) {
+    fs.copyFileSync(simulatorMapSource, path.join(assetsDir, 'allandale-sim-basemap.webp'));
+  }
   const vectorMapSource = path.join(srcDir, 'platform-map', 'allandale-basemap.svg');
   if (fs.existsSync(vectorMapSource)) {
     fs.copyFileSync(vectorMapSource, path.join(assetsDir, 'allandale-basemap.svg'));
