@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Allandale Terminal TV – Phase 3 proposal (mockup)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --cyan: #2bb7d6;
+    --ink: #f8fafc;
+    --muted: #a8bbc4;
+    --board: #071722;
+    --row: #0a1c27;
+    --rule: #203846;
+    --live: #2fd27a;
+    --soon: #ffe08a;
+    --here: #ffd447;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #10161b; font-family: "Segoe UI", Arial, sans-serif; }
+
+  /* The TV is 1920x1080; scale the whole screen to fit this window. */
+  .viewport { position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden; }
+  .tv { position: relative; width: 1920px; height: 1080px; padding: 24px; background: #0d1419; transform-origin: center; flex: none; }
+  .screen { position: relative; width: 1872px; height: 1032px; display: grid; grid-template-rows: 84px 876px 72px; background: #fff; overflow: hidden; }
+  .current { position: absolute; inset: 0; display: none; }
+  .current img { width: 100%; height: 100%; display: block; }
+  body[data-view="current"] .current { display: block; }
+
+  /* Header */
+  .header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 38px; color: var(--ink);
+    background: linear-gradient(90deg, #030608 0%, #06131d 55%, #030608 100%); border-bottom: 3px solid var(--cyan); }
+  .header__eyebrow { display: block; color: var(--cyan); font-size: 15px; font-weight: 800; letter-spacing: 0.22em; text-transform: uppercase; }
+  .header h1 { margin: 2px 0 0; font-size: 34px; font-weight: 900; line-height: 1; }
+  .pill { justify-self: center; display: inline-flex; align-items: center; gap: 10px; padding: 9px 26px; border: 2px solid #355361;
+    border-radius: 999px; color: var(--live); background: #0b1f2a; font-size: 18px; font-weight: 900; letter-spacing: 0.08em; }
+  .pill::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: currentColor; }
+  body[data-state="down"] .pill { color: #ffd25e; }
+  .clock { justify-self: end; text-align: right; }
+  .clock time { display: block; font-size: 40px; font-weight: 900; line-height: 1; }
+  .clock span { display: block; margin-top: 4px; color: var(--muted); font-size: 18px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+
+  /* Workspace */
+  .workspace { display: grid; grid-template-columns: 972px 900px; min-height: 0; }
+  .map { position: relative; overflow: hidden; background: #dce6e9 url("assets/map.png") 0 0 / 972px 876px no-repeat; }
+
+  /* Map rail cards: platform + routes only. */
+  .rail { position: absolute; left: 12px; display: flex; gap: 8px; }
+  .rail--top { top: 18px; }
+  .rail--bottom { bottom: 18px; }
+  body[data-cards="none"] .rail { display: none; }
+  .card { width: 132px; height: 98px; padding: 6px 8px; display: grid; grid-template-rows: 40px 1fr; border: 1px solid #628192;
+    border-left: 5px solid var(--accent, #075f86); border-radius: 7px; background: #fff; box-shadow: 0 3px 10px rgba(0,0,0,.28); }
+  .card__head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .card__title { color: #062235; font-size: 32px; font-weight: 900; line-height: 1; white-space: nowrap; }
+  .card__title--long { font-size: 24px; }
+  .card--stop .card__logo { display: none; }
+  .card__logo { width: 46px; height: 22px; object-fit: contain; }
+  .card__routes { display: flex; align-items: center; gap: 6px; }
+  .card--wide { width: 156px; }
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; color: var(--fg, #fff); background: var(--bg, #075f86);
+    font-size: 28px; font-weight: 900; line-height: 1; white-space: nowrap; }
+  .card .badge--sm { font-size: 24px; padding: 3px 6px; }
+  .card--live { outline: 4px solid var(--live); outline-offset: 0; }
+
+  /* Wayfinding: "You are here" joins the terminal building callout. */
+  .here { position: absolute; left: 118px; top: 413px; width: 172px; padding: 7px 8px; display: flex; align-items: center; justify-content: center;
+    gap: 8px; border-radius: 0 0 6px 6px; color: #092337; background: var(--here); box-shadow: 0 3px 8px rgba(0,0,0,.3);
+    font-size: 19px; font-weight: 900; letter-spacing: 0.02em; text-transform: uppercase; white-space: nowrap; }
+  .here::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: #d4262c; box-shadow: 0 0 0 3px #fff; }
+
+  /* "Bus at platform" state on the map pointer. */
+  .pointer-glow { position: absolute; display: none; border-radius: 10px; box-shadow: 0 0 0 5px var(--live), 0 0 22px 6px rgba(47,210,122,.75); pointer-events: none; }
+  .bus { position: absolute; display: none; width: 52px; height: 52px; border: 3px solid #fff; border-radius: 50%; place-items: center;
+    color: #111; background: #f58220; box-shadow: 0 3px 10px rgba(0,0,0,.45); font-size: 21px; font-weight: 900; }
+  body[data-state="platform"] .pointer-glow { display: block; }
+  body[data-state="platform"] .bus { display: grid; }
+
+  /* Board */
+  .board { display: flex; flex-direction: column; min-height: 0; color: var(--ink); background: var(--board); border-left: 1px solid #34505e; }
+  .board__head { padding: 12px 24px 10px; border-bottom: 1px solid var(--rule); }
+  .board__head h2 { margin: 0; font-size: 40px; font-weight: 900; line-height: 1; }
+  .board__head p { margin: 6px 0 0; color: var(--cyan); font-size: 20px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
+  .banner { display: none; margin: 0; padding: 10px 24px; color: #1a1300; background: #ffd25e; font-size: 24px; font-weight: 800; line-height: 1.2; }
+  body[data-state="down"] .banner { display: block; }
+  .rows { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+  .row { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: 136px 70px minmax(0, 1fr); align-items: center; gap: 12px;
+    padding: 2px 22px; background: var(--row); border-bottom: 1px solid var(--rule); overflow: hidden; }
+  .row--multi { flex-grow: 1.6; }
+  .row--platform { background: #0d2a24; box-shadow: inset 6px 0 0 var(--live); }
+  .row__platform { font-size: 38px; font-weight: 900; line-height: 1; }
+  .row__platform--long { font-size: 28px; }
+  .row__state { display: none; margin-top: 4px; color: #7fe0a6; font-size: 18px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; }
+  .row--platform .row__state { display: block; }
+  .row__logo { width: 70px; height: 40px; padding: 3px 4px; border-radius: 5px; background: #fff; object-fit: contain; }
+  .services { display: grid; gap: 6px; min-width: 0; }
+  .service { display: grid; grid-template-columns: 100px minmax(0, 1fr) auto; align-items: center; gap: 14px; font-size: 28px; font-weight: 800; line-height: 1; }
+  .service .badge { font-size: 30px; text-align: center; padding: 4px 6px; }
+  .service .badge--train { font-size: 24px; padding: 7px 6px; }
+  .dest { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .time { display: flex; align-items: center; justify-content: flex-end; gap: 12px; white-space: nowrap; }
+  .time__main { font-size: 42px; font-weight: 900; line-height: 1; }
+  .time__main--soon { color: var(--soon); }
+  .time__main--due { color: var(--live); }
+  .time__clock { display: none; color: var(--muted); font-size: 22px; font-weight: 800; }
+  body[data-time="both"] .time__clock { display: inline; }
+  .live { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 2px solid var(--live); border-radius: 6px;
+    color: var(--live); font-size: 20px; font-weight: 900; letter-spacing: 0.04em; }
+  .live::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+  body[data-state="down"] .live { display: none; }
+  .ondemand { flex: 0 0 auto; display: grid; grid-template-columns: 136px auto 1fr; align-items: center; gap: 16px; padding: 6px 22px; background: #0b1f2b; }
+  .ondemand .badge { font-size: 28px; }
+  .ondemand .row__platform { font-size: 38px; }
+  .ondemand strong { display: block; font-size: 28px; line-height: 1.05; }
+  .ondemand span { color: var(--muted); font-size: 22px; font-weight: 700; }
+
+  /* Footer */
+  .footer { display: flex; align-items: center; gap: 22px; padding: 0 32px; color: #fff; background: #06131d; border-top: 3px solid var(--cyan); }
+  .footer strong { padding: 9px 18px; border-radius: 999px; color: #062235; background: #89d9e8; font-size: 22px; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; }
+  .footer span { font-size: 24px; font-weight: 800; }
+
+  /* Numbered notes for the review (not part of the TV design). */
+  .note { position: absolute; z-index: 50; width: 34px; height: 34px; display: grid; place-items: center; border: 3px solid #fff; border-radius: 50%;
+    color: #fff; background: #d6336c; box-shadow: 0 2px 8px rgba(0,0,0,.5); font: 900 18px/1 "Segoe UI", Arial, sans-serif; }
+  body[data-notes="off"] .note, body[data-view="current"] .note { display: none; }
+
+  /* Review controls (outside the TV). */
+  .controls { position: fixed; z-index: 100; right: 14px; bottom: 14px; width: 340px; max-height: calc(100vh - 28px); overflow: auto;
+    padding: 14px 16px; border-radius: 10px; color: #e7eef2; background: rgba(12, 20, 26, 0.94); box-shadow: 0 8px 30px rgba(0,0,0,.5);
+    font: 14px/1.35 "Segoe UI", Arial, sans-serif; }
+  .controls h3 { margin: 0 0 8px; font-size: 15px; }
+  .controls fieldset { margin: 0 0 10px; padding: 0; border: 0; }
+  .controls legend { margin-bottom: 4px; color: #8fb3c2; font-weight: 700; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+  .controls label { display: block; cursor: pointer; }
+  .controls ol { margin: 6px 0 0; padding-left: 20px; }
+  .controls li { margin-bottom: 4px; }
+  .controls .hide { float: right; color: #8fb3c2; background: none; border: 0; cursor: pointer; font: inherit; }
+  body.controls-hidden .controls { display: none; }
+</style>
+</head>
+<body data-view="proposed" data-state="normal" data-time="minutes" data-cards="large" data-notes="on">
+<div class="viewport">
+  <div class="tv" id="tv">
+    <div class="screen">
+      <header class="header">
+        <div>
+          <span class="header__eyebrow">Live terminal display</span>
+          <h1>Barrie Allandale Terminal</h1>
+        </div>
+        <div class="pill" id="pill">LIVE</div>
+        <div class="clock"><time>12:31 PM</time><span>Updated just now</span></div>
+      </header>
+
+      <div class="workspace">
+        <div class="map" id="map">
+          <div class="rail rail--top" id="rail-top"></div>
+          <div class="rail rail--bottom" id="rail-bottom"></div>
+          <div class="here">You are here</div>
+          <div class="pointer-glow" style="left:474px;top:294px;width:48px;height:40px"></div>
+          <div class="bus" style="left:420px;top:244px">7A</div>
+          <div class="note" style="left:100px;top:440px">4</div>
+          <div class="note" style="left:860px;top:110px">5</div>
+        </div>
+
+        <aside class="board">
+          <div class="board__head">
+            <h2>Next departures</h2>
+            <p>All platforms</p>
+          </div>
+          <p class="banner">Live bus tracking is unavailable. Times shown are scheduled.</p>
+          <div class="rows" id="rows"></div>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <strong>Service update</strong>
+        <span>Thanksgiving Service: No Service on Monday, October 12.</span>
+      </footer>
+
+      <div class="note" style="left:1820px;top:100px">1</div>
+      <div class="note" style="left:1690px;top:100px">2</div>
+      <div class="note" style="left:1560px;top:100px">3</div>
+      <div class="note" style="left:1080px;top:26px">6</div>
+
+      <div class="current"><img src="assets/current-design.png" alt="Current design, captured at 1920x1080"></div>
+    </div>
+  </div>
+</div>
+
+<div class="controls" id="controls">
+  <button class="hide" id="hide" type="button">Hide (H)</button>
+  <h3>Phase 3 proposal – review controls</h3>
+  <fieldset>
+    <legend>View</legend>
+    <label><input type="radio" name="view" value="proposed" checked> Proposed design</label>
+    <label><input type="radio" name="view" value="current"> Current design (screenshot)</label>
+  </fieldset>
+  <fieldset>
+    <legend>Situation</legend>
+    <label><input type="radio" name="state" value="normal" checked> Normal service</label>
+    <label><input type="radio" name="state" value="platform"> Bus at platform (P6, 7A due)</label>
+    <label><input type="radio" name="state" value="down"> Live tracking down</label>
+  </fieldset>
+  <fieldset>
+    <legend>Time format (question 2)</legend>
+    <label><input type="radio" name="time" value="minutes" checked> Minutes, then clock time after 60 min</label>
+    <label><input type="radio" name="time" value="both"> Minutes plus clock time on every row</label>
+  </fieldset>
+  <fieldset>
+    <legend>Map cards (question 3)</legend>
+    <label><input type="radio" name="cards" value="large" checked> Platform + routes, larger</label>
+    <label><input type="radio" name="cards" value="none"> Remove map cards</label>
+  </fieldset>
+  <fieldset>
+    <legend>Notes</legend>
+    <label><input type="checkbox" id="notes" checked> Show numbered notes</label>
+    <ol>
+      <li>One board shows every platform. No pages to wait for.</li>
+      <li>Larger text: times 42 px, destinations 30 px; long names wrap, never cut off.</li>
+      <li>"LIVE" (dot + word) only when a tracked bus runs the trip. No "SCHEDULED" badge.</li>
+      <li>"You are here" joins the terminal building label, clear of the P12/P13 pointers.</li>
+      <li>Map cards show platform and routes in large type; times live on the board only.</li>
+      <li>The feed-status row and page countdown are gone. Riders only see a plain message when live tracking is down.</li>
+    </ol>
+  </fieldset>
+</div>
+
+<script>
+  const LOGO = {
+    bt: 'assets/agency-barrie-transit.png',
+    go: 'assets/agency-go-transit.svg',
+    linx: 'assets/agency-simcoe-linx.png',
+    on: 'assets/agency-ontario-northland.png',
+  };
+  const ROUTE = {
+    TRAIN: ['#1f4e8c', '#fff'], '68': ['#1f4e8c', '#fff'], '2': ['#00703c', '#fff'], '201': ['#00214d', '#ffd447'],
+    '8A': ['#050505', '#fff'], '8B': ['#050505', '#fff'], '7A': ['#f58220', '#111'], '7B': ['#f58220', '#111'],
+    '12A': ['#f49ac1', '#111'], '12B': ['#f49ac1', '#111'],
+  };
+  // Minutes from "now" (12:31 PM); clock times derived from them.
+  const BOARD = [
+    { p: 'P1', a: 'go', s: [{ r: 'TRAIN', d: 'Toronto / Union Station', m: 33 }] },
+    { p: 'P2', a: 'linx', s: [{ r: '2', d: 'Wasaga Beach', m: 58, live: true }] },
+    { p: 'P3', a: 'bt', s: [{ r: '8A', d: 'Yonge Southbound', m: 21 }] },
+    { p: 'P4', a: 'bt', s: [{ r: '8B', d: 'Essa Southbound', m: 21 }] },
+    { p: 'P5', a: 'bt', s: [{ r: '8A', d: 'RVH Northbound', m: 10 }] },
+    { p: 'P6', a: 'bt', s: [{ r: '7A', d: 'Grove', m: 7, platformM: 0 }, { r: '7B', d: 'Bear Creek', m: 21 }] },
+    { p: 'P7', a: 'go', s: [{ r: '68', d: 'Aurora / East Gwillimbury', m: 129 }] },
+    { p: 'P8', a: 'on', s: [{ r: '201', d: 'Ontario Northland', m: 3, live: true }] },
+    { p: 'P12', a: 'bt', s: [{ r: '8B', d: 'Crosstown Northbound', m: 10 }] },
+    { p: 'P13', a: 'bt', s: [{ r: '12A', d: 'Georgian Mall', m: 17 }] },
+    { p: 'Stop 14', a: 'bt', s: [{ r: '12B', d: 'Barrie South GO', m: 29 }] },
+  ];
+  const RAIL_TOP = [['P12', 'bt', ['8B']], ['P13', 'bt', ['12A']], ['P6', 'bt', ['7A', '7B']], ['P7', 'go', ['68']], ['P8', 'on', ['201']], ['P9', 'bt', ['C', 'D']]];
+  const RAIL_BOTTOM = [['Stop 14', 'bt', ['12B']], ['P5', 'bt', ['8A']], ['P4', 'bt', ['8B']], ['P3', 'bt', ['8A']], ['P2', 'linx', ['2']], ['P1', 'go', ['TRAIN']]];
+  const ACCENT = { bt: '#075f86', go: '#00853f', linx: '#f2a900', on: '#00214d' };
+  const NOW_MINUTES = 12 * 60 + 31;
+
+  function clockAt(minutesFromNow) {
+    const total = NOW_MINUTES + minutesFromNow;
+    const h = Math.floor(total / 60) % 24;
+    const m = total % 60;
+    return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+  }
+
+  function el(tag, cls, text) {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function badge(route, extra) {
+    const b = el('span', `badge ${extra || ''}`, route);
+    const colors = ROUTE[route] || ['#075f86', '#fff'];
+    b.style.setProperty('--bg', colors[0]);
+    b.style.setProperty('--fg', colors[1]);
+    return b;
+  }
+
+  function renderBoard() {
+    const state = document.body.dataset.state;
+    const rows = document.getElementById('rows');
+    rows.textContent = '';
+    BOARD.forEach((entry) => {
+      const atPlatform = state === 'platform' && entry.p === 'P6';
+      const row = el('section', `row${entry.s.length > 1 ? ' row--multi' : ''}${atPlatform ? ' row--platform' : ''}`);
+      const head = el('div');
+      head.appendChild(el('div', `row__platform${entry.p.length > 4 ? ' row__platform--long' : ''}`, entry.p));
+      head.appendChild(el('div', 'row__state', 'At platform'));
+      row.appendChild(head);
+      const logo = el('img', 'row__logo');
+      logo.src = LOGO[entry.a];
+      logo.alt = '';
+      row.appendChild(logo);
+      const services = el('div', 'services');
+      entry.s.forEach((service) => {
+        const line = el('div', 'service');
+        line.appendChild(badge(service.r, service.r === 'TRAIN' ? 'badge--train' : ''));
+        line.appendChild(el('span', 'dest', service.d));
+        const minutes = atPlatform && service.platformM !== undefined ? service.platformM : service.m;
+        const live = (service.live || (atPlatform && service.platformM !== undefined)) && state !== 'down';
+        const time = el('span', 'time');
+        if (live) time.appendChild(el('span', 'live', 'LIVE'));
+        if (minutes <= 60) time.appendChild(el('span', 'time__clock', clockAt(minutes)));
+        const main = minutes === 0 ? 'Due' : minutes <= 60 ? `${minutes} min` : clockAt(minutes);
+        const mainClass = minutes === 0 ? ' time__main--due' : minutes <= 10 ? ' time__main--soon' : '';
+        time.appendChild(el('strong', `time__main${mainClass}`, main));
+        line.appendChild(time);
+        services.appendChild(line);
+      });
+      row.appendChild(services);
+      rows.appendChild(row);
+    });
+    const ondemand = el('section', 'ondemand');
+    ondemand.appendChild(el('div', 'row__platform', 'P9'));
+    ondemand.appendChild(badge('C / D'));
+    const copy = el('div');
+    copy.appendChild(el('strong', '', 'On Demand'));
+    copy.appendChild(el('span', '', 'Stop 900'));
+    ondemand.appendChild(copy);
+    rows.appendChild(ondemand);
+  }
+
+  function renderRails() {
+    const state = document.body.dataset.state;
+    [['rail-top', RAIL_TOP], ['rail-bottom', RAIL_BOTTOM]].forEach(([id, cards]) => {
+      const rail = document.getElementById(id);
+      rail.textContent = '';
+      cards.forEach(([platform, agency, routes]) => {
+        const card = el('div', `card${routes.length > 1 ? ' card--wide' : ''}${platform.length > 4 ? ' card--stop' : ''}${state === 'platform' && platform === 'P6' ? ' card--live' : ''}`);
+        card.style.setProperty('--accent', ACCENT[agency]);
+        const head = el('div', 'card__head');
+        head.appendChild(el('span', `card__title${platform.length > 4 ? ' card__title--long' : ''}`, platform));
+        const logo = el('img', 'card__logo');
+        logo.src = LOGO[agency];
+        logo.alt = '';
+        head.appendChild(logo);
+        card.appendChild(head);
+        const list = el('div', 'card__routes');
+        routes.forEach((route) => list.appendChild(badge(route, routes.length > 1 ? 'badge--sm' : '')));
+        card.appendChild(list);
+        rail.appendChild(card);
+      });
+    });
+  }
+
+  function render() {
+    document.getElementById('pill').textContent = document.body.dataset.state === 'down' ? 'SCHEDULED TIMES' : 'LIVE';
+    renderBoard();
+    renderRails();
+  }
+
+  function fit() {
+    const scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    document.getElementById('tv').style.transform = `scale(${scale})`;
+  }
+
+  document.querySelectorAll('.controls input[type="radio"]').forEach((input) => {
+    input.addEventListener('change', () => {
+      document.body.dataset[input.name] = input.value;
+      render();
+    });
+  });
+  document.getElementById('notes').addEventListener('change', (event) => {
+    document.body.dataset.notes = event.target.checked ? 'on' : 'off';
+  });
+  const toggleControls = () => document.body.classList.toggle('controls-hidden');
+  document.getElementById('hide').addEventListener('click', toggleControls);
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'h' || event.key === 'H') toggleControls();
+  });
+  window.addEventListener('resize', fit);
+  fit();
+  render();
+</script>
+</body>
+</html>

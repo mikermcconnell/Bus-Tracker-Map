@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Allandale Terminal TV – base map options (mockup)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --cyan: #2bb7d6; --ink: #f8fafc; --muted: #a8bbc4; --board: #071722; --row: #0a1c27; --rule: #203846;
+    --live: #2fd27a; --soon: #ffe08a; --here: #ffd447;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #10161b; font-family: "Segoe UI", Arial, sans-serif; }
+  .viewport { position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden; }
+  .tv { position: relative; width: 1920px; height: 1080px; padding: 24px; background: #0d1419; transform-origin: center; flex: none; }
+  .screen { position: relative; width: 1872px; height: 1032px; display: grid; grid-template-rows: 84px 876px 72px; background: #fff; overflow: hidden; }
+
+  /* Header and footer as approved in phase 3. */
+  .header { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 38px; color: var(--ink);
+    background: linear-gradient(90deg, #030608 0%, #06131d 55%, #030608 100%); border-bottom: 3px solid var(--cyan); }
+  .header__eyebrow { display: block; color: var(--cyan); font-size: 15px; font-weight: 800; letter-spacing: 0.22em; text-transform: uppercase; }
+  .header h1 { margin: 2px 0 0; font-size: 34px; font-weight: 900; line-height: 1; }
+  .pill { justify-self: center; display: inline-flex; align-items: center; gap: 10px; padding: 9px 26px; border: 2px solid #355361;
+    border-radius: 999px; color: var(--live); background: #0b1f2a; font-size: 18px; font-weight: 900; letter-spacing: 0.08em; }
+  .pill::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: currentColor; }
+  .clock { justify-self: end; text-align: right; color: var(--ink); }
+  .clock time { display: block; font-size: 40px; font-weight: 900; line-height: 1; }
+  .clock span { display: block; margin-top: 4px; color: var(--muted); font-size: 18px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+  .footer { display: flex; align-items: center; gap: 22px; padding: 0 32px; color: #fff; background: #06131d; border-top: 3px solid var(--cyan); }
+  .footer strong { padding: 9px 18px; border-radius: 999px; color: #062235; background: #89d9e8; font-size: 22px; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; }
+  .footer span { font-size: 24px; font-weight: 800; }
+
+  .workspace { display: grid; grid-template-columns: 972px 900px; min-height: 0; }
+
+  /* ---------- Map panel ---------- */
+  .map { position: relative; overflow: hidden; background: #e8ebf3; }
+  .basemap { position: absolute; inset: 0; display: none; }
+  .basemap img { position: absolute; display: block; }
+  body[data-base="osm"] .basemap--osm,
+  body[data-base="sim"] .basemap--sim,
+  body[data-base="official"] .basemap--official { display: block; }
+  .basemap--osm img { left: 0; top: 0; width: 972px; height: 876px; }
+  .basemap--sim img { left: 0; top: 0; width: 972px; height: 876px; }
+  .basemap--official { background: #dfe6e6; }
+  .basemap--official img { left: 0; top: 128px; width: 972px; height: 620px; }
+
+  /* Rails of platform cards (approved phase 3 design) – hidden on the official map, which labels its own platforms. */
+  .rail { position: absolute; left: 12px; z-index: 5; display: flex; gap: 8px; }
+  .rail--top { top: 18px; }
+  .rail--bottom { bottom: 18px; }
+  body[data-base="official"] .rail { display: none; }
+  .card { width: 132px; height: 98px; padding: 6px 8px; display: grid; grid-template-rows: 40px 1fr; border: 1px solid #628192;
+    border-left: 5px solid var(--accent, #075f86); border-radius: 7px; background: #fff; box-shadow: 0 3px 10px rgba(0,0,0,.28); }
+  .card__head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .card__title { color: #062235; font-size: 32px; font-weight: 900; line-height: 1; white-space: nowrap; }
+  .card__title--long { font-size: 24px; }
+  .card__logo { width: 46px; height: 22px; object-fit: contain; }
+  .card--stop .card__logo { display: none; }
+  .card__routes { display: flex; align-items: center; gap: 6px; }
+  .card--wide { width: 156px; }
+  .card--live { outline: 4px solid var(--live); }
+  .badge { display: inline-block; padding: 3px 8px; border-radius: 6px; color: var(--fg, #fff); background: var(--bg, #075f86);
+    font-size: 28px; font-weight: 900; line-height: 1; white-space: nowrap; }
+  .card .badge--sm { font-size: 24px; padding: 3px 6px; }
+
+  /* Platform pointers drawn by the page (simulator base map). */
+  .pointers { position: absolute; inset: 0; z-index: 4; display: none; }
+  body[data-base="sim"] .pointers { display: block; }
+  .ptr-dot { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; border: 3px solid #fff; border-radius: 50%;
+    background: var(--c, #075f86); box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+  .ptr { position: absolute; padding: 6px 9px; border: 2px solid #fff; border-radius: 8px; color: #fff; background: var(--c, #075f86);
+    box-shadow: 0 3px 8px rgba(0,0,0,.4); font-size: 24px; font-weight: 900; line-height: 1; transform: translate(-50%, -50%); white-space: nowrap; }
+  .ptr--live { box-shadow: 0 0 0 5px var(--live), 0 0 22px 6px rgba(47,210,122,.75); }
+  .ptr-stem { position: absolute; width: 2px; background: #33495a; transform-origin: top center; }
+
+  /* Street names: the simulator draws none. */
+  .street { position: absolute; z-index: 3; display: none; color: #4b5d6e; font-size: 20px; font-weight: 800; letter-spacing: 0.04em;
+    text-shadow: 0 0 4px #fff, 0 0 4px #fff, 0 0 4px #fff; transform-origin: center; white-space: nowrap; }
+  body[data-base="sim"] .street { display: block; }
+
+  /* GO train on the GO track (simulator base map). Track: (230,505) -> (960,580), about 6 degrees. */
+  .train { position: absolute; z-index: 5; display: none; height: 26px; transform-origin: left center; }
+  body[data-base="sim"][data-train="platform"] .train--platform,
+  body[data-base="sim"][data-train="arriving"] .train--arriving { display: flex; }
+  .train__car { flex: 0 0 auto; width: 60px; height: 26px; margin-right: 3px; border: 2px solid #fff; border-radius: 4px;
+    background: linear-gradient(#00853f 0 58%, #fff 58% 70%, #00853f 70%); box-shadow: 0 2px 6px rgba(0,0,0,.45); }
+  .train__car--cab { width: 70px; border-radius: 14px 4px 4px 14px; }
+  .train__car--loco { border-radius: 4px 10px 10px 4px; background: #00853f; }
+  .train-tag { position: absolute; z-index: 6; display: none; padding: 6px 12px; border: 3px solid #00853f; border-radius: 8px; color: #062235;
+    background: #fff; box-shadow: 0 3px 10px rgba(0,0,0,.3); font-size: 22px; font-weight: 900; line-height: 1.1; white-space: nowrap; }
+  .train-tag small { display: block; color: #31505e; font-size: 17px; font-weight: 800; }
+  .train-tag b { color: #00853f; }
+  body[data-base="sim"][data-train="platform"] .train-tag--platform,
+  body[data-base="sim"][data-train="arriving"] .train-tag--arriving { display: block; }
+
+  /* "You are here" styles (simulator base map). */
+  .yahs { position: absolute; inset: 0; z-index: 6; pointer-events: none; display: none; }
+  body[data-base="sim"] .yahs { display: block; }
+  .yahs > * { display: none; }
+  body[data-yahstyle="flag"] .yah-flag,
+  body[data-yahstyle="dot"] .yah-dot,
+  body[data-yahstyle="building"] .yah-building { display: block; }
+  .yahs svg { position: absolute; inset: 0; width: 972px; height: 876px; overflow: visible; }
+  .yah-outline { fill: rgba(7, 95, 134, 0.18); stroke: #075f86; stroke-width: 5; stroke-linejoin: round; }
+  .yah-outline--strong { fill: rgba(255, 212, 71, 0.55); stroke: #092337; stroke-width: 5; }
+  .yah-marker { position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px; border: 5px solid #fff; border-radius: 50%;
+    background: #d4262c; box-shadow: 0 0 0 3px #d4262c, 0 3px 10px rgba(0,0,0,.45); }
+  .yah-flag__label { position: absolute; padding: 8px 14px; border-radius: 8px; color: #fff; background: #d4262c;
+    box-shadow: 0 3px 10px rgba(0,0,0,.35); font-size: 26px; font-weight: 900; letter-spacing: .03em; line-height: 1; text-transform: uppercase; white-space: nowrap;
+    transform: translateY(-50%); }
+  .yah-flag__label::before { content: ""; position: absolute; right: 100%; top: 50%; margin-top: -12px; border: 12px solid transparent; border-right-color: #d4262c; }
+  .yah-name { position: absolute; color: #092337; font-size: 17px; font-weight: 900; letter-spacing: .02em; text-align: center; text-transform: uppercase;
+    text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; transform: translate(-50%, -50%); white-space: nowrap; line-height: 1.05; }
+  .yah-dot__label { position: absolute; color: #b3121b; font-size: 28px; font-weight: 900; text-transform: uppercase; white-space: nowrap;
+    text-shadow: 0 0 4px #fff, 0 0 4px #fff, 0 0 4px #fff, 0 0 4px #fff; transform: translateY(-50%); }
+  .yah-building__label { position: absolute; padding: 6px 10px; border: 3px solid #092337; border-radius: 6px; color: #092337; background: #ffd447;
+    font-size: 20px; font-weight: 900; line-height: 1.05; text-align: center; text-transform: uppercase; transform: translate(-50%, -100%); white-space: nowrap; }
+  .yah-building__label span { display: block; font-size: 15px; letter-spacing: .02em; }
+
+  /* "You are here" proposals. */
+  .yah { position: absolute; z-index: 6; display: none; }
+  body[data-base="sim"] .yah--sim, body[data-base="official"] .yah--official, body[data-base="osm"] .yah--osm { display: block; }
+  .yah__pin { position: absolute; left: 0; top: 0; width: 34px; height: 34px; margin: -34px 0 0 -17px; border: 4px solid #fff;
+    border-radius: 50% 50% 50% 0; background: #e51d43; box-shadow: 0 2px 8px rgba(0,0,0,.5); transform: rotate(-45deg); }
+  .yah__pin::after { content: ""; position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #fff; }
+  .yah__label { position: absolute; display: grid; gap: 2px; padding: 8px 14px; border-radius: 8px; color: #092337; background: var(--here);
+    box-shadow: 0 3px 10px rgba(0,0,0,.35); white-space: nowrap; }
+  .yah__label strong { font-size: 26px; font-weight: 900; text-transform: uppercase; letter-spacing: .02em; line-height: 1; }
+  .yah__label span { font-size: 18px; font-weight: 800; line-height: 1.1; }
+  .yah__ring { position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border: 4px dashed #e51d43; border-radius: 50%; }
+  body[data-yah="off"] .yah { display: none !important; }
+
+  /* Live buses on the map (sample). */
+  .bus { position: absolute; z-index: 7; display: grid; place-items: center; width: 50px; height: 50px; margin: -25px 0 0 -25px; border: 3px solid #fff;
+    border-radius: 50%; color: var(--fg, #fff); background: var(--bg, #050505); box-shadow: 0 3px 10px rgba(0,0,0,.45); font-size: 20px; font-weight: 900; }
+
+  .attribution { position: absolute; right: 6px; bottom: 2px; z-index: 8; color: #4a5a66; font-size: 11px; }
+
+  /* ---------- Board (approved phase 3) ---------- */
+  .board { display: flex; flex-direction: column; min-height: 0; color: var(--ink); background: var(--board); border-left: 1px solid #34505e; }
+  .board__head { padding: 12px 24px 10px; border-bottom: 1px solid var(--rule); }
+  .board__head h2 { margin: 0; font-size: 40px; font-weight: 900; line-height: 1; }
+  .board__head p { margin: 6px 0 0; color: var(--cyan); font-size: 20px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; }
+  .rows { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+  .row { flex: 1 1 auto; display: grid; grid-template-columns: 136px 70px minmax(0, 1fr); align-items: center; gap: 12px; padding: 3px 22px;
+    background: var(--row); border-bottom: 1px solid var(--rule); }
+  .row--platform { background: #0d2a24; box-shadow: inset 6px 0 0 var(--live); }
+  .row__platform { font-size: 38px; font-weight: 900; line-height: 1; }
+  .row__platform--long { font-size: 28px; }
+  .row__state { display: none; margin-top: 4px; color: #7fe0a6; font-size: 18px; font-weight: 900; text-transform: uppercase; white-space: nowrap; }
+  .row--platform .row__state { display: block; }
+  .row__logo { width: 70px; height: 40px; padding: 3px 4px; border-radius: 5px; background: #fff; object-fit: contain; }
+  .services { display: grid; gap: 6px; min-width: 0; }
+  .service { display: grid; grid-template-columns: 100px minmax(0, 1fr) auto; align-items: center; gap: 14px; font-size: 28px; font-weight: 800; line-height: 1; }
+  .service .badge { text-align: center; padding: 4px 6px; }
+  .service .badge--train { font-size: 24px; padding: 6px; }
+  .time { display: flex; align-items: center; justify-content: flex-end; gap: 12px; white-space: nowrap; }
+  .time__main { font-size: 42px; font-weight: 900; line-height: 1; }
+  .time__main--soon { color: var(--soon); }
+  .time__main--due { color: var(--live); }
+  .live { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border: 2px solid var(--live); border-radius: 6px;
+    color: var(--live); font-size: 20px; font-weight: 900; }
+  .live::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+  .ondemand { display: grid; grid-template-columns: 136px auto 1fr; align-items: center; gap: 16px; padding: 6px 22px; background: #0b1f2b; }
+  .ondemand strong { display: block; font-size: 28px; }
+  .ondemand span { color: var(--muted); font-size: 22px; font-weight: 700; }
+
+  /* Review controls (outside the TV). */
+  .controls { position: fixed; z-index: 100; right: 14px; bottom: 14px; width: 360px; max-height: calc(100vh - 28px); overflow: auto;
+    padding: 14px 16px; border-radius: 10px; color: #e7eef2; background: rgba(12, 20, 26, 0.95); box-shadow: 0 8px 30px rgba(0,0,0,.5);
+    font: 14px/1.35 "Segoe UI", Arial, sans-serif; }
+  .controls h3 { margin: 0 0 8px; font-size: 15px; }
+  .controls fieldset { margin: 0 0 10px; padding: 0; border: 0; }
+  .controls legend { margin-bottom: 4px; color: #8fb3c2; font-weight: 700; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+  .controls label { display: block; cursor: pointer; }
+  .controls .about { display: none; margin: 4px 0 0; color: #c9d6dd; }
+  body[data-base="osm"] .about--osm, body[data-base="sim"] .about--sim, body[data-base="official"] .about--official { display: block; }
+  .controls .hide { float: right; color: #8fb3c2; background: none; border: 0; cursor: pointer; font: inherit; }
+  body.controls-hidden .controls { display: none; }
+</style>
+</head>
+<body data-base="sim" data-state="normal" data-yah="on" data-yahstyle="flag" data-train="platform">
+<div class="viewport">
+  <div class="tv" id="tv">
+    <div class="screen">
+      <header class="header">
+        <div><span class="header__eyebrow">Live terminal display</span><h1>Barrie Allandale Terminal</h1></div>
+        <div class="pill">LIVE</div>
+        <div class="clock"><time>12:31 PM</time><span>Updated just now</span></div>
+      </header>
+
+      <div class="workspace">
+        <div class="map" id="map">
+          <div class="basemap basemap--osm"><img src="assets/osm-current.png" alt=""></div>
+          <div class="basemap basemap--sim"><img src="assets/simulator-terminal.png" alt=""></div>
+          <div class="basemap basemap--official"><img src="assets/official-terminal-map.svg" alt=""></div>
+
+          <div class="pointers" id="pointers"></div>
+
+          <span class="street" style="left:118px;top:640px;transform:rotate(-58deg)">ESSA RD</span>
+          <span class="street" style="left:104px;top:262px;transform:rotate(-14deg)">TIFFIN ST</span>
+          <span class="street" style="left:700px;top:262px;transform:rotate(22deg)">LAKESHORE DR</span>
+          <span class="street" style="left:640px;top:600px;transform:rotate(6deg)">GOWAN ST</span>
+          <span class="street" style="left:740px;top:516px;transform:rotate(6deg);color:#5d6b78;font-size:17px">GO TRAIN PLATFORM</span>
+
+          <!-- Terminal building footprint in the simulator image, with three "You are here" styles. -->
+          <div class="yahs">
+            <div class="yah-flag">
+              <svg viewBox="0 0 972 876"><polygon class="yah-outline" points="300,347 362,351 359,446 292,441"/></svg>
+              <div class="yah-marker" style="left:327px;top:400px"></div>
+              <div class="yah-flag__label" style="left:382px;top:414px">You are here</div>
+              <div class="yah-name" style="left:327px;top:428px">Terminal</div>
+            </div>
+            <div class="yah-dot">
+              <svg viewBox="0 0 972 876"><polygon class="yah-outline" points="300,347 362,351 359,446 292,441"/></svg>
+              <div class="yah-marker" style="left:327px;top:400px"></div>
+              <div class="yah-dot__label" style="left:378px;top:414px">You are here</div>
+            </div>
+            <div class="yah-building">
+              <svg viewBox="0 0 972 876"><polygon class="yah-outline yah-outline--strong" points="300,347 362,351 359,446 292,441"/></svg>
+              <div class="yah-building__label" style="left:478px;top:440px">You are here<span>Allandale Terminal</span></div>
+            </div>
+          </div>
+          <!-- Official map: same treatment on its "Terminal Building" box. -->
+          <div class="yah yah--official" style="left:270px;top:432px">
+            <div class="yah__ring"></div>
+            <div class="yah__pin"></div>
+            <div class="yah__label" style="left:-250px;top:60px"><strong>You are here</strong><span>Terminal Building</span></div>
+          </div>
+          <!-- Current map: the approved phase 3 strip, for comparison. -->
+          <div class="yah yah--osm" style="left:118px;top:413px">
+            <div class="yah__label" style="left:0;top:0;width:172px;padding:7px 8px;border-radius:0 0 6px 6px"><strong style="font-size:19px">You are here</strong></div>
+          </div>
+
+          <div class="train train--platform" style="left:600px;top:530px;transform:rotate(5.9deg)">
+            <div class="train__car train__car--cab"></div><div class="train__car"></div><div class="train__car"></div><div class="train__car"></div>
+            <div class="train__car"></div><div class="train__car"></div><div class="train__car train__car--loco"></div>
+          </div>
+          <div class="train-tag train-tag--platform" style="left:610px;top:662px">GO Train <b>· Boarding</b><small>to Union Station · departs 1:04 PM</small></div>
+          <div class="train train--arriving" style="left:820px;top:552px;transform:rotate(5.9deg)">
+            <div class="train__car train__car--loco"></div><div class="train__car"></div><div class="train__car"></div>
+          </div>
+          <div class="train-tag train-tag--arriving" style="left:660px;top:662px">GO Train <b>· Arriving</b><small>at the GO platform in 3 min</small></div>
+
+          <div id="buses"></div>
+
+          <div class="rail rail--top" id="rail-top"></div>
+          <div class="rail rail--bottom" id="rail-bottom"></div>
+          <div class="attribution" id="attribution"></div>
+        </div>
+
+        <aside class="board">
+          <div class="board__head"><h2>Next departures</h2><p>All platforms</p></div>
+          <div class="rows" id="rows"></div>
+        </aside>
+      </div>
+
+      <footer class="footer"><strong>Service update</strong><span>Thanksgiving Service: No Service on Monday, October 12.</span></footer>
+    </div>
+  </div>
+</div>
+
+<div class="controls" id="controls">
+  <button class="hide" id="hide" type="button">Hide (H)</button>
+  <h3>Base map options – review controls</h3>
+  <fieldset>
+    <legend>Base map</legend>
+    <label><input type="radio" name="base" value="sim" checked> Barrie Simulator (top-down)</label>
+    <label><input type="radio" name="base" value="official"> Official terminal map (Jan 30, 2026)</label>
+    <label><input type="radio" name="base" value="osm"> Current OpenStreetMap (for comparison)</label>
+    <p class="about about--sim">Rendered from the Barrie Simulator at the same scale as today's map (0.4 m per pixel). Calm 3D buildings, no shop or stop labels. Platform pointers, street names and "You are here" are drawn by our page on top, so they stay sharp and large. Bus positions line up exactly (same latitude/longitude maths).</p>
+    <p class="about about--official">The City's own wayfinding drawing, cropped to the map area. It already labels every platform, so the map cards are hidden. It is a diagram, not to scale: live bus positions are approximate. It is wider than the map panel, so there are bands above and below.</p>
+    <p class="about about--osm">Today's map with the approved phase 3 changes.</p>
+  </fieldset>
+  <fieldset>
+    <legend>Situation</legend>
+    <label><input type="radio" name="state" value="normal" checked> Normal service</label>
+    <label><input type="radio" name="state" value="platform"> Bus at platform (P6, 7A due)</label>
+  </fieldset>
+  <fieldset>
+    <legend>"You are here" style (simulator)</legend>
+    <label><input type="radio" name="yahstyle" value="flag" checked> A. Red flag above the building (recommended)</label>
+    <label><input type="radio" name="yahstyle" value="dot"> B. Red dot with a plain red label</label>
+    <label><input type="radio" name="yahstyle" value="building"> C. Building filled yellow, label on top</label>
+  </fieldset>
+  <fieldset>
+    <legend>GO train (simulator)</legend>
+    <label><input type="radio" name="train" value="platform" checked> Train at the platform (boarding)</label>
+    <label><input type="radio" name="train" value="arriving"> Train arriving</label>
+    <label><input type="radio" name="train" value="none"> No train</label>
+  </fieldset>
+  <fieldset>
+    <legend>Other markers</legend>
+    <label><input type="checkbox" id="yah" checked> Show "You are here" on the other base maps</label>
+  </fieldset>
+</div>
+
+<script>
+  const LOGO = { bt: 'assets/agency-barrie-transit.png', go: 'assets/agency-go-transit.svg', linx: 'assets/agency-simcoe-linx.png', on: 'assets/agency-ontario-northland.png' };
+  const ROUTE = { TRAIN: ['#1f4e8c', '#fff'], '68': ['#1f4e8c', '#fff'], '2': ['#00703c', '#fff'], '201': ['#00214d', '#ffd447'],
+    '8A': ['#050505', '#fff'], '8B': ['#050505', '#fff'], '7A': ['#f58220', '#111'], '7B': ['#f58220', '#111'], '12A': ['#f49ac1', '#111'], '12B': ['#f49ac1', '#111'] };
+  const ACCENT = { bt: '#075f86', go: '#007a33', linx: '#00549f', on: '#002a5c' };
+  const BOARD = [
+    { p: 'P1', a: 'go', s: [{ r: 'TRAIN', d: 'Toronto / Union Station', m: 33 }] },
+    { p: 'P2', a: 'linx', s: [{ r: '2', d: 'Wasaga Beach', m: 58, live: true }] },
+    { p: 'P3', a: 'bt', s: [{ r: '8A', d: 'Yonge Southbound', m: 21 }] },
+    { p: 'P4', a: 'bt', s: [{ r: '8B', d: 'Essa Southbound', m: 21 }] },
+    { p: 'P5', a: 'bt', s: [{ r: '8A', d: 'RVH Northbound', m: 10 }] },
+    { p: 'P6', a: 'bt', s: [{ r: '7A', d: 'Grove', m: 7, platformM: 0 }, { r: '7B', d: 'Bear Creek', m: 21 }] },
+    { p: 'P7', a: 'go', s: [{ r: '68', d: 'Aurora / East Gwillimbury', m: 129 }] },
+    { p: 'P8', a: 'on', s: [{ r: '201', d: 'Ontario Northland', m: 3, live: true }] },
+    { p: 'P12', a: 'bt', s: [{ r: '8B', d: 'Crosstown Northbound', m: 10 }] },
+    { p: 'P13', a: 'bt', s: [{ r: '12A', d: 'Georgian Mall', m: 17 }] },
+    { p: 'Stop 14', a: 'bt', s: [{ r: '12B', d: 'Barrie South GO', m: 29 }] },
+  ];
+  const RAIL_TOP = [['P12', 'bt', ['8B']], ['P13', 'bt', ['12A']], ['P6', 'bt', ['7A', '7B']], ['P7', 'go', ['68']], ['P8', 'on', ['201']], ['P9', 'bt', ['C', 'D']]];
+  const RAIL_BOTTOM = [['Stop 14', 'bt', ['12B']], ['P5', 'bt', ['8A']], ['P4', 'bt', ['8B']], ['P3', 'bt', ['8A']], ['P2', 'linx', ['2']], ['P1', 'go', ['TRAIN']]];
+
+  // Simulator: where each platform's lat/lon lands in the rendered image (capture-simulator.js), plus a label offset.
+  const SIM_POINTS = {
+    P1: [651, 535, 46, -34, 'go'], P2: [549, 475, 18, 44, 'linx'], P3: [504, 468, 0, 44, 'bt'], P4: [454, 460, 0, 44, 'bt'],
+    P5: [409, 453, -16, 44, 'bt'], P6: [427, 367, -14, -40, 'bt'], P7: [476, 367, 18, -40, 'go'], P8: [531, 381, 36, -42, 'on'],
+    P9: [580, 353, 30, -34, 'bt'], P12: [285, 388, -46, -30, 'bt'], P13: [266, 424, -50, 24, 'bt'], S14: [142, 543, 0, -40, 'bt'],
+  };
+  // Official map: drawing points (pt) → panel pixels. Crop 16.5,51 → 759 x 484.5 pt shown at 972 x 620, 128 px from the top.
+  const officialPx = (x, y) => [(x - 16.5) * (972 / 759), (y - 51) * (972 / 759) + 128];
+  const NOW_MINUTES = 12 * 60 + 31;
+
+  const clockAt = (mins) => { const t = NOW_MINUTES + mins; const h = Math.floor(t / 60) % 24; return `${((h + 11) % 12) + 1}:${String(t % 60).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`; };
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
+  const badge = (route, extra) => { const b = el('span', `badge ${extra || ''}`, route); const c = ROUTE[route] || ['#075f86', '#fff']; b.style.setProperty('--bg', c[0]); b.style.setProperty('--fg', c[1]); return b; };
+
+  function renderBoard() {
+    const atP6 = document.body.dataset.state === 'platform';
+    const rows = document.getElementById('rows');
+    rows.textContent = '';
+    BOARD.forEach((entry) => {
+      const atPlatform = atP6 && entry.p === 'P6';
+      const row = el('section', `row${atPlatform ? ' row--platform' : ''}`);
+      const head = el('div');
+      head.appendChild(el('div', `row__platform${entry.p.length > 4 ? ' row__platform--long' : ''}`, entry.p));
+      head.appendChild(el('div', 'row__state', 'At platform'));
+      row.appendChild(head);
+      const logo = el('img', 'row__logo'); logo.src = LOGO[entry.a]; logo.alt = ''; row.appendChild(logo);
+      const services = el('div', 'services');
+      entry.s.forEach((s) => {
+        const line = el('div', 'service');
+        line.appendChild(badge(s.r, s.r === 'TRAIN' ? 'badge--train' : ''));
+        line.appendChild(el('span', '', s.d));
+        const m = atPlatform && s.platformM !== undefined ? s.platformM : s.m;
+        const time = el('span', 'time');
+        if (s.live || (atPlatform && s.platformM !== undefined)) time.appendChild(el('span', 'live', 'LIVE'));
+        time.appendChild(el('strong', `time__main${m === 0 ? ' time__main--due' : m <= 10 ? ' time__main--soon' : ''}`, m === 0 ? 'Due' : m <= 60 ? `${m} min` : clockAt(m)));
+        line.appendChild(time);
+        services.appendChild(line);
+      });
+      row.appendChild(services);
+      rows.appendChild(row);
+    });
+    const od = el('section', 'ondemand');
+    od.appendChild(el('div', 'row__platform', 'P9'));
+    od.appendChild(badge('C / D'));
+    const copy = el('div'); copy.appendChild(el('strong', '', 'On Demand')); copy.appendChild(el('span', '', 'Stop 900')); od.appendChild(copy);
+    rows.appendChild(od);
+  }
+
+  function renderRails() {
+    const atP6 = document.body.dataset.state === 'platform';
+    [['rail-top', RAIL_TOP], ['rail-bottom', RAIL_BOTTOM]].forEach(([id, cards]) => {
+      const rail = document.getElementById(id);
+      rail.textContent = '';
+      cards.forEach(([p, a, routes]) => {
+        const card = el('div', `card${routes.length > 1 ? ' card--wide' : ''}${p.length > 4 ? ' card--stop' : ''}${atP6 && p === 'P6' ? ' card--live' : ''}`);
+        card.style.setProperty('--accent', ACCENT[a]);
+        const head = el('div', 'card__head');
+        head.appendChild(el('span', `card__title${p.length > 4 ? ' card__title--long' : ''}`, p));
+        const logo = el('img', 'card__logo'); logo.src = LOGO[a]; logo.alt = ''; head.appendChild(logo);
+        card.appendChild(head);
+        const list = el('div', 'card__routes');
+        routes.forEach((r) => list.appendChild(badge(r, routes.length > 1 ? 'badge--sm' : '')));
+        card.appendChild(list);
+        rail.appendChild(card);
+      });
+    });
+  }
+
+  function renderPointers() {
+    const atP6 = document.body.dataset.state === 'platform';
+    const layer = document.getElementById('pointers');
+    layer.textContent = '';
+    Object.entries(SIM_POINTS).forEach(([name, [x, y, dx, dy, agency]]) => {
+      const colour = ACCENT[agency];
+      const stem = el('div', 'ptr-stem');
+      const length = Math.hypot(dx, dy);
+      stem.style.left = `${x}px`; stem.style.top = `${y}px`; stem.style.height = `${length}px`;
+      stem.style.transform = `rotate(${Math.atan2(-dx, dy) * 180 / Math.PI}deg)`;
+      layer.appendChild(stem);
+      const dot = el('div', 'ptr-dot'); dot.style.left = `${x}px`; dot.style.top = `${y}px`; dot.style.setProperty('--c', colour); layer.appendChild(dot);
+      const label = el('div', `ptr${atP6 && name === 'P6' ? ' ptr--live' : ''}`, name);
+      label.style.left = `${x + dx}px`; label.style.top = `${y + dy}px`; label.style.setProperty('--c', colour);
+      layer.appendChild(label);
+    });
+  }
+
+  function renderBuses() {
+    const base = document.body.dataset.base;
+    const atP6 = document.body.dataset.state === 'platform';
+    const layer = document.getElementById('buses');
+    layer.textContent = '';
+    // Sample buses: one approaching on Essa Rd, and (in the platform state) a 7A at P6.
+    const buses = [];
+    if (base === 'sim') {
+      buses.push({ r: '8A', x: 212, y: 560 });
+      if (atP6) buses.push({ r: '7A', x: 427, y: 367 });
+    } else if (base === 'official') {
+      const [ex, ey] = officialPx(175, 470); buses.push({ r: '8A', x: ex, y: ey });
+      if (atP6) { const [px, py] = officialPx(332, 238); buses.push({ r: '7A', x: px, y: py }); }
+    }
+    buses.forEach((b) => {
+      const bus = el('div', 'bus', b.r);
+      const c = ROUTE[b.r];
+      bus.style.setProperty('--bg', c[0]); bus.style.setProperty('--fg', c[1]);
+      bus.style.left = `${b.x}px`; bus.style.top = `${b.y}px`;
+      layer.appendChild(bus);
+    });
+    document.getElementById('attribution').textContent = base === 'official'
+      ? 'Map: City of Barrie / Barrie Transit'
+      : base === 'sim' ? 'Map data © OpenStreetMap contributors (ODbL) · rendered by Barrie Simulator' : '© OpenStreetMap contributors';
+  }
+
+  function render() { renderBoard(); renderRails(); renderPointers(); renderBuses(); }
+  function fit() { const s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080); document.getElementById('tv').style.transform = `scale(${s})`; }
+
+  document.querySelectorAll('.controls input[type="radio"]').forEach((input) => input.addEventListener('change', () => { document.body.dataset[input.name] = input.value; render(); }));
+  document.getElementById('yah').addEventListener('change', (e) => { document.body.dataset.yah = e.target.checked ? 'on' : 'off'; });
+  const toggleControls = () => document.body.classList.toggle('controls-hidden');
+  document.getElementById('hide').addEventListener('click', toggleControls);
+  window.addEventListener('keydown', (e) => { if (e.key === 'h' || e.key === 'H') toggleControls(); });
+  window.addEventListener('resize', fit);
+  fit();
+  render();
+</script>
+</body>
+</html>

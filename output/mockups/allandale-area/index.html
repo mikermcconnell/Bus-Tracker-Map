@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Allandale Terminal area: proposed improvements (mockup)</title>
+<style>
+  :root {
+    --ink: #1d2433; --muted: #5d6578; --line: #dde1ec; --bg: #f4f5fa; --card: #fff;
+    --accent: #1f5fbf; --lawn: #cdeac6; --warn: #c2410c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 "Segoe UI", system-ui, sans-serif; color: var(--ink); background: var(--bg); }
+  header { padding: 18px 24px 12px; display: flex; flex-wrap: wrap; gap: 12px 32px; align-items: end; justify-content: space-between; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+  header p { margin: 4px 0 0; color: var(--muted); max-width: 760px; }
+  .controls { display: flex; gap: 18px; flex-wrap: wrap; }
+  .group { display: flex; flex-direction: column; gap: 4px; }
+  .group span { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .seg { display: inline-flex; background: #e6e9f2; border-radius: 9px; padding: 3px; }
+  .seg button { border: 0; background: transparent; padding: 6px 12px; border-radius: 7px; font: inherit; font-weight: 600; color: var(--muted); cursor: pointer; }
+  .seg button.on { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(20, 30, 60, 0.15); }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; padding: 0 24px 24px; }
+  .stage { position: relative; background: #e9ebf3; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(20, 30, 60, 0.12); align-self: start; }
+  .stage img, .stage svg { display: block; width: 100%; height: auto; }
+  .stage svg { position: absolute; inset: 0; height: 100%; }
+  .badge-today { position: absolute; left: 12px; top: 12px; background: rgba(29, 36, 51, 0.82); color: #fff; padding: 4px 10px; border-radius: 999px; font-weight: 600; font-size: 12px; }
+  aside { display: flex; flex-direction: column; gap: 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: default; transition: border-color 0.15s, box-shadow 0.15s; }
+  .card.hot { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(31, 95, 191, 0.18); }
+  .card label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+  .card input { margin-top: 4px; }
+  .num { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; font-size: 12px; display: grid; place-items: center; }
+  .card h3 { margin: 0; font-size: 14px; }
+  .card p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+  .tag { display: inline-block; margin-top: 5px; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
+  .tag.sure { background: #e3f4e6; color: #1e6b34; }
+  .tag.check { background: #fdecdf; color: var(--warn); }
+  .notes { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .notes section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+  .notes h2 { margin: 0 0 6px; font-size: 15px; }
+  .notes ul { margin: 0; padding-left: 18px; }
+  .notes li { margin: 3px 0; }
+  svg text { font-family: "Segoe UI", system-ui, sans-serif; }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } .notes { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Allandale Terminal area: proposed improvements</h1>
+    <p>The base image is the Barrie Simulator as it is today. The coloured shapes are the proposals, drawn in real-world metres and placed through the simulator's own camera. Hover over a proposal to find it on the map.</p>
+  </div>
+  <div class="controls">
+    <div class="group"><span>View</span><div class="seg" id="view"><button data-v="view3d" class="on">3D</button><button data-v="plan">Plan</button></div></div>
+    <div class="group"><span>Show</span><div class="seg" id="mode"><button data-v="after" class="on">Proposed</button><button data-v="before">Today</button></div></div>
+    <div class="group"><span>Circled buildings</span><div class="seg" id="bld"><button data-v="restyle" class="on">As built</button><button data-v="remove">Remove</button></div></div>
+  </div>
+</header>
+<main>
+  <div class="stage" id="stage">
+    <img id="base" src="view3d.png" alt="Barrie Simulator view of the Allandale Terminal area">
+    <svg id="overlay" viewBox="0 0 1600 900" preserveAspectRatio="none"></svg>
+    <div class="badge-today" id="todayBadge" hidden>Today (simulator)</div>
+  </div>
+  <aside id="cards"></aside>
+  <div class="notes">
+    <section>
+      <h2>Other things I would add</h2>
+      <ul>
+        <li><b>Platforms 10 and 11</b> on the north access road (City map, Nov 2025): small bus pads with a pole sign. They are not in the simulator yet. Drawn as item 5.</li>
+        <li><b>Walking routes</b> from Tiffin Street and Lakeshore Drive into the terminal. The City says these sidewalks were still being built. Drawn as item 5.</li>
+        <li><b>Gowan Street tunnel steps</b> (in OSM, about 100 m west of the GO station): a small glass head so people can see the link from Gowan Street to the platforms. Drawn as item 5.</li>
+        <li><b>Trees on the new lawns</b>, in loose groups, so the 3D view reads as a finished site and not an empty lot. The Gowan strip has no room for trees between the stalls and the tracks.</li>
+        <li>Later: <b>bike parking</b> beside the terminal (on the City map) and a <b>GO platform shelter</b> at Platform 1.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>To check before building it in the simulator</h2>
+      <ul>
+        <li><b>The loop-side building</b> (OSM 1442477381) has no tags, so its use is not known. It is drawn in the terminal's materials.</li>
+        <li><b>Gowan parking layout.</b> The aerial shows one row of cars along the tracks. The space count is an estimate at 2.75 m per stall.</li>
+        <li><b>Drop-off layout.</b> The City map places "Passenger Drop Off" at the east end, beside Platform 1. The bay layout here is a proposal.</li>
+      </ul>
+    </section>
+  </div>
+</main>
+<script src="data.js"></script>
+<script>
+(() => {
+  const { cameras, buildings } = window.MOCK;
+  const C = {
+    lawn: '#cdeac6', lawnEdge: '#a9d6a0', asphalt: '#c4c7dc', lot: '#bfc2d8', stall: '#ffffff',
+    bay: '#f6d77b', bayEdge: '#e0a91f', blue: '#2f6fdc', tree: '#4cbf86', treeDark: '#2f9c69', trunk: '#7a5a43',
+    path: '#f3eee4', pathEdge: '#d9cfbd', pad: '#e9e3d6', remove: '#d6453d', glass: 'rgba(170, 205, 235, 0.75)', post: '#3b4152',
+  };
+  let state = { view: 'view3d', mode: 'after', bld: 'restyle', hot: null };
+  const off = new Set();
+
+  // ---------- geometry helpers (world metres: x east, z south, y up) ----------
+  function offsetLine(pts, d) {
+    return pts.map((p, i) => {
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)];
+      const dx = b[0] - a[0], dz = b[1] - a[1], len = Math.hypot(dx, dz);
+      return [p[0] - (dz / len) * d, p[1] + (dx / len) * d];
+    });
+  }
+  const band = (line, d0, d1) => [...offsetLine(line, d0), ...offsetLine(line, d1).reverse()];
+  function along(line, step, from = 0) {
+    const out = [];
+    let carry = from;
+    for (let i = 0; i < line.length - 1; i++) {
+      const [a, b] = [line[i], line[i + 1]];
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const ux = (b[0] - a[0]) / len, uz = (b[1] - a[1]) / len;
+      let s = carry;
+      for (; s <= len; s += step) out.push({ p: [a[0] + ux * s, a[1] + uz * s], n: [-uz, ux] });
+      carry = s - len;
+    }
+    return out;
+  }
+  const lineLength = (line) => line.slice(1).reduce((s, p, i) => s + Math.hypot(p[0] - line[i][0], p[1] - line[i][1]), 0);
+  function inside(pt, poly) {
+    let c = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, zi] = poly[i], [xj, zj] = poly[j];
+      if ((zi > pt[1]) !== (zj > pt[1]) && pt[0] < ((xj - xi) * (pt[1] - zi)) / (zj - zi) + xi) c = !c;
+    }
+    return c;
+  }
+  function rng(seed) { return () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646; }
+  function distToSegment(p, a, b) {
+    const dx = b[0] - a[0], dz = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dz) / (dx * dx + dz * dz)));
+    return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dz);
+  }
+
+  // ---------- the proposals ----------
+  // Simulator data (downtown.json): Lakeshore Drive's south lanes, the station service road and the
+  // Gowan Street parking strip. The ring lawn sits inside the service road and Lakeshore Drive.
+  const HISTORIC = [[-272, 997], [-198, 1057]]; // historic station's long axis (from the plan capture)
+  const GOWAN_LINE = [[-447.5, 1090.5], [-115.5, 1145.5]]; // centre of the simulator's 5 m parking strip
+  const SERVICE = [[-257, 1083], [-174, 1096], [-97, 1109], [-40, 1118]]; // drop-off access road (east access)
+  const LAWN_RING = [
+    [-288, 962], [-270, 966], [-243, 972], [-207, 990], [-166, 1018], [-128, 1038], [-86, 1052], [-30, 1064],
+    [-22, 1072], [-24, 1100], [-28, 1110], [-40, 1113], [-97, 1104], [-174, 1091], [-257, 1078], [-290, 1072],
+    [-300, 1060], [-303, 1046], [-299, 1010], [-292, 968],
+  ];
+  const TUNNEL = [-101, 1117]; // steps down to the Gowan Street tunnel (OSM footway and steps)
+  const LAWN_NORTH = [[-384, 966], [-306, 962], [-305, 1010], [-312, 1020], [-386, 1018], [-392, 1004]];
+  const LAWN_NORTH_EDGE = [[-388, 1012], [-312, 1015], [-312, 1021], [-388, 1019]];
+  const stallCount = Math.round(lineLength(GOWAN_LINE) / 2.75);
+
+  const PROPOSALS = [
+    {
+      id: 'bld', n: 1, title: 'The circled buildings north of the loop',
+      text: 'Now modelled in the simulator (the base image): the 1914 visitor centre at 4 Essa Road, The Farmhouse (the old Allandale YMCA) with its tower and verandah, and the loop-side building in the terminal brick and zinc.',
+      tag: ['sure', 'Built in the simulator'],
+    },
+    {
+      id: 'lawn', n: 2, title: 'Add grass around the terminal and the historic station',
+      text: 'The empty ground inside the ring road, south of the historic station and north of the bus loop becomes lawn, with trees in loose groups.',
+      tag: ['sure', 'Matches the finished site'],
+    },
+    {
+      id: 'gowan', n: 3, title: `Gowan Street parking strip (about ${stallCount} spaces)`,
+      text: 'The simulator already has the strip between Gowan Street and the tracks, but as a plain band. Add head-in stall lines (one row of cars, as in the aerial) and "P" signs where the City map shows them.',
+      tag: ['sure', 'On the City map'],
+    },
+    {
+      id: 'drop', n: 4, title: 'Passenger pick-up and drop-off',
+      text: 'Along the east access road north of the GO platform (the City map puts "Passenger Drop Off" here): painted drop-off bays on the platform side, a wide walk to the platform with a glass waiting shelter, "Drop-off" signs, and accessible plus short-stay stalls in the small lot that OSM already has.',
+      tag: ['check', 'Bay layout is a proposal'],
+    },
+    {
+      id: 'extras', n: 5, title: 'Platforms 10 and 11, walking routes, tunnel entrance',
+      text: 'Bus pads with pole signs on the north access road, sidewalks from Tiffin Street and Lakeshore Drive into the terminal, and a small glass head over the steps to the Gowan Street tunnel.',
+      tag: ['sure', 'On the City map'],
+    },
+  ];
+
+  // ---------- projection through the simulator camera ----------
+  let cam;
+  function P(x, y, z) {
+    const e = cam.viewProj;
+    const cx = e[0] * x + e[4] * y + e[8] * z + e[12];
+    const cy = e[1] * x + e[5] * y + e[9] * z + e[13];
+    const cw = e[3] * x + e[7] * y + e[11] * z + e[15];
+    return [((cx / cw + 1) / 2) * cam.width, ((1 - cy / cw) / 2) * cam.height, cw];
+  }
+  const pts = (poly, y = 0.3) => poly.map(([x, z]) => P(x, y, z).slice(0, 2).map((v) => v.toFixed(1)).join(',')).join(' ');
+  const depth = (x, y, z) => Math.hypot(x - cam.eye[0], y - cam.eye[1], z - cam.eye[2]);
+
+  // ---------- SVG drawing ----------
+  const svg = document.getElementById('overlay');
+  const NS = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs, parent) {
+    const node = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    parent.appendChild(node);
+    return node;
+  }
+  const poly = (g, p, fill, extra = {}, y) => el('polygon', { points: pts(p, y), fill, ...extra }, g);
+  const line = (g, a, b, stroke, width, y = 0.35, extra = {}) => {
+    const [x1, y1] = P(a[0], y, a[1]), [x2, y2] = P(b[0], y, b[1]);
+    return el('line', { x1, y1, x2, y2, stroke, 'stroke-width': width, 'stroke-linecap': 'round', ...extra }, g);
+  };
+  // Pixels per metre at a world point, for sizing trees and labels.
+  const scaleAt = (x, y, z) => { const a = P(x, y, z), b = P(x + 1, y, z); return Math.hypot(b[0] - a[0], b[1] - a[1]); };
+
+  // Things that stand up (trees, posts, shelters, buildings) are gathered, then drawn far-to-near.
+  let solids;
+  function tree(x, z, h = 7, r = 2.6) {
+    solids.push({ d: depth(x, 0, z), draw(g) {
+      const base = P(x, 0, z), top = P(x, h * 0.55, z), crown = P(x, h - r * 0.8, z);
+      const s = scaleAt(x, h, z);
+      el('line', { x1: base[0], y1: base[1], x2: top[0], y2: top[1], stroke: C.trunk, 'stroke-width': Math.max(1.2, s * 0.35) }, g);
+      el('circle', { cx: crown[0], cy: crown[1], r: r * s, fill: C.tree, stroke: C.treeDark, 'stroke-width': Math.max(0.6, s * 0.12) }, g);
+      el('circle', { cx: crown[0] - r * s * 0.3, cy: crown[1] - r * s * 0.3, r: r * s * 0.35, fill: '#7fd8a8', opacity: 0.7 }, g);
+    } });
+  }
+  function sign(x, z, h, plate, text, color = C.blue, wide = 1) {
+    solids.push({ d: depth(x, 0, z), draw(g) {
+      const base = P(x, 0, z), top = P(x, h, z), s = scaleAt(x, h, z);
+      el('line', { x1: base[0], y1: base[1], x2: top[0], y2: top[1], stroke: C.post, 'stroke-width': Math.max(1.2, s * 0.15) }, g);
+      const w = plate * s * wide, hh = plate * s * 0.8;
+      el('rect', { x: top[0] - w / 2, y: top[1] - hh, width: w, height: hh, rx: hh * 0.15, fill: color, stroke: '#fff', 'stroke-width': Math.max(0.8, s * 0.08) }, g);
+      el('text', { x: top[0], y: top[1] - hh * 0.28, 'font-size': hh * (wide > 1 ? 0.5 : 0.62), 'font-weight': 800, fill: '#fff', 'text-anchor': 'middle' }, g).textContent = text;
+    } });
+  }
+  // A box (shelter or building) as visible faces: walls far-to-near, then the roof.
+  function box(footprint, h, wall, roof, opts = {}) {
+    const cx = footprint.reduce((s, p) => s + p[0], 0) / footprint.length;
+    const cz = footprint.reduce((s, p) => s + p[1], 0) / footprint.length;
+    solids.push({ d: depth(cx, h / 2, cz), draw(g) {
+      const faces = footprint.map((a, i) => {
+        const b = footprint[(i + 1) % footprint.length];
+        return { a, b, d: depth((a[0] + b[0]) / 2, h / 2, (a[1] + b[1]) / 2) };
+      }).sort((p, q) => q.d - p.d);
+      for (const f of faces) {
+        const quad = [P(f.a[0], 0, f.a[1]), P(f.b[0], 0, f.b[1]), P(f.b[0], h, f.b[1]), P(f.a[0], h, f.a[1])];
+        // Shade walls by which way they face, so the box reads as 3D.
+        const dx = f.b[0] - f.a[0], dz = f.b[1] - f.a[1], shade = 0.78 + 0.22 * Math.abs(dx) / Math.hypot(dx, dz);
+        el('polygon', { points: quad.map((q) => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' '), fill: wall, stroke: 'rgba(40,40,60,0.35)', 'stroke-width': 0.6, style: `filter: brightness(${shade})`, ...(opts.wallAttrs || {}) }, g);
+      }
+      el('polygon', { points: pts(footprint, h), fill: roof, stroke: 'rgba(40,40,60,0.45)', 'stroke-width': 0.8, ...(opts.roofAttrs || {}) }, g);
+      if (opts.parapet) el('polygon', { points: pts(offsetPolyIn(footprint, 0.6), h + 0.01), fill: 'none', stroke: 'rgba(255,255,255,0.35)', 'stroke-width': 1 }, g);
+    } });
+  }
+  function offsetPolyIn(fp, d) {
+    const cx = fp.reduce((s, p) => s + p[0], 0) / fp.length, cz = fp.reduce((s, p) => s + p[1], 0) / fp.length;
+    return fp.map(([x, z]) => { const l = Math.hypot(x - cx, z - cz); return [x - ((x - cx) / l) * d, z - ((z - cz) / l) * d]; });
+  }
+  function scatterTrees(area, count, seed, keepClear) {
+    const r = rng(seed);
+    const xs = area.map((p) => p[0]), zs = area.map((p) => p[1]);
+    let placed = 0, tries = 0;
+    while (placed < count && tries++ < 4000) {
+      const p = [Math.min(...xs) + r() * (Math.max(...xs) - Math.min(...xs)), Math.min(...zs) + r() * (Math.max(...zs) - Math.min(...zs))];
+      if (!inside(p, area) || (keepClear && keepClear(p))) continue;
+      tree(p[0], p[1], 6 + r() * 3, 2.2 + r() * 1.2);
+      placed++;
+    }
+  }
+  function label(g, n, x, z, y = 3) {
+    const [px, py] = P(x, y, z);
+    const grp = el('g', { class: 'label', 'data-id': n }, g);
+    el('circle', { cx: px, cy: py, r: 15, fill: '#1f5fbf', stroke: '#fff', 'stroke-width': 3 }, grp);
+    el('text', { x: px, y: py + 5.5, 'font-size': 16, 'font-weight': 800, fill: '#fff', 'text-anchor': 'middle' }, grp).textContent = n;
+  }
+  function hull(points) {
+    const p = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    const lower = [], upper = [];
+    for (const q of p) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0) lower.pop(); lower.push(q); }
+    for (const q of p.slice().reverse()) { while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0) upper.pop(); upper.push(q); }
+    return lower.slice(0, -1).concat(upper.slice(0, -1));
+  }
+
+
+  function render() {
+    cam = cameras[state.view];
+    svg.innerHTML = '';
+    document.getElementById('base').src = `${state.view}.png`;
+    document.getElementById('todayBadge').hidden = state.mode !== 'before';
+    if (state.mode === 'before') return;
+    const on = (id) => !off.has(id);
+    const dim = (id) => (state.hot && state.hot !== id ? 0.35 : 1);
+    const ground = el('g', {}, svg);
+    const layers = {};
+    for (const p of PROPOSALS) layers[p.id] = el('g', { opacity: dim(p.id) }, ground);
+    solids = [];
+
+    // 2. Lawns (drawn first, everything else sits on them). The historic station stands inside the
+    // ring lawn, so a mask cuts its whole on-screen shape (walls and roofs) out of the grass.
+    if (on('lawn')) {
+      const g = layers.lawn;
+      const [a, b] = HISTORIC;
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]), ux = (b[0] - a[0]) / len, uz = (b[1] - a[1]) / len;
+      const corner = (s, t) => [a[0] + ux * s - uz * t, a[1] + uz * s + ux * t];
+      const plaza = [corner(-8, -14), corner(len + 10, -14), corner(len + 10, 14), corner(-8, 14)];
+      const cut = hull(plaza.flatMap(([x, z]) => [P(x, 0, z), P(x, 16, z)]).map((q) => q.slice(0, 2)));
+      const mask = el('mask', { id: 'stationCut', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: cam.width, height: cam.height }, el('defs', {}, g));
+      el('rect', { x: 0, y: 0, width: cam.width, height: cam.height, fill: '#fff' }, mask);
+      el('polygon', { points: cut.map((q) => q.join(',')).join(' '), fill: '#000' }, mask);
+      const ring = el('g', { mask: 'url(#stationCut)' }, g);
+      poly(ring, LAWN_RING, C.lawn, { stroke: C.lawnEdge, 'stroke-width': 1.5 });
+      poly(g, state.bld === 'remove' ? LAWN_NORTH : LAWN_NORTH_EDGE, C.lawn, { stroke: C.lawnEdge, 'stroke-width': 1.5 });
+      const clear = (p) => distToSegment(p, a, b) < 24 || !inside(p, offsetPolyIn(LAWN_RING, 6));
+      scatterTrees(LAWN_RING, 30, 11, clear);
+      if (state.bld === 'remove') scatterTrees(LAWN_NORTH, 9, 7, (p) => p[0] > -318);
+    }
+
+    // 1. Circled buildings.
+    if (on('bld')) {
+      const g = layers.bld;
+      for (const [id, b] of Object.entries(buildings)) {
+        if (!b.footprint) continue;
+        if (state.bld === 'remove') {
+          // Paint over the old box's whole outline on screen, then mark its footprint.
+          const silhouette = hull(b.footprint.flatMap(([x, z]) => [P(x, 0, z), P(x, b.height, z)]).map((q) => q.slice(0, 2)));
+          el('polygon', { points: silhouette.map((q) => q.join(',')).join(' '), fill: on('lawn') ? C.lawn : '#eceef6' }, g);
+          poly(g, b.footprint, 'none', { stroke: C.remove, 'stroke-width': 2, 'stroke-dasharray': '6 4' });
+        }
+      }
+    }
+
+    // 3. Gowan Street parking: stall lines on the simulator's existing strip, head-in from Gowan Street.
+    if (on('gowan')) {
+      const g = layers.gowan;
+      poly(g, band(GOWAN_LINE, -3, 3), C.lot, { stroke: '#a7abc6', 'stroke-width': 1 });
+      for (const s of along(GOWAN_LINE, 2.75, 1)) line(g, [s.p[0] - s.n[0] * 3, s.p[1] - s.n[1] * 3], [s.p[0] + s.n[0] * 2.2, s.p[1] + s.n[1] * 2.2], C.stall, 1.1);
+      const marks = along(GOWAN_LINE, 1, 0);
+      for (const i of [120, 290]) sign(marks[i].p[0] - marks[i].n[0] * 3.6, marks[i].p[1] - marks[i].n[1] * 3.6, 4.5, 2.4, 'P');
+    }
+
+    // 4. Pick-up and drop-off along the east access road, between the road and the GO platform.
+    if (on('drop')) {
+      const g = layers.drop;
+      const part = (from, to) => SERVICE.filter(([x]) => x > from && x < to);
+      const walk = [[-140, 1102.5], ...part(-140, -40), [-40, 1118]];
+      poly(g, band(walk, 6.3, 13.5), C.path, { stroke: C.pathEdge, 'stroke-width': 1 });
+      poly(g, band(SERVICE, -3.5, 3.5), C.asphalt, { stroke: '#a7abc6', 'stroke-width': 1 });
+      for (const s of along(SERVICE, 6, 0)) line(g, s.p, [s.p[0] + s.n[1] * 3, s.p[1] - s.n[0] * 3], '#fff', 1.4);
+      // Drop-off bays (6.5 m) on the platform side.
+      const bays = along(SERVICE, 7.2, 0).filter((s) => s.p[0] > -128 && s.p[0] < -48);
+      for (const s of bays) {
+        const ux = s.n[1], uz = -s.n[0];
+        const c = (dn, du) => [s.p[0] + s.n[0] * dn + ux * du, s.p[1] + s.n[1] * dn + uz * du];
+        poly(g, [c(3.5, -3.25), c(3.5, 3.25), c(6.3, 3.25), c(6.3, -3.25)], C.bay, { stroke: C.bayEdge, 'stroke-width': 1 }, 0.35);
+      }
+      // The small OSM lot west of the bays: 2 accessible stalls nearest the platform path, then short-stay.
+      const LOT = [[-141, 1105], [-165, 1102], [-166, 1108], [-142, 1112]];
+      poly(g, LOT, C.lot, { stroke: '#a7abc6', 'stroke-width': 1 });
+      for (let i = 0; i < 9; i++) {
+        const t0 = i / 9, t1 = (i + 1) / 9;
+        const lerp = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+        const quad = [lerp(LOT[0], LOT[1], t0), lerp(LOT[0], LOT[1], t1), lerp(LOT[3], LOT[2], t1), lerp(LOT[3], LOT[2], t0)];
+        poly(g, quad, i < 2 ? C.blue : 'none', { stroke: '#fff', 'stroke-width': 1 }, 0.35);
+      }
+      // Glass waiting shelter on the walk, half way along the bays, and signs at each end.
+      const mid = along(SERVICE, 1, 0).find((s) => s.p[0] > -90);
+      const ux = mid.n[1], uz = -mid.n[0];
+      const sc = (dn, du) => [mid.p[0] + mid.n[0] * dn + ux * du, mid.p[1] + mid.n[1] * dn + uz * du];
+      box([sc(8, -5), sc(8, 5), sc(10.5, 5), sc(10.5, -5)], 3, C.glass, '#5b6170');
+      sign(...sc(7, -40), 4, 2.4, 'Drop-off', C.blue, 3.2);
+      sign(...sc(7, 36), 4, 2.4, 'Drop-off', C.blue, 3.2);
+    }
+
+    // 5. Platforms 10 and 11, walking routes and the Gowan Street tunnel steps.
+    if (on('extras')) {
+      const g = layers.extras;
+      for (const route of [[[-336, 966], [-334, 992], [-340, 1018]], [[-298, 958], [-292, 1000], [-294, 1040], [-288, 1072]]]) {
+        el('polyline', { points: pts(route), fill: 'none', stroke: C.pathEdge, 'stroke-width': 9, 'stroke-linejoin': 'round' }, g);
+        el('polyline', { points: pts(route), fill: 'none', stroke: C.path, 'stroke-width': 6, 'stroke-linejoin': 'round' }, g);
+      }
+      for (const [z, n] of [[1000, '10'], [978, '11']]) {
+        poly(g, [[-306, z - 6], [-303.5, z - 6], [-303.5, z + 6], [-306, z + 6]], C.pad, { stroke: '#c9bfa9', 'stroke-width': 1 });
+        line(g, [-304.8, z - 5], [-304.8, z + 5], '#f2b630', 2);
+        sign(-306.2, z - 4, 3.2, 2.4, n, '#0b3b70');
+      }
+      const [tx, tz] = TUNNEL;
+      box([[tx - 2, tz - 1.5], [tx + 2, tz - 1.5], [tx + 2, tz + 1.5], [tx - 2, tz + 1.5]], 2.8, C.glass, '#5b6170');
+      sign(tx + 3, tz - 1, 3.4, 2.2, '↓', '#0b3b70');
+    }
+
+    solids.sort((a, b) => b.d - a.d);
+    const standing = el('g', {}, svg);
+    for (const s of solids) s.draw(standing);
+
+    // Stop 14 (Essa at Gowan), which the TV view must keep in frame.
+    {
+      const [px, py] = P(-489, 4, 1110), [bx, by] = P(-489, 0, 1110);
+      const pin = el('g', {}, svg);
+      el('line', { x1: bx, y1: by, x2: px, y2: py, stroke: '#0b3b70', 'stroke-width': 2 }, pin);
+      el('rect', { x: px - 34, y: py - 26, width: 68, height: 24, rx: 6, fill: '#0b3b70', stroke: '#fff', 'stroke-width': 2 }, pin);
+      el('text', { x: px, y: py - 9, 'font-size': 13, 'font-weight': 800, fill: '#fff', 'text-anchor': 'middle' }, pin).textContent = 'STOP 14';
+    }
+
+    // Number badges on top of everything.
+    const labels = el('g', {}, svg);
+    const spots = { bld: [-345, 990, 14], lawn: [-110, 1065, 3], gowan: [-250, 1124, 3], drop: [-118, 1098, 3], extras: [-300, 966, 6] };
+    for (const p of PROPOSALS) if (on(p.id)) {
+      const g = el('g', { opacity: dim(p.id) }, labels);
+      label(g, p.n, spots[p.id][0], spots[p.id][1], spots[p.id][2]);
+    }
+  }
+
+  // ---------- side panel and controls ----------
+  const cards = document.getElementById('cards');
+  for (const p of PROPOSALS) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<label><input type="checkbox" checked><span class="num">${p.n}</span><span><h3>${p.title}</h3><p>${p.text}</p><span class="tag ${p.tag[0]}">${p.tag[1]}</span></span></label>`;
+    card.querySelector('input').addEventListener('change', (e) => { e.target.checked ? off.delete(p.id) : off.add(p.id); render(); });
+    card.addEventListener('mouseenter', () => { state.hot = p.id; card.classList.add('hot'); render(); });
+    card.addEventListener('mouseleave', () => { state.hot = null; card.classList.remove('hot'); render(); });
+    cards.appendChild(card);
+  }
+  for (const [id, key] of [['view', 'view'], ['mode', 'mode'], ['bld', 'bld']]) {
+    document.getElementById(id).addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      state[key] = b.dataset.v;
+      for (const x of e.currentTarget.children) x.classList.toggle('on', x === b);
+      render();
+    });
+  }
+  render();
+})();
+</script>
+</body>
+</html>
