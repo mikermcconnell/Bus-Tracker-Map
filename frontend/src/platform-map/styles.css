@@ -441,6 +441,21 @@ body {
   box-shadow: 0 0 0 2px #d4262c;
 }
 
+.map-legend__symbol--platform {
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #075f86;
+  box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px #075f86;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 950;
+  line-height: 1;
+}
+
 .map-legend__symbol--train {
   width: 18px;
   height: 10px;
@@ -502,60 +517,55 @@ body {
   flex: 1 1 0;
 }
 
+/* The badge sits on the bay itself, so the small anchor dot under it is not shown. */
 .map-platform-anchor {
-  --pointer-color: #075f86;
-  position: absolute;
-  z-index: 3;
-  width: 11px;
-  height: 11px;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: var(--pointer-color);
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
-  transform: translate(-50%, -50%);
-  pointer-events: none;
+  display: none;
 }
 
-.map-platform-anchor[data-agency-id="go-transit"],
 .map-platform-anchor__label[data-agency-id="go-transit"] {
   --pointer-color: #007a33;
 }
 
-.map-platform-anchor[data-agency-id="ontario-northland"],
 .map-platform-anchor__label[data-agency-id="ontario-northland"] {
   --pointer-color: #002a5c;
 }
 
-.map-platform-anchor[data-agency-id="simcoe-linx"],
 .map-platform-anchor__label[data-agency-id="simcoe-linx"] {
   --pointer-color: #00549f;
 }
 
-.map-platform-anchor[data-agency-id="passenger"],
 .map-platform-anchor__label[data-agency-id="passenger"] {
   --pointer-color: #087db7;
 }
 
+/* Round platform number badge centred on its bay. No stem, so no label points elsewhere. */
 .map-platform-anchor__label {
   --pointer-color: #075f86;
+  --badge-size: calc(30px * var(--map-scale, 1));
   position: absolute;
   z-index: 4;
-  min-width: calc(38px * var(--map-scale, 1));
-  min-height: calc(32px * var(--map-scale, 1));
-  padding: calc(6px * var(--map-scale, 1)) calc(8px * var(--map-scale, 1));
+  width: var(--badge-size);
+  height: var(--badge-size);
   display: grid;
   place-items: center;
-  border: 2px solid #fff;
-  border-radius: 7px;
+  border: max(2px, calc(3px * var(--map-scale, 1))) solid #fff;
+  border-radius: 50%;
   color: #fff;
   background: var(--pointer-color);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.48);
-  font-size: max(11px, calc(22px * var(--map-scale, 1)));
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  font-size: max(10px, calc(17px * var(--map-scale, 1)));
   font-weight: 950;
-  letter-spacing: 0.01em;
   line-height: 1;
   text-align: center;
   white-space: nowrap;
+  transform: translate(-50%, -50%);
+}
+
+.map-platform-anchor__label[data-pointer-label="12"],
+.map-platform-anchor__label[data-pointer-label="13"],
+.map-platform-anchor__label[data-pointer-label="14"] {
+  font-size: max(9px, calc(14px * var(--map-scale, 1)));
+  letter-spacing: -0.03em;
 }
 
 .map-platform-anchor__state {
@@ -565,56 +575,32 @@ body {
 .map-platform-anchor__label[data-live-state="approaching"],
 .map-platform-anchor__label[data-live-state="occupied"] {
   box-shadow:
-    0 3px 8px rgba(0, 0, 0, 0.48),
+    0 2px 6px rgba(0, 0, 0, 0.5),
     0 0 0 4px rgba(74, 222, 128, 0.78),
     0 0 14px rgba(74, 222, 128, 0.82);
 }
 
-.map-platform-anchor[data-live-state="approaching"],
-.map-platform-anchor[data-live-state="occupied"] {
-  box-shadow:
-    0 1px 5px rgba(0, 0, 0, 0.55),
-    0 0 0 4px rgba(74, 222, 128, 0.6),
-    0 0 10px rgba(74, 222, 128, 0.7);
-}
-
-.map-platform-anchor__label[data-label-placement="below"] {
-  transform: translate(-50%, 12px);
-}
-
-.map-platform-anchor__label[data-label-placement="above"] {
-  transform: translate(-50%, calc(-100% - 12px));
-}
-
-.map-platform-anchor__label[data-label-placement="left"] {
-  transform: translate(calc(-100% - 12px), -50%);
-}
-
-/* Staggered labels sit one row further out, joined to their dot by a short line. */
-.map-platform-anchor__label[data-label-stagger="true"][data-label-placement="below"] {
-  transform: translate(-50%, calc(100% + 18px));
-}
-
-.map-platform-anchor__label[data-label-stagger="true"][data-label-placement="above"] {
-  transform: translate(-50%, calc(-200% - 18px));
-}
-
-.map-platform-anchor__label[data-label-stagger="true"]::before {
-  content: "";
+/* White symbol tile beside a badge, e.g. the train at Platform 1. */
+.map-platform-anchor__symbol {
   position: absolute;
-  left: 50%;
-  width: 2px;
-  height: calc(100% + 16px);
-  margin-left: -1px;
-  background: var(--pointer-color);
+  top: 50%;
+  left: calc(100% + 5px);
+  width: calc(var(--badge-size) * 1.8);
+  height: calc(var(--badge-size) * 1.8);
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--pointer-color);
+  border-radius: 5px;
+  color: var(--pointer-color);
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  transform: translateY(-50%);
 }
 
-.map-platform-anchor__label[data-label-stagger="true"][data-label-placement="below"]::before {
-  bottom: calc(100% + 2px);
-}
-
-.map-platform-anchor__label[data-label-stagger="true"][data-label-placement="above"]::before {
-  top: calc(100% + 2px);
+.map-platform-anchor__symbol svg,
+.map-dropoff-card__icon svg {
+  width: 80%;
+  height: 80%;
 }
 
 .map-platform-anchor__label[data-pointer-label="P/D"] {
@@ -661,8 +647,7 @@ body {
 }
 
 .map-label-rail .map-platform-card[data-has-schedule="false"][data-live-state=""] .map-platform-card__title {
-  font-size: 18px;
-  text-overflow: clip;
+  flex: 0 0 auto;
 }
 
 .map-label-rail .map-platform-card[data-has-schedule="false"][data-live-state=""] .map-platform-card__brand,
@@ -698,6 +683,7 @@ body {
 }
 
 .map-platform-card__header {
+  min-width: 0;
   min-height: 42px;
   padding: 5px 7px;
   display: flex;
@@ -711,12 +697,47 @@ body {
 }
 
 .map-platform-card__title {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   overflow: hidden;
-  font-size: 30px;
-  font-weight: 900;
   line-height: 1;
-  text-overflow: clip;
+}
+
+/* Same round badge as the map, so a rider matches the card to the bay by number. */
+.map-platform-card__badge {
+  --badge-size: 32px;
+  flex: 0 0 auto;
+  width: var(--badge-size);
+  height: var(--badge-size);
+  display: grid;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--agency-header);
+  font-size: calc(var(--badge-size) * 0.58);
+  font-weight: 950;
+  line-height: 1;
+}
+
+.map-platform-card__badge[data-digits="2"] {
+  font-size: calc(var(--badge-size) * 0.46);
+  letter-spacing: -0.03em;
+}
+
+.map-platform-card__kind {
+  font-size: 18px;
+  font-weight: 900;
+  text-transform: uppercase;
   white-space: nowrap;
+}
+
+/* "STOP" needs the width its logo would take. */
+.map-platform-card[data-platform="14"] .map-platform-card__brand {
+  display: none;
 }
 
 .map-platform-card__dot {
@@ -755,14 +776,6 @@ body {
   object-fit: contain;
 }
 
-.map-platform-card[data-platform="14"] .map-platform-card__title {
-  font-size: 22px;
-}
-
-/* "STOP 14" needs the width its logo would take. */
-.map-platform-card[data-platform="14"] .map-platform-card__brand {
-  display: none;
-}
 
 .map-platform-card__routes {
   min-height: 0;
@@ -876,11 +889,16 @@ body {
 }
 
 .map-connection-card__platform {
-  padding-right: 7px;
-  border-right: 1px solid rgba(255, 255, 255, 0.4);
-  font-size: 14px;
-  font-weight: 900;
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   line-height: 1;
+}
+
+.map-connection-card .map-platform-card__badge {
+  --badge-size: 26px;
 }
 
 .map-connection-card__logo {
@@ -1011,11 +1029,10 @@ body {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
+  border: 2px solid #006fb9;
   border-radius: 5px;
-  color: #fff;
-  background: #006fb9;
-  font-size: 17px;
-  font-weight: 900;
+  color: #006fb9;
+  background: #fff;
 }
 
 .map-dropoff-card__copy {
@@ -1696,8 +1713,13 @@ body {
     min-height: 26px;
   }
 
-  .map-platform-card__title {
-    font-size: 13px;
+  .map-platform-card__badge {
+    --badge-size: 20px;
+    border-width: 1.5px;
+  }
+
+  .map-platform-card__kind {
+    font-size: 11px;
   }
 
   .map-platform-card__route,
@@ -1714,9 +1736,8 @@ body {
     gap: 5px;
   }
 
-  .map-connection-card__platform {
-    padding-right: 5px;
-    font-size: 12px;
+  .map-connection-card .map-platform-card__badge {
+    --badge-size: 17px;
   }
 
   .map-platform-card__brand {
@@ -1730,9 +1751,6 @@ body {
     min-width: 40px;
   }
 
-  .map-platform-card[data-platform="14"] .map-platform-card__title {
-    font-size: 11px;
-  }
 
   .map-connection-card__logo {
     width: min(48px, 52%);

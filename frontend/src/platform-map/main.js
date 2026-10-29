@@ -112,10 +112,12 @@ const PLATFORM_LABEL_RAILS = Object.freeze({
   '13': Object.freeze({ rail: 'top', order: 2 }),
   '14': Object.freeze({ rail: 'bottom', order: 1 }),
 });
-const REVERSED_POINTER_LABEL_PLATFORMS = new Set(['2', '3', '4', '5', '6', '7', '8']);
-// Neighbouring pointers are only a label-width apart; these sit one row further out.
-const STAGGERED_POINTER_LABEL_PLATFORMS = new Set(['2', '4', '7']);
-const POINTER_LABEL_PLACEMENT_OVERRIDES = Object.freeze({ '12': 'left' });
+// Small white-tile symbols beside a map point (pick-up car, GO train at Platform 1).
+const MAP_SYMBOL_PATHS = Object.freeze({
+  car: 'M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11h.5a1.5 1.5 0 0 1 1.5 1.5V17h-2v1.5a1.5 1.5 0 0 1-3 0V17H8v1.5a1.5 1.5 0 0 1-3 0V17H3v-4.5A1.5 1.5 0 0 1 4.5 11zM7.2 11h9.6l-1.1-3.5H8.3zM6.5 15a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5zm11 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5z',
+  train: 'M7 3h10a3 3 0 0 1 3 3v9a3 3 0 0 1-2.2 2.9l1.7 3.1h-2.3l-1.4-2.8H8.2L6.8 21H4.5l1.7-3.1A3 3 0 0 1 4 15V6a3 3 0 0 1 3-3zm-.5 3.5V11h11V6.5zM8 13.5a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5zm8 0a1.25 1.25 0 1 0 0 2.5 1.25 1.25 0 0 0 0-2.5z',
+});
+const PLATFORM_POINTER_SYMBOLS = Object.freeze({ '1': 'train' });
 // User-confirmed physical pointer locations. Add platforms here one at a time;
 // do not substitute agency GTFS stop coordinates for these display anchors.
 const PLATFORM_POINTER_COORDINATES = Object.freeze({
@@ -211,6 +213,28 @@ function createElement(tag, className, text) {
   if (className) element.className = className;
   if (text !== undefined && text !== null) element.textContent = String(text);
   return element;
+}
+
+function createMapSymbol(name, className) {
+  const tile = createElement('span', className);
+  tile.dataset.symbol = name;
+  tile.setAttribute('aria-hidden', 'true');
+  const icon = document.createElementNS(SVG_NS, 'svg');
+  icon.setAttribute('viewBox', '0 0 24 24');
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', MAP_SYMBOL_PATHS[name]);
+  path.setAttribute('fill-rule', 'evenodd');
+  path.setAttribute('fill', 'currentColor');
+  icon.appendChild(path);
+  tile.appendChild(icon);
+  return tile;
+}
+
+// The badge that names a platform on the map and on its rail card, so they match.
+function createPlatformBadge(platform, className) {
+  const badge = createElement('span', className, platform);
+  badge.dataset.digits = String(platform).length;
+  return badge;
 }
 
 // The base map is a still image rendered from the Barrie Simulator. It needs no
@@ -629,15 +653,8 @@ function setupPlatformApp() {
     if (!dot || !label || !anchor) return;
     dot.style.left = `${anchor.x}%`;
     dot.style.top = `${anchor.y}%`;
-    requestAnimationFrame(() => {
-      if (!card.isConnected || !mapStageEl.isConnected || !mapPlaneEl.isConnected) return;
-      const stageRect = mapStageEl.getBoundingClientRect();
-      const planeRect = mapPlaneEl.getBoundingClientRect();
-      const anchorX = planeRect.left - stageRect.left + planeRect.width * anchor.x / 100;
-      const anchorY = planeRect.top - stageRect.top + planeRect.height * anchor.y / 100;
-      label.style.left = `${anchorX}px`;
-      label.style.top = `${anchorY}px`;
-    });
+    label.style.left = `${anchor.x}%`;
+    label.style.top = `${anchor.y}%`;
   }
 
   function appendCardToRail(card, placement) {
@@ -654,8 +671,8 @@ function setupPlatformApp() {
     card.dataset.manualPointer = 'true';
     card.dataset.pointerLat = String(pointerCoordinates.lat);
     card.dataset.pointerLon = String(pointerCoordinates.lon);
-    const labelRail = platform ? PLATFORM_LABEL_RAILS[platform] && PLATFORM_LABEL_RAILS[platform].rail : 'right';
-    const pointerLabel = platform ? (String(platform) === '14' ? 'S14' : `P${platform}`) : 'P/D';
+    // The map shows the bare number on the bay; the rail card shows the same badge.
+    const pointerLabel = platform ? String(platform) : 'P/D';
     const agencyId = card.dataset.agencyId || 'passenger';
     if (card.classList.contains('map-dropoff-card')) {
       card.dataset.geographicCard = 'true';
@@ -671,21 +688,17 @@ function setupPlatformApp() {
     anchor.dataset.pointerLabel = pointerLabel;
     anchor.dataset.agencyId = agencyId;
     anchorLabel.dataset.pointerLabel = pointerLabel;
-    const defaultLabelPlacement = labelRail === 'top' ? 'below' : labelRail === 'bottom' ? 'above' : 'left';
-    anchorLabel.dataset.labelPlacement = POINTER_LABEL_PLACEMENT_OVERRIDES[String(platform)] || (
-      REVERSED_POINTER_LABEL_PLATFORMS.has(String(platform))
-        ? defaultLabelPlacement === 'above' ? 'below' : 'above'
-        : defaultLabelPlacement
-    );
-    if (STAGGERED_POINTER_LABEL_PLATFORMS.has(String(platform))) anchorLabel.dataset.labelStagger = 'true';
     anchorLabel.dataset.agencyId = agencyId;
+    const symbol = PLATFORM_POINTER_SYMBOLS[String(platform)];
+    if (symbol) anchorLabel.appendChild(createMapSymbol(symbol, 'map-platform-anchor__symbol'));
     if (card.classList.contains('map-dropoff-card')) {
       anchor.classList.add('map-platform-anchor--pickup-dropoff');
     }
     card.__platformAnchor = anchor;
     card.__platformAnchorLabel = anchorLabel;
     mapPlatformLayerEl.appendChild(anchor);
-    mapLabelLayerEl.appendChild(anchorLabel);
+    // On the map plane, under the bus layer, so a bus at the bay draws over its number.
+    mapPlatformLayerEl.appendChild(anchorLabel);
   }
 
   function refreshManualPointer(card) {
@@ -875,7 +888,11 @@ function setupPlatformApp() {
     if (position.wide) card.classList.add('map-platform-card--wide');
 
     const heading = createElement('header', 'map-platform-card__header');
-    heading.appendChild(createElement('strong', 'map-platform-card__title', platformDisplayName(platform).toUpperCase()));
+    const title = createElement('strong', 'map-platform-card__title');
+    title.appendChild(createPlatformBadge(platform, 'map-platform-card__badge'));
+    // Stop 14 is a street stop, not a terminal platform, so its card says so.
+    if (String(platform) === '14') title.appendChild(createElement('span', 'map-platform-card__kind', 'Stop'));
+    heading.appendChild(title);
     const brandMark = createElement('span', 'map-platform-card__brand');
     brandMark.appendChild(createAgencyLogo(brand, 'map-platform-card__brand-logo'));
     brandMark.appendChild(createElement('span', 'map-platform-card__dot'));
@@ -923,7 +940,9 @@ function setupPlatformApp() {
     );
 
     const heading = createElement('header', 'map-connection-card__header');
-    heading.appendChild(createElement('strong', 'map-connection-card__platform', `P${connection.platform}`));
+    const title = createElement('strong', 'map-connection-card__platform');
+    title.appendChild(createPlatformBadge(connection.platform, 'map-platform-card__badge'));
+    heading.appendChild(title);
     heading.appendChild(createAgencyLogo(connection.brand, 'map-connection-card__logo'));
     card.appendChild(heading);
 
@@ -989,9 +1008,9 @@ function setupPlatformApp() {
   function renderMapLegend() {
     const legend = createElement('section', 'map-legend');
     legend.setAttribute('aria-label', 'Map legend');
-    [['here', 'You are here'], ['train', 'GO train'], ['bus', 'Live bus']].forEach(([key, text]) => {
+    [['here', 'You are here'], ['platform', 'Platform'], ['train', 'GO train'], ['bus', 'Live bus']].forEach(([key, text]) => {
       const item = createElement('span', 'map-legend__item');
-      item.appendChild(createElement('i', `map-legend__symbol map-legend__symbol--${key}`));
+      item.appendChild(createElement('i', `map-legend__symbol map-legend__symbol--${key}`, key === 'platform' ? '5' : null));
       item.appendChild(createElement('span', '', text));
       legend.appendChild(item);
     });
@@ -1011,7 +1030,8 @@ function setupPlatformApp() {
 
     const dropoff = createElement('section', 'map-dropoff-card');
     dropoff.setAttribute('aria-label', 'Passenger pick-up and drop-off');
-    dropoff.appendChild(createElement('span', 'map-dropoff-card__icon', 'P'));
+    // A car, not a "P", so the pick-up point is not mistaken for a platform.
+    dropoff.appendChild(createMapSymbol('car', 'map-dropoff-card__icon'));
     const copy = createElement('span', 'map-dropoff-card__copy');
     copy.appendChild(createElement('strong', '', 'Passenger'));
     copy.appendChild(createElement('span', '', 'Pick-up / drop-off'));
@@ -1125,7 +1145,6 @@ function setupPlatformApp() {
     while (mapPlatformLayerEl.firstChild) {
       mapPlatformLayerEl.removeChild(mapPlatformLayerEl.firstChild);
     }
-    mapLabelLayerEl.querySelectorAll('.map-platform-anchor__label').forEach((label) => label.remove());
     mapLabelLayerEl.querySelectorAll('.map-legend').forEach((legend) => legend.remove());
     mapLabelLayerEl.querySelectorAll('.map-go-train-tag').forEach((tag) => tag.remove());
     mapLabelLayerEl.querySelectorAll('.map-dropoff-card[data-geographic-card="true"]').forEach((card) => card.remove());
