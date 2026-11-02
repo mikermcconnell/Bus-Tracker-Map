@@ -127,6 +127,14 @@ function copyPlatformMapAssets() {
   if (fs.existsSync(simulatorMapSource)) {
     fs.copyFileSync(simulatorMapSource, path.join(assetsDir, 'allandale-sim-basemap.webp'));
   }
+  const busSpriteSource = path.join(srcDir, 'platform-map', 'bus-sprites');
+  if (fs.existsSync(busSpriteSource)) {
+    const busSpriteDest = path.join(assetsDir, 'bus-sprites');
+    fs.mkdirSync(busSpriteDest, { recursive: true });
+    fs.readdirSync(busSpriteSource)
+      .filter((file) => file.endsWith('.webp'))
+      .forEach((file) => fs.copyFileSync(path.join(busSpriteSource, file), path.join(busSpriteDest, file)));
+  }
   const vectorMapSource = path.join(srcDir, 'platform-map', 'allandale-basemap.svg');
   if (fs.existsSync(vectorMapSource)) {
     fs.copyFileSync(vectorMapSource, path.join(assetsDir, 'allandale-basemap.svg'));

@@ -784,6 +784,88 @@ test('platform map calibration stays inside the image at a 4:3 viewport', async 
   expect(bounds.inside).toBe(true);
 });
 
+test('platform map draws a live bus as a sprite with a route icon above it', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.route('**/api/vehicles.json*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      feed_timestamp: nowSeconds,
+      vehicles: [{
+        id: 'sprite-bus',
+        route_id: '7A',
+        route_label: '7A',
+        agency_id: 'barrie-transit',
+        lat: 44.373837,
+        lon: -79.689279,
+        bearing: 270,
+        last_reported: nowSeconds,
+      }],
+      sources: {
+        barrie_transit: { feed_status: 'live' },
+        go_transit: { feed_status: 'live' },
+        ontario_northland: { feed_status: 'live' },
+      },
+    }),
+  }));
+
+  await page.goto('/platform.map');
+  const sprite = page.locator('.vehicle-marker__sprite');
+  await expect(sprite).toHaveAttribute('src', /-12\.webp$/);
+  await expect.poll(() => sprite.evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+  const layout = await page.evaluate(() => {
+    const box = (selector) => globalThis.document.querySelector(selector).getBoundingClientRect();
+    const marker = box('.vehicle-marker');
+    const image = box('.vehicle-marker__sprite');
+    const icon = box('.vehicle-marker__body');
+    return {
+      imageWidth: image.width,
+      iconWidth: icon.width,
+      centred: Math.abs((image.left + image.width / 2) - (marker.left + marker.width / 2)) < 1,
+      iconAbove: icon.top + icon.height / 2 < image.top + image.height / 2,
+    };
+  });
+  expect(layout.iconWidth).toBeLessThan(75);
+  expect(layout.imageWidth).toBeGreaterThan(90);
+  expect(layout.centred).toBe(true);
+  expect(layout.iconAbove).toBe(true);
+  await expect(page.locator('.vehicle-marker__arrow')).toBeHidden();
+});
+
+test('platform map falls back to the full-size icon when a bus sprite cannot load', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.route('**/assets/bus-sprites/**', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.route('**/api/vehicles.json*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      feed_timestamp: nowSeconds,
+      vehicles: [{
+        id: 'sprite-missing-bus',
+        route_id: '7A',
+        route_label: '7A',
+        agency_id: 'barrie-transit',
+        lat: 44.373837,
+        lon: -79.689279,
+        bearing: 270,
+        last_reported: nowSeconds,
+      }],
+      sources: {
+        barrie_transit: { feed_status: 'live' },
+        go_transit: { feed_status: 'live' },
+        ontario_northland: { feed_status: 'live' },
+      },
+    }),
+  }));
+
+  await page.goto('/platform.map');
+  await expect(page.locator('.vehicle-marker')).toHaveCount(1);
+  await expect(page.locator('.vehicle-marker--sprite')).toHaveCount(0);
+  await expect(page.locator('.vehicle-marker__sprite')).toHaveCount(0);
+  await expect(page.locator('.vehicle-marker__body')).toBeVisible();
+});
+
 test('platform map hides vehicle icons when the live feed goes offline', async ({ page }) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   let pollCount = 0;

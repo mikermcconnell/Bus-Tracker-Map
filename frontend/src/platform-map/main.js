@@ -29,6 +29,7 @@ import {
   isGoTrain,
 } from './go-train.js';
 import BASEMAP_CALIBRATION from './basemap-calibration.json';
+import { busSpriteUrl, busSpriteWidth } from './bus-sprites.js';
 import {
   fetchText,
   isNewBuild,
@@ -497,6 +498,35 @@ function renderVehicleBubbleLabel(element, vehicle) {
   element.appendChild(createElement('span', 'vehicle-marker__route-text', vehicleRouteCode(vehicle)));
 }
 
+// The bus drawing under the icon. A grouped marker and a train keep the full-size icon, and so
+// does a bus whose drawing cannot load.
+function updateVehicleSprite(marker, vehicle, routeColor, isCluster) {
+  const bearing = normalizeBearing(vehicle.bearing);
+  if (bearing !== null) marker.__spriteBearing = bearing;
+  const url = isCluster ? '' : busSpriteUrl(vehicle, routeColor, marker.__spriteBearing);
+  const usable = Boolean(url) && url !== marker.__spriteFailedUrl;
+  marker.classList.toggle('vehicle-marker--sprite', usable);
+  let sprite = marker.__parts.sprite;
+  if (!usable) {
+    if (sprite) sprite.remove();
+    marker.__parts.sprite = null;
+    return;
+  }
+  if (!sprite) {
+    sprite = createElement('img', 'vehicle-marker__sprite');
+    sprite.alt = '';
+    sprite.addEventListener('error', () => {
+      marker.__spriteFailedUrl = sprite.getAttribute('src');
+      marker.classList.remove('vehicle-marker--sprite');
+      sprite.remove();
+      marker.__parts.sprite = null;
+    });
+    marker.insertBefore(sprite, marker.firstChild);
+    marker.__parts.sprite = sprite;
+  }
+  if (sprite.getAttribute('src') !== url) sprite.src = url;
+}
+
 function createMarker(key) {
   const marker = createElement('div', 'vehicle-marker');
   marker.dataset.markerKey = key;
@@ -515,7 +545,7 @@ function createMarker(key) {
   marker.appendChild(labels);
   const count = createElement('span', 'vehicle-marker__count');
   marker.appendChild(count);
-  marker.__parts = { arrow, body, top, bottom, badge, labels, count };
+  marker.__parts = { arrow, body, top, bottom, badge, labels, count, sprite: null };
   return marker;
 }
 
@@ -527,6 +557,8 @@ function updateMarker(marker, cluster, routeStyles, projectCoordinate) {
 
   marker.style.left = `${Math.min(97, Math.max(3, position.x))}%`;
   marker.style.top = `${Math.min(84.5, Math.max(14.5, position.y))}%`;
+  // Nearer the viewer draws on top, as the buildings do on the 3D base map.
+  marker.style.zIndex = String(Math.round(position.y * 10));
   marker.dataset.agencyId = String(lead.agency_id || 'barrie-transit');
   marker.dataset.vehicleIds = vehicles.map((vehicle) => vehicle.id || vehicle.vehicle_id || '').join(',');
   marker.classList.toggle('vehicle-marker--cluster', vehicles.length > 1);
@@ -536,6 +568,7 @@ function updateMarker(marker, cluster, routeStyles, projectCoordinate) {
   marker.style.setProperty('--route-color', style.color);
   marker.style.setProperty('--route-text-color', style.textColor);
   renderVehicleIcon(marker, lead);
+  updateVehicleSprite(marker, lead, style.color, vehicles.length > 1);
 
   while (marker.__parts.labels.firstChild) {
     marker.__parts.labels.removeChild(marker.__parts.labels.firstChild);
@@ -617,6 +650,7 @@ function setupPlatformApp() {
   const serviceNoticeTextEl = document.getElementById('service-notice-text');
   const displayLegendEl = document.getElementById('display-legend');
   let lastVisibleVehicles = [];
+  window.addEventListener('resize', updateBusSpriteSize);
   let lastTerminalDepartures = [];
 
   function projectCoordinate(lat, lon) {
@@ -1109,7 +1143,17 @@ function setupPlatformApp() {
     });
   }
 
+  function updateBusSpriteSize() {
+    const planeWidth = busLayer.getBoundingClientRect().width;
+    if (!planeWidth) return;
+    const width = `${busSpriteWidth(planeWidth, BASEMAP_CALIBRATION).toFixed(1)}px`;
+    if (busLayer.style.getPropertyValue('--bus-sprite-width') !== width) {
+      busLayer.style.setProperty('--bus-sprite-width', width);
+    }
+  }
+
   function renderVehicles(vehicles, terminalDepartures = null) {
+    updateBusSpriteSize();
     lastVisibleVehicles = Array.isArray(vehicles) ? vehicles : [];
     if (Array.isArray(terminalDepartures)) lastTerminalDepartures = terminalDepartures;
     const drawnTrains = renderGoTrains(lastVisibleVehicles);

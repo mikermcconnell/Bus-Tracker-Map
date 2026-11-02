@@ -1519,6 +1519,58 @@ body {
   transform-origin: 50% calc(100% + clamp(22px, 2.5vmin, 39px));
 }
 
+/* A bus drawing stands at the vehicle's position; an icon floats above it to name the route. */
+.vehicle-marker__sprite {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: var(--bus-sprite-width, 111px);
+  max-width: none;
+  height: auto;
+  filter: drop-shadow(0 0 1px rgba(10, 25, 45, 0.75));
+  transform: translate(-50%, -50%);
+}
+
+.vehicle-marker--sprite {
+  width: clamp(56px, 6.3vmin, 88px);
+  height: clamp(56px, 6.3vmin, 88px);
+}
+
+.vehicle-marker--sprite .vehicle-marker__arrow {
+  display: none;
+}
+
+.vehicle-marker--sprite .vehicle-marker__body,
+.vehicle-marker--sprite .vehicle-marker__badge {
+  transform: translateY(calc(var(--bus-sprite-width, 111px) * -0.55));
+}
+
+.vehicle-marker--sprite .vehicle-marker__body {
+  z-index: 5;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+}
+
+.vehicle-marker--sprite .vehicle-marker__badge {
+  z-index: 6;
+}
+
+.vehicle-marker--sprite .vehicle-marker__top {
+  padding-bottom: 2px;
+  font-size: clamp(12px, 1.4vmin, 20px);
+}
+
+.vehicle-marker--sprite .vehicle-marker__logo {
+  width: 70%;
+  height: clamp(16px, 1.9vmin, 26px);
+}
+
+.vehicle-marker--sprite .vehicle-marker__bottom,
+.vehicle-marker--sprite .vehicle-marker__bottom--long {
+  padding-top: 2px;
+  font-size: clamp(20px, 2.2vmin, 30px);
+}
+
 .vehicle-marker__labels {
   position: absolute;
   z-index: 3;
