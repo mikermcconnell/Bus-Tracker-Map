@@ -544,16 +544,6 @@ body {
   gap: clamp(10px, 1.2cqw, 14px);
 }
 
-/* Spacing for browsers without flex gap (class set by legacy-layout.js). */
-.no-flex-gap .map-label-rail--top > * + *,
-.no-flex-gap .map-label-rail--bottom > * + * {
-  margin-left: 7px;
-}
-
-.no-flex-gap .map-label-rail--right > * + * {
-  margin-top: 12px;
-}
-
 .map-label-rail--top > *,
 .map-label-rail--bottom > * {
   flex: 1 1 0;
@@ -2094,4 +2084,80 @@ body {
   .vehicle-marker {
     transition: none;
   }
+}
+
+/* Flex gap needs Chrome 84+. The terminal TV (LG 55UM5N signage, see README) lacks it,
+   so legacy-layout.js sets .no-flex-gap and these margins space the items instead.
+   Grid gap is supported there and needs no fallback. */
+.no-flex-gap .connection-status > * + * {
+  margin-left: 0.55em;
+}
+
+.no-flex-gap .map-go-train-tag > * + * {
+  margin-left: 10px;
+}
+
+.no-flex-gap .map-legend__item > * + *,
+.no-flex-gap .map-label-rail--top > * + *,
+.no-flex-gap .map-label-rail--bottom > * + *,
+.no-flex-gap .map-connection-card__header > * + *,
+.no-flex-gap .map-connection-card__service > * + * {
+  margin-left: 7px;
+}
+
+.no-flex-gap .map-platform-card__header > * + * {
+  margin-left: 5px;
+}
+
+.no-flex-gap .map-platform-card__title > * + *,
+.no-flex-gap .map-platform-card__routes > * + *,
+.no-flex-gap .map-connection-card__platform > * + * {
+  margin-left: 6px;
+}
+
+.no-flex-gap .map-connection-card__routes > * + * {
+  margin-left: 3px;
+}
+
+.no-flex-gap .map-dropoff-card > * + * {
+  margin-left: 8px;
+}
+
+.no-flex-gap .platform-directory__header > * + * {
+  margin-left: 18px;
+}
+
+.no-flex-gap .service-notice > * + * {
+  margin-left: 1.1em;
+}
+
+.no-flex-gap .map-go-train-tag__copy > * + * {
+  margin-top: 2px;
+}
+
+.no-flex-gap .map-label-rail--right > * + * {
+  margin-top: 12px;
+}
+
+.no-flex-gap .map-connection-card__service-copy > * + * {
+  margin-top: 1px;
+}
+
+.no-flex-gap .platform-card__heading > * + * {
+  margin-top: 0.25em;
+}
+
+/* The LIVE dot is a pseudo-element in front of plain text. */
+.no-flex-gap .platform-card__service-source::before {
+  margin-right: 6px;
+}
+
+/* row-reverse: the second item sits to the left of the first. */
+.no-flex-gap .platform-card__departure > * + * {
+  margin-right: 10px;
+}
+
+/* Keep the logo pushed to the right edge of its header. */
+.no-flex-gap .map-connection-card__logo {
+  margin-left: auto;
 }

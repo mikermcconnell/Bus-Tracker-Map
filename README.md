@@ -64,6 +64,22 @@ Open [http://localhost:3000](http://localhost:3000) in a browser (or on the Smar
 
 The terminal-focused displays are available at `/platform.map` and `/batt.map`. Both consume the same merged, freshness-checked vehicle endpoint and show Ontario Northland and GO vehicles when they enter the calibrated Allandale platform area. The platform display reads `/api/terminal-layout`, overlays current GTFS-derived bay assignments, keeps live markers aligned at 16:9 and 4:3, and marks Platform 14 as having no scheduled service when it is absent from the current Barrie feed.
 
+### Allandale Terminal TV
+
+`/platform.map` runs on the waiting-area display at Allandale Terminal. Details from its System Information screen (November 2026):
+
+| Setting | Value |
+| --- | --- |
+| Model | LG 55UM5N-EP (55" commercial signage display, not a consumer TV) |
+| webOS version | webOS Signage, build `libertyspikes-lage…` (name is cut off on screen) |
+| S/W version | 03.74.00 |
+| Micom version | V6.05.9 |
+| Network | Ethernet (Wi-Fi not connected) |
+| Smart Energy Saving | On (dims the screen automatically; turn off under General if it looks dim in daytime) |
+| Page size | 1920 x 1080 |
+
+Its built-in browser behaves like Chrome 79-87. It supports CSS grid, `clamp()`, `min()` and `max()`, but not container query units (`cqw`/`cqh`), `aspect-ratio`, `inset` or flex-box `gap`. Rules that use those are ignored there, so `frontend/src/platform-map/legacy-layout.js` sizes the map in pixels and turns on margin fallbacks for flex gap, and `styles.css` puts a plain pixel value before each `cqw` rule. Keep those fallbacks when changing the layout, and check new CSS against Chrome 79 before relying on it.
+
 ## Simcoe regional map
 
 Open [http://localhost:3000/simcoe](http://localhost:3000/simcoe) locally or `/simcoe` on the production site. **Simcoe Region Live Transit** is an interactive regional view covering Barrie Transit, all six Simcoe County LINX routes, GO route 68 and Barrie line trains, and Barrie-serving Ontario Northland routes. Regional services appear at the county scale; detailed Barrie routes and stops appear as the user zooms in or chooses a service.
