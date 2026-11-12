@@ -1,4 +1,5 @@
 import { createDataClient } from '../data/client.js';
+import { applyLegacyMapSizing, markFlexGapSupport } from './legacy-layout.js';
 import { BATT_COORDS, getTerminalListStatus } from '../map/nearby-vehicles.js';
 import { clusterVehicles, distanceBetweenMeters } from '../map/vehicle-groups.js';
 import feedFreshness from '../../../shared/feed-freshness.js';
@@ -640,6 +641,9 @@ function setupPlatformApp() {
   const assignmentLayerEl = document.getElementById('assignment-layer');
   const mapStageEl = document.querySelector('.map-stage');
   const mapPlaneEl = document.querySelector('.map-plane');
+  // Older TV browsers cannot size the map from CSS; do it here before anything measures it.
+  markFlexGapSupport(document);
+  applyLegacyMapSizing(mapStageEl, mapPlaneEl);
   const mapPlatformLayerEl = document.getElementById('map-platform-layer');
   const mapLabelLayerEl = document.getElementById('map-label-layer');
   const mapLabelRails = Object.freeze({
@@ -1462,6 +1466,7 @@ function setupPlatformApp() {
 
   // 1 at the TV's 1920x1080; smaller when the map is drawn smaller.
   function updateMapScale() {
+    applyLegacyMapSizing(mapStageEl, mapPlaneEl);
     const scale = mapPlaneEl.clientHeight / BASEMAP_CALIBRATION.height;
     if (scale > 0) mapStageEl.style.setProperty('--map-scale', String(Math.min(1.2, scale)));
   }
