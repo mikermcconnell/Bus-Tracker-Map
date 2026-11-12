@@ -13,5 +13,17 @@
     "F58220",
     "F8A1BE"
   ],
-  "barrie_default_color": "00457C"
+  "barrie_default_color": "00457C",
+  "train": {
+    "cars": [
+      "cab",
+      "coach",
+      "loco"
+    ],
+    "track_bearing": 96.2,
+    "view_metres": {
+      "width": 30,
+      "height": 20
+    }
+  }
 }

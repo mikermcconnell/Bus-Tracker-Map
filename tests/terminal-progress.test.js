@@ -272,6 +272,60 @@ describe('BATT trip progress classification', () => {
     }).status).toBe('departed');
   });
 
+  describe('Union-bound GO train waiting at Allandale', () => {
+    const departureMs = Date.parse('2026-11-12T14:02:00Z'); // 9:02 AM in Barrie
+    const waitingTrain = {
+      start_date: '20261112',
+      current_stop_sequence: null,
+      current_status: null,
+      stop_id: 'AD',
+      speed: 0,
+      trip_headsign: 'Union Station GO',
+    };
+    const originOptions = (nowMs) => ({
+      nowMs,
+      terminalStops: [{
+        stop_id: 'AD',
+        stop_sequence: 1,
+        arrival_time: '09:02:00',
+        departure_time: '09:02:00',
+        is_departure: true,
+      }],
+      terminalStopIds: ['AD'],
+      inboundHeadsignPattern: /Allandale Waterfront/i,
+    });
+
+    test('is at the terminal ten minutes before it leaves', () => {
+      const enriched = enrichTerminalProgress(waitingTrain, originOptions(departureMs - 10 * 60 * 1000));
+      expect(enriched).toMatchObject({
+        terminal_progress_status: 'at_terminal',
+        terminal_stop_id: 'AD',
+        terminal_departure_time: departureMs / 1000,
+        terminal_is_departure: true,
+      });
+    });
+
+    test('stays at the terminal while a few minutes late', () => {
+      expect(classifyTerminalProgress(waitingTrain, originOptions(departureMs + 4 * 60 * 1000)).status)
+        .toBe('at_terminal');
+    });
+
+    test('is departed once it moves', () => {
+      expect(classifyTerminalProgress({ ...waitingTrain, speed: 8 }, originOptions(departureMs - 60 * 1000)).status)
+        .toBe('departed');
+    });
+
+    test('is departed well after its departure time', () => {
+      expect(classifyTerminalProgress(waitingTrain, originOptions(departureMs + 6 * 60 * 1000)).status)
+        .toBe('departed');
+    });
+
+    test('is not shown as boarding more than 20 minutes early', () => {
+      expect(classifyTerminalProgress(waitingTrain, originOptions(departureMs - 21 * 60 * 1000)).status)
+        .toBe('departed');
+    });
+  });
+
   test('selects a later BATT visit when a trip serves the terminal more than once', () => {
     const enriched = enrichTerminalProgress({
       current_stop_sequence: 80,

@@ -27,6 +27,7 @@ import {
   describeGoTrain,
   drawGoTrain,
   isGoTrain,
+  preloadGoTrainSprites,
 } from './go-train.js';
 import BASEMAP_CALIBRATION from './basemap-calibration.json';
 import { busSpriteUrl, busSpriteWidth } from './bus-sprites.js';
@@ -648,8 +649,14 @@ function setupPlatformApp() {
   });
   const serviceNoticeEl = document.getElementById('service-notice');
   const serviceNoticeTextEl = document.getElementById('service-notice-text');
-  const displayLegendEl = document.getElementById('display-legend');
+  const footerEl = document.getElementById('platform-footer');
   let lastVisibleVehicles = [];
+  let goTrainSpritesReady = false;
+  let lastGoTrainDrawing = '';
+  preloadGoTrainSprites(() => {
+    goTrainSpritesReady = true;
+    if (lastVisibleVehicles.length) renderVehicles(lastVisibleVehicles);
+  });
   window.addEventListener('resize', updateBusSpriteSize);
   let lastTerminalDepartures = [];
 
@@ -1091,10 +1098,10 @@ function setupPlatformApp() {
 
   // Returns the GO trains drawn on the track, so they are not also drawn as bubbles.
   function renderGoTrains(vehicles) {
-    goTrainLayer.textContent = '';
     mapLabelLayerEl.querySelectorAll('.map-go-train-tag').forEach((tag) => tag.remove());
     mapPlatformLayerEl.querySelectorAll('.map-street-label').forEach((label) => { label.style.visibility = ''; });
     const drawn = new Set();
+    const trains = [];
     vehicles.filter(isGoTrain).forEach((vehicle) => {
       const front = goTrainFrontMetres(vehicle);
       if (front === null) return;
@@ -1103,14 +1110,21 @@ function setupPlatformApp() {
         const start = basemapPixel(...trackPoint(GO_TRACK, cursor), BASEMAP_CALIBRATION);
         const end = basemapPixel(...trackPoint(GO_TRACK, cursor + car.metres), BASEMAP_CALIBRATION);
         cursor += car.metres + GO_TRAIN_CAR_GAP_METRES;
-        return { kind: car.kind, start, end };
+        return { kind: car.kind, metres: car.metres, start, end };
       });
       if (cars.some((car) => !car.start || !car.end)) return;
-      drawGoTrain(goTrainLayer, cars);
+      trains.push(cars);
       drawn.add(vehicle);
       const status = describeGoTrain(vehicle);
       if (status) renderGoTrainTag(status, trackPoint(GO_TRACK, Math.max(front, 0)));
     });
+    // A parked train is redrawn only when something changes, so its images do not flicker on each poll.
+    const drawing = JSON.stringify([goTrainSpritesReady, trains]);
+    if (drawing !== lastGoTrainDrawing) {
+      lastGoTrainDrawing = drawing;
+      goTrainLayer.textContent = '';
+      trains.forEach((cars) => drawGoTrain(goTrainLayer, cars, goTrainSpritesReady));
+    }
     return drawn;
   }
 
@@ -1429,14 +1443,21 @@ function setupPlatformApp() {
         const special = status && status.is_special_service && status.today;
         const message = upcoming || (special && status.message) || '';
         serviceNoticeTextEl.textContent = normalizeServiceNotice(message);
-        serviceNoticeEl.hidden = !serviceNoticeTextEl.textContent;
-        displayLegendEl.hidden = !serviceNoticeEl.hidden;
+        showServiceNotice(Boolean(serviceNoticeTextEl.textContent));
       })
       .catch((err) => {
-        serviceNoticeEl.hidden = true;
-        displayLegendEl.hidden = false;
+        showServiceNotice(false);
         console.warn('Platform service status unavailable:', err);
       });
+  }
+
+  // The footer shows only a service notice. With no notice the map and board take its space,
+  // so the map is laid out again whenever the footer appears or goes.
+  function showServiceNotice(visible) {
+    serviceNoticeEl.hidden = !visible;
+    if (footerEl.hidden === !visible) return;
+    footerEl.hidden = !visible;
+    handleResize();
   }
 
   // 1 at the TV's 1920x1080; smaller when the map is drawn smaller.

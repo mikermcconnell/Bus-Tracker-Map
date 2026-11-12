@@ -4,7 +4,7 @@
 // the Barrie Simulator (tools/blender/out/*.glb). The camera matches the base map: north
 // up, tilted 40 degrees from straight down, so a bus sits on the road like the buildings.
 //
-//   node scripts/render-platform-bus-sprites.js [--sim "../City Simulator 2"]
+//   node scripts/render-platform-bus-sprites.js [--sim "../City Simulator 2"] [--trains-only]
 //
 // Blender is not needed: the models are already exported. The script reads three.js and
 // the models from the simulator project and changes nothing there.
@@ -21,6 +21,7 @@ const SIM_DIR = path.resolve(simIndex >= 0 && args[simIndex + 1]
   ? args[simIndex + 1]
   : path.join(__dirname, '..', '..', 'City Simulator 2'));
 const OUT_DIR = path.join(__dirname, '..', 'frontend', 'src', 'platform-map', 'bus-sprites');
+const TRAINS_ONLY = args.includes('--trains-only');
 
 const HEADINGS = 16;
 const VIEW_METRES = 18;
@@ -34,6 +35,19 @@ const SPRITES = [
   { name: 'go-transit', model: 'go-hero' },
   { name: 'simcoe-linx', model: 'linx-hero' },
   { name: 'ontario-northland', model: 'ontario-northland-hero' },
+];
+
+// One drawing per car, at the fixed bearing of the GO track (GO_TRACK in platform-map/main.js).
+// A car keeps its real length so the train fits the map, and is drawn wider and taller to match
+// the buses. Each car's front faces away from the train: the cab car west, the locomotive east.
+const TRAIN_TRACK_BEARING = 96.2;
+const TRAIN_STRETCH = 2.2;
+const TRAIN_VIEW_METRES = { width: 30, height: 20 };
+const TRAIN_PIXELS_PER_METRE = 12.8;
+const TRAIN_CARS = [
+  { kind: 'cab', model: 'go-train-cab-hero', bearing: TRAIN_TRACK_BEARING + 180 },
+  { kind: 'coach', model: 'go-train-coach-hero', bearing: TRAIN_TRACK_BEARING },
+  { kind: 'loco', model: 'go-train-loco-hero', bearing: TRAIN_TRACK_BEARING },
 ];
 
 const RENDER_PAGE = `<!doctype html>
@@ -87,6 +101,21 @@ window.renderSprite = async (model, color, headings) => {
   scene.remove(bus);
   return images;
 };
+window.renderTrainCar = async (model, bearing, stretch, width, height, pixelsPerMetre) => {
+  renderer.setSize(width * pixelsPerMetre, height * pixelsPerMetre);
+  Object.assign(camera, { left: -width / 2, right: width / 2, top: height / 2, bottom: -height / 2 });
+  camera.updateProjectionMatrix();
+  Object.assign(sun.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22 });
+  sun.shadow.camera.updateProjectionMatrix();
+  const car = (await loader.loadAsync('/out/' + model + '.glb')).scene;
+  car.traverse((part) => { if (part.isMesh) part.castShadow = true; });
+  car.scale.set(1, stretch, stretch);
+  car.rotation.y = (90 - bearing) * Math.PI / 180;
+  scene.add(car);
+  renderer.render(scene, camera);
+  scene.remove(car);
+  return renderer.domElement.toDataURL('image/png');
+};
 window.renderReady = true;
 </script>`;
 
@@ -123,7 +152,7 @@ async function main() {
     await page.waitForFunction('window.renderReady === true', null, { timeout: 30000 });
 
     let totalBytes = 0;
-    for (const sprite of SPRITES) {
+    for (const sprite of TRAINS_ONLY ? [] : SPRITES) {
       const images = await page.evaluate(
         ([model, color, headings]) => window.renderSprite(model, color, headings),
         [sprite.model, sprite.color || null, HEADINGS]
@@ -136,14 +165,29 @@ async function main() {
       }
       console.log(`Rendered ${sprite.name}`);
     }
+    for (const car of TRAIN_CARS) {
+      const image = await page.evaluate(
+        ([model, bearing, stretch, width, height, scale]) => window.renderTrainCar(model, bearing, stretch, width, height, scale),
+        [car.model, car.bearing, TRAIN_STRETCH, TRAIN_VIEW_METRES.width, TRAIN_VIEW_METRES.height, TRAIN_PIXELS_PER_METRE]
+      );
+      const webp = await sharp(Buffer.from(image.split(',')[1], 'base64')).webp({ quality: 85 }).toBuffer();
+      totalBytes += webp.length;
+      fs.writeFileSync(path.join(OUT_DIR, `go-train-${car.kind}.webp`), webp);
+      console.log(`Rendered go-train-${car.kind}`);
+    }
     fs.writeFileSync(path.join(OUT_DIR, 'manifest.json'), `${JSON.stringify({
       source: 'Barrie Simulator tools/blender/out',
       headings: HEADINGS,
       view_metres: VIEW_METRES,
       barrie_colors: BARRIE_COLORS,
       barrie_default_color: BARRIE_DEFAULT_COLOR,
+      train: {
+        cars: TRAIN_CARS.map((car) => car.kind),
+        track_bearing: TRAIN_TRACK_BEARING,
+        view_metres: TRAIN_VIEW_METRES,
+      },
     }, null, 2)}\n`);
-    console.log(`${SPRITES.length * HEADINGS} sprites, ${(totalBytes / 1024).toFixed(0)} KB`);
+    console.log(`Wrote ${(totalBytes / 1024).toFixed(0)} KB`);
   } finally {
     await browser.close();
   }

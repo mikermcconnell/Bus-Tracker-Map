@@ -866,6 +866,36 @@ test('platform map falls back to the full-size icon when a bus sprite cannot loa
   await expect(page.locator('.vehicle-marker__body')).toBeVisible();
 });
 
+test('platform map keeps the flat GO train when the car drawings cannot load', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.route('**/assets/bus-sprites/go-train-*', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.route('**/api/vehicles.json*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      feed_timestamp: nowSeconds,
+      vehicles: [{
+        id: 'go-transit:train-1',
+        agency_id: 'go-transit',
+        agency_name: 'GO Transit',
+        route_id: 'GO-TRAIN',
+        route_mode: 'train',
+        lat: 44.37352,
+        lon: -79.6878,
+        last_reported: nowSeconds,
+        terminal_progress_status: 'at_terminal',
+        terminal_stop_id: 'AD',
+      }],
+      sources: platformVehiclePayload(nowSeconds).sources,
+    }),
+  }));
+
+  await page.goto('/platform.map');
+  await expect(page.locator('.map-go-train-layer .map-go-train')).toHaveCount(1);
+  await expect(page.locator('.map-go-train image')).toHaveCount(0);
+  await expect(page.locator('.map-go-train rect').first()).toBeAttached();
+});
+
 test('platform map hides vehicle icons when the live feed goes offline', async ({ page }) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   let pollCount = 0;
@@ -1043,6 +1073,8 @@ test('platform map draws a boarding GO train on the simulator map and marks P1 b
   await expect(page.locator('.map-here__dot')).toHaveCount(1);
   await expect(page.locator('.map-legend')).toContainText('You are here');
   await expect(page.locator('.map-go-train-layer .map-go-train')).toHaveCount(1);
+  // One drawing per car: cab, ten coaches and the locomotive.
+  await expect(page.locator('.map-go-train image')).toHaveCount(12);
   await expect(page.locator('.map-go-train-tag')).toContainText('GO Train · Boarding');
   await expect(page.locator('.map-go-train-tag')).toContainText('to Union Station');
   // The train is drawn on the track, not also as a bubble marker.

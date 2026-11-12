@@ -28,17 +28,11 @@
       <div class="platform-workspace">
         <div class="map-stage">
           <div class="map-plane">
-            <object
-              data="./assets/allandale-basemap.svg"
-              type="image/svg+xml"
-              aria-label="Barrie Allandale Transit Terminal platform layout"
-              class="map-image"
-              id="map-image"
-            >Barrie Allandale Transit Terminal platform layout</object>
             <div
               id="platform-basemap"
               class="platform-basemap"
-              aria-label="Mapbox map of Barrie Allandale Transit Terminal"
+              role="img"
+              aria-label="Map of Barrie Allandale Transit Terminal"
             ></div>
             <section id="map-platform-layer" class="map-platform-layer" aria-label="Platform locations and scheduled routes"></section>
             <div id="bus-layer" class="bus-layer" aria-label="Live vehicles"></div>
@@ -61,11 +55,7 @@
         </aside>
       </div>
 
-      <footer class="platform-footer">
-        <div id="display-legend" class="display-legend">
-          <strong>Scheduled platform service</strong>
-          <span><i class="display-legend__vehicle"></i>Live vehicles appear as coloured icons</span>
-        </div>
+      <footer id="platform-footer" class="platform-footer" hidden>
         <div id="service-notice" class="service-notice" role="status" aria-live="polite" hidden>
           <strong>Service update</strong>
           <span id="service-notice-text"></span>

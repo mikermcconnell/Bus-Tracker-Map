@@ -60,7 +60,7 @@ Open [http://localhost:3000](http://localhost:3000) in a browser (or on the Smar
 - A banner if the realtime feed is temporarily unavailable (bus icons are hidden while it is offline).
 - Ontario Northland service alerts are intentionally neither requested nor published; this map is focused on route and live-vehicle tracking.
 
-`/platform.map` draws each live bus as a 3D drawing with a route icon above it. The drawings are rendered from the Barrie Simulator models by `node scripts/render-platform-bus-sprites.js`; grouped vehicles and trains keep their own symbols.
+`/platform.map` draws each live bus as a 3D drawing with a route icon above it. The drawings are rendered from the Barrie Simulator models by `node scripts/render-platform-bus-sprites.js`; the GO train is drawn the same way, one drawing per car, and falls back to its flat view if they cannot load. Grouped vehicles keep their own symbol.
 
 The terminal-focused displays are available at `/platform.map` and `/batt.map`. Both consume the same merged, freshness-checked vehicle endpoint and show Ontario Northland and GO vehicles when they enter the calibrated Allandale platform area. The platform display reads `/api/terminal-layout`, overlays current GTFS-derived bay assignments, keeps live markers aligned at 16:9 and 4:3, and marks Platform 14 as having no scheduled service when it is absent from the current Barrie feed.
 

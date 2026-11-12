@@ -1,3 +1,5 @@
+import BASEMAP_CALIBRATION from './basemap-calibration.json';
+
 export const MAP_IMAGE_WIDTH = 11659;
 export const MAP_IMAGE_HEIGHT = 9010;
 export const MAP_IMAGE_RATIO = MAP_IMAGE_WIDTH / MAP_IMAGE_HEIGHT;
@@ -188,8 +190,10 @@ export function getVehicleLabel(vehicle) {
   return String(vehicle.route_label || vehicle.route_id || '?');
 }
 
-export function isTerminalDisplayVehicle(vehicle) {
-  if (!vehicle || !projectVehicleToImage(vehicle.lat, vehicle.lon)) return false;
+// True when the vehicle is on the simulator base map and still serves the terminal.
+export function isTerminalDisplayVehicle(vehicle, calibration = BASEMAP_CALIBRATION) {
+  const position = vehicle && projectToBasemap(vehicle.lat, vehicle.lon, calibration);
+  if (!position || position.x < 0 || position.x > 100 || position.y < 0 || position.y > 100) return false;
   const status = String(vehicle.terminal_progress_status || '').toLowerCase();
   return status !== 'not_serving' && status !== 'departed';
 }
@@ -343,7 +347,7 @@ export function basemapPixel(lat, lon, calibration) {
   const u = (numericLon - calibration.center.lon) * calibration.input_scale;
   const v = (numericLat - calibration.center.lat) * calibration.input_scale;
   const w = h[6] * u + h[7] * v + 1;
-  if (!Number.isFinite(w) || w === 0) return null;
+  if (!Number.isFinite(w) || w <= 0) return null; // w <= 0 is behind the camera
   return { x: (h[0] * u + h[1] * v + h[2]) / w, y: (h[3] * u + h[4] * v + h[5]) / w };
 }
 

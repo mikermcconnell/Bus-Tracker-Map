@@ -52,7 +52,8 @@ body {
   overflow: hidden;
   display: grid;
   --u: min(1vw, 1.7778vh);
-  grid-template-rows: 9.4% 83.6% 7%;
+  --canvas-height: calc(100vh - (var(--safe-gap) * 2));
+  grid-template-rows: 9.4% minmax(0, 1fr) auto;
   background: #fff;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.48);
 }
@@ -73,29 +74,21 @@ body {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  container-type: inline-size;
+  container-type: size;
   background: #dce6e9;
 }
 
+/* The map always covers the stage, centred on the terminal. On the 1920x1080 TV it
+   scales to the stage width (the same framing as the old fixed layout). On taller,
+   narrower stages (4:3) it scales to the stage height instead, so no empty bands show. */
 .map-plane {
   position: absolute;
-  top: -11.59%;
-  left: calc(50% + 24px);
-  width: auto;
-  height: 125.94%;
+  top: 50%;
+  left: calc(50% + 2.47cqw);
+  width: max(144.7cqw, 129.4cqh);
+  height: auto;
   aspect-ratio: 11659 / 9010;
-  transform: translateX(-50%);
-}
-
-.map-image {
-  position: absolute;
-  inset: 0;
-  display: none;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  object-fit: fill;
-  pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
 .platform-basemap {
@@ -124,12 +117,8 @@ body {
   padding: 1px 5px;
   color: #213845;
   background: rgba(255, 255, 255, 0.8);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.2;
-}
-
-.map-plane--live-basemap .map-image {
-  opacity: 0;
 }
 
 .map-plane--live-basemap .map-platform-scrub,
@@ -442,15 +431,15 @@ body {
 }
 
 .map-legend__symbol--platform {
-  width: 17px;
-  height: 17px;
+  width: 20px;
+  height: 20px;
   display: grid;
   place-items: center;
   border-radius: 50%;
   color: #fff;
   background: #075f86;
   box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px #075f86;
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 950;
   line-height: 1;
@@ -492,6 +481,10 @@ body {
   top: clamp(10px, 2cqw, 22px);
   left: 12px;
   width: min(calc(100% - 24px), 780px);
+}
+
+.map-label-rail--top > [data-platform="9"] {
+  flex-grow: 1.35;
 }
 
 .map-label-rail--top > [data-platform="13"] {
@@ -936,7 +929,7 @@ body {
 .map-connection-card__service-name {
   overflow: hidden;
   color: #004e80;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.025em;
   line-height: 1;
@@ -961,7 +954,7 @@ body {
   min-width: 0;
   overflow: hidden;
   color: #17384a;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.05;
   text-overflow: ellipsis;
@@ -1676,11 +1669,11 @@ body {
   min-width: 0;
   overflow: hidden;
   color: #fff;
+  height: calc(var(--canvas-height) * 0.07);
   background: #06131d;
   border-top: max(2px, 0.15vmin) solid var(--cyan);
 }
 
-.display-legend,
 .service-notice {
   width: 100%;
   height: 100%;
@@ -1692,29 +1685,11 @@ body {
   font-size: clamp(15px, 1.04vw, 22px);
 }
 
-.display-legend strong,
 .service-notice strong {
   color: #fff;
   font-size: 1.05em;
   font-weight: 900;
   white-space: nowrap;
-}
-
-.display-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5em;
-  color: #c5d6df;
-  font-weight: 700;
-}
-
-.display-legend__vehicle {
-  width: 1.2em;
-  height: 1.2em;
-  border: 2px solid #fff;
-  border-radius: 0.28em;
-  background: #007a33;
-  box-shadow: 0 0 0.4em rgba(74, 222, 128, 0.65);
 }
 
 .service-notice {
@@ -1739,17 +1714,10 @@ body {
     grid-template-columns: minmax(0, 1fr) clamp(520px, 46vw, 620px);
   }
 
-  .map-stage {
-    height: auto;
-    aspect-ratio: calc((11659 / 9010) / 0.794);
-    align-self: center;
-  }
-
   .platform-card__state {
     font-size: clamp(11px, 0.8vw, 15px);
   }
 
-  .display-legend,
   .service-notice {
     padding-inline: 1.2%;
   }
@@ -1822,11 +1790,11 @@ body {
   }
 
   .map-connection-card__stop {
-    font-size: 9px;
+    font-size: 12px;
   }
 
   .map-connection-card__service-name {
-    font-size: 7px;
+    font-size: 10px;
   }
 
   .map-dropoff-card {
@@ -1914,6 +1882,153 @@ body {
 
   .platform-connection__stop {
     font-size: 17px;
+  }
+}
+
+/* Narrow map panel (for example 1024x768): six cards in a row overlap, so wrap
+   them into two rows of three. */
+@container (max-width: 600px) {
+  /* Zoom out a little so the outer platforms stay in view. The thin strips this
+     can leave at the top and bottom sit under the two rows of cards. */
+  .map-plane {
+    width: max(155cqw, 110cqh);
+  }
+
+  .map-label-rail--top,
+  .map-label-rail--bottom {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .map-label-rail--top > *,
+  .map-label-rail--bottom > * {
+    flex: 1 1 calc((100% - 2 * clamp(5px, 0.7cqw, 10px)) / 3 - 1px);
+  }
+
+  .map-label-rail--top > [data-platform="9"] {
+    flex-grow: 1;
+  }
+
+  .map-label-rail--top > [data-platform="13"] {
+    margin-right: 0;
+  }
+}
+
+/* Phones: the page scrolls. The map sits above a one-column board; the board
+   already lists every platform, so the map keeps only its bay numbers. */
+@media (max-width: 700px) {
+  html,
+  body {
+    height: auto;
+    overflow: auto;
+  }
+
+  .platform-app {
+    height: auto;
+    min-height: 100vh;
+    padding: 0;
+    display: block;
+  }
+
+  .platform-canvas {
+    width: 100%;
+    height: auto;
+    --canvas-height: 100vh;
+    grid-template-rows: auto auto auto;
+  }
+
+  .platform-header {
+    min-height: 56px;
+    padding-block: 6px;
+  }
+
+  .platform-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    overflow: visible;
+  }
+
+  .map-stage {
+    height: 80vw;
+  }
+
+  .map-label-rail--top,
+  .map-label-rail--bottom,
+  .map-dropoff-card,
+  .map-legend {
+    display: none;
+  }
+
+  .platform-directory,
+  .assignment-layer {
+    overflow: visible;
+  }
+
+  .platform-directory {
+    border-left: 0;
+  }
+
+  .platform-directory__header h2 {
+    font-size: 26px;
+  }
+
+  .platform-card {
+    min-height: 56px;
+    padding: 6px 10px;
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .platform-card__agency {
+    display: none;
+  }
+
+  .platform-card__title {
+    font-size: 22px;
+  }
+
+  .platform-card[data-platform="14"] .platform-card__title {
+    font-size: 16px;
+  }
+
+  .platform-card__state {
+    font-size: 10px;
+    white-space: normal;
+  }
+
+  .platform-card__service {
+    grid-template-columns: 54px minmax(0, 1fr) auto;
+    gap: 8px;
+    font-size: 16px;
+  }
+
+  .platform-card__destination {
+    font-size: 15px;
+  }
+
+  .platform-card__departure {
+    gap: 6px;
+  }
+
+  .platform-card__service-source {
+    padding: 2px 4px;
+    font-size: 10px;
+  }
+
+  .platform-card__service-countdown {
+    min-width: 0;
+    font-size: 19px;
+  }
+
+  .platform-card__service-countdown[data-departure-state="future-day"],
+  .platform-card__service-countdown[data-departure-state="unavailable"],
+  .platform-card__service-countdown[data-departure-state="past"] {
+    font-size: 15px;
+  }
+
+  .platform-footer {
+    height: auto;
+    min-height: 48px;
   }
 }
 

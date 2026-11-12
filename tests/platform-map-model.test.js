@@ -61,6 +61,15 @@ describe('platform map model', () => {
     expect(isTerminalDisplayVehicle({ ...atTerminal, terminal_progress_status: 'at_terminal' })).toBe(true);
   });
 
+  test('shows vehicles on the outer streets of the simulator base map', () => {
+    // North of Lakeshore Dr and east of the terminal: outside the old map image, inside the new map.
+    expect(isTerminalDisplayVehicle({ lat: 44.3755, lon: -79.6915, terminal_progress_status: 'approaching' })).toBe(true);
+    expect(isTerminalDisplayVehicle({ lat: 44.3752, lon: -79.687, terminal_progress_status: 'approaching' })).toBe(true);
+    // Beyond the edge of the base map.
+    expect(isTerminalDisplayVehicle({ lat: 44.3741, lon: -79.6935, terminal_progress_status: 'approaching' })).toBe(false);
+    expect(isTerminalDisplayVehicle({ lat: 44.36, lon: -79.689, terminal_progress_status: 'approaching' })).toBe(false);
+  });
+
   test('limits at-platform highlighting to departures within twenty minutes', () => {
     const now = Date.parse('2026-08-17T16:00:00Z');
     expect(isAtPlatformDepartureEligible({
