@@ -41,13 +41,32 @@ export function resolveTerminalAssignment(vehicle, assignments) {
     const stopMatches = agencyAssignments.filter((assignment) => (
       normalize(assignment.stop_id) === stopId
     ));
-    const exactMatches = stopMatches.filter((assignment) => routesOverlap(assignment, vehicle));
-    if (exactMatches.length === 1) return exactMatches[0];
+    const exactMatch = pickAssignment(
+      stopMatches.filter((assignment) => routesOverlap(assignment, vehicle)),
+      vehicle
+    );
+    if (exactMatch) return exactMatch;
     if (stopMatches.length === 1) return stopMatches[0];
   }
 
-  const routeMatches = agencyAssignments.filter((assignment) => routesOverlap(assignment, vehicle));
-  return routeMatches.length === 1 ? routeMatches[0] : null;
+  return pickAssignment(
+    agencyAssignments.filter((assignment) => routesOverlap(assignment, vehicle)),
+    vehicle
+  );
+}
+
+// Several routes can share one route_id (all Ontario Northland routes are ONTC).
+// Prefer the vehicle's own route number; otherwise any match will do when they
+// all point at the same platform.
+function pickAssignment(matches, vehicle) {
+  if (matches.length <= 1) return matches[0] || null;
+  const sourceRouteId = normalize(vehicle && vehicle.source_route_id);
+  const sameRoute = sourceRouteId
+    ? matches.filter((assignment) => normalize(assignment.source_route_id) === sourceRouteId)
+    : [];
+  if (sameRoute.length === 1) return sameRoute[0];
+  const platforms = new Set(matches.map((assignment) => normalize(assignment.platform)));
+  return platforms.size === 1 ? matches[0] : null;
 }
 
 export function formatPlatformLabel(assignment) {

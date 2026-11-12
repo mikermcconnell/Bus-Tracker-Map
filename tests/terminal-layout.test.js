@@ -119,11 +119,58 @@ describe('terminal platform layout', () => {
     expect(layout.assignments).toEqual(expect.arrayContaining([
       expect.objectContaining({ platform: '1', route_id: 'GO-TRAIN', destination: 'Toronto / Union Station' }),
       expect.objectContaining({ platform: '7', route_id: 'GO-BUS', route_label: '68' }),
-      expect.objectContaining({ platform: '8', route_id: 'ONTC', route_label: 'ON' }),
+      expect.objectContaining({ platform: '8', route_id: 'ONTC', route_label: '201', source_route_id: '201' }),
       expect.objectContaining({
         platform: '2', route_id: 'LINX-2', route_label: '2', destination: 'Wasaga Beach'
       }),
     ]));
+  });
+
+  test('lists each Ontario Northland route at P8 with its own destination and next departure', () => {
+    const nowSeconds = Date.parse('2026-11-12T22:00:00Z') / 1000; // 5:00 PM Toronto, a Thursday
+    const everyDay = { service_calendars: { daily: {
+      start_date: '20260101', end_date: '20271231',
+      monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 1, sunday: 1,
+    } } };
+    const trip = (routeId, headsign, time) => ({
+      route_id: routeId,
+      service_id: 'daily',
+      headsign,
+      terminal_stops: [{ stop_id: '315', departure_time: time, is_departure: true }],
+    });
+    const layout = buildTerminalLayout({
+      now: nowSeconds * 1000,
+      ontarioNorthland: {
+        ...everyDay,
+        routes: {
+          101: { long_name: 'Toronto - North Bay' },
+          102: { long_name: 'North Bay - Toronto' },
+          201: { long_name: 'Toronto - Sudbury' },
+          202: { long_name: 'Sudbury - Toronto' },
+        },
+        trips: {
+          a: trip('201', 'SUDBURY', '21:36:00'),
+          b: trip('202', 'YORKDALE', '18:05:00'),
+          c: trip('202', 'TORONTO', '23:10:00'),
+          d: trip('101', 'NORTH BAY', '20:44:00'),
+          e: trip('102', 'YORKDALE', '20:25:00'),
+        },
+      },
+    });
+
+    const p8 = layout.assignments.filter((assignment) => assignment.platform === '8');
+    expect(p8.map((assignment) => [assignment.route_label, assignment.destination])).toEqual([
+      ['101', 'North Bay'],
+      ['102', 'Toronto'],
+      ['201', 'Sudbury'],
+      ['202', 'Toronto'],
+    ]);
+    // Each route keeps its own next departure; 6:05 PM belongs to 202, not 201.
+    const sixOhFive = Date.parse('2026-11-12T23:05:00Z') / 1000;
+    expect(p8.find((assignment) => assignment.route_label === '202').next_departure_time).toBe(sixOhFive);
+    expect(p8.find((assignment) => assignment.route_label === '201').next_departure_time)
+      .toBe(Date.parse('2026-11-13T02:36:00Z') / 1000);
+    expect(p8.every((assignment) => assignment.route_id === 'ONTC')).toBe(true);
   });
 
   test('cleans regional route prefixes from headsigns', () => {

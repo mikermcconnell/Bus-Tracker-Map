@@ -47,7 +47,16 @@ function readStopPlatformMap(metadata) {
   return result;
 }
 
-function normalizeRoute(agencyId, trip, stopId) {
+// Ontario Northland names each route "Origin - Destination" (e.g. 101 "Toronto - North Bay").
+// Use that destination; trip headsigns vary for the same route (YORKDALE vs TORONTO).
+function ontarioNorthlandDestination(metadata, sourceRouteId) {
+  const route = metadata && metadata.routes && metadata.routes[sourceRouteId];
+  const longName = String(route && route.long_name || '').trim();
+  const parts = longName.split(/\s+-\s+/);
+  return parts.length > 1 ? parts[parts.length - 1] : 'Ontario Northland';
+}
+
+function normalizeRoute(agencyId, trip, stopId, metadata) {
   const sourceRouteId = String(trip && trip.route_id || '');
   if (agencyId === 'go-transit') {
     const train = stopId === 'AD' || /(?:^|-)BR(?:$|-)/i.test(sourceRouteId);
@@ -60,12 +69,13 @@ function normalizeRoute(agencyId, trip, stopId) {
     };
   }
   if (agencyId === 'ontario-northland') {
+    // route_id stays ONTC for the agency colour; each route number is its own entry.
     return {
       route_id: 'ONTC',
-      route_label: 'ON',
+      route_label: sourceRouteId || 'ON',
       source_route_id: sourceRouteId,
       mode: 'coach',
-      destination: 'Ontario Northland',
+      destination: ontarioNorthlandDestination(metadata, sourceRouteId),
     };
   }
   if (agencyId === 'simcoe-linx') {
@@ -140,8 +150,10 @@ function collectAssignments(metadata, agencyId, agencyName, nowSeconds) {
       const stopId = String(stop && stop.stop_id || '');
       const platform = String(platformByStop[stopId] || '');
       if (!platform) return;
-      const route = normalizeRoute(agencyId, trip, stopId);
-      const key = [platform, agencyId, route.route_id].join('|');
+      const route = normalizeRoute(agencyId, trip, stopId, metadata);
+      // Ontario Northland shares one route_id, so split it by route number.
+      const key = [platform, agencyId, route.route_id, agencyId === 'ontario-northland' ? route.source_route_id : '']
+        .join('|');
       let assignment = assignmentsByKey.get(key);
       if (!assignment) {
         const configuredLabel = BARRIE_PLATFORM_LABELS[`${platform}|${route.route_id}`];

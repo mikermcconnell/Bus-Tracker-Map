@@ -1147,3 +1147,43 @@ test('platform map lines up every LIVE badge in one column', async ({ page }) =>
     .evaluateAll((badges) => badges.map((badge) => Math.round(badge.getBoundingClientRect().left)));
   expect(new Set(lefts).size).toBe(1);
 });
+
+test('platform map lists every Ontario Northland route at P8 and marks only the live one', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.route('**/api/departures?*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      departures: [{
+        platform: '8',
+        agency_id: 'ontario-northland',
+        route_id: '202',
+        route_label: '202',
+        destination: 'TORONTO',
+        scheduled_departure_time: nowSeconds + 10 * 60,
+        expected_departure_time: nowSeconds + 10 * 60,
+        departure_source: 'realtime',
+        live_vehicle_id: 'coach-202',
+      }],
+    }),
+  }));
+  await page.goto('/platform.map');
+
+  const rows = page.locator('.platform-card[data-platform="8"] .platform-card__service');
+  await expect(rows).toHaveCount(4);
+  // The board orders P8 by next departure, which depends on the time of day.
+  const boardRoutes = await page.locator('.platform-card[data-platform="8"] .platform-card__route').allTextContents();
+  expect(boardRoutes.slice().sort()).toEqual(['101', '102', '201', '202']);
+  await expect(page.locator('.platform-card[data-platform="8"]')).toContainText('Sudbury');
+  await expect(page.locator('.platform-card[data-platform="8"]')).toContainText('North Bay');
+
+  // Only the 202 row picks up the live prediction, although all four share route_id ONTC.
+  await expect(page.locator('.platform-card[data-platform="8"] .platform-card__service-source:visible')).toHaveCount(1);
+  await expect(page.locator('.platform-card[data-platform="8"] .platform-card__service[data-source-route-id="202"] .platform-card__service-source'))
+    .toBeVisible();
+
+  const mapRoutes = page.locator('.map-platform-card[data-platform="8"] .map-platform-card__route');
+  await expect(mapRoutes).toHaveText(['101', '102', '201', '202']);
+  expect(await mapRoutes.evaluateAll((badges) => badges.every((badge) => badge.scrollWidth <= badge.clientWidth))).toBe(true);
+});

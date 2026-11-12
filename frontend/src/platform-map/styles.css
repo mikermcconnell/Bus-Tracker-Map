@@ -849,6 +849,20 @@ body {
 }
 
 /* "TRAIN" is the longest route label; scale it with the map so it never shows "...". */
+/* Three or more routes (P8 Ontario Northland): a two-column grid with smaller numbers. */
+.map-platform-card--many-routes .map-platform-card__routes {
+  padding: 4px 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+}
+
+.map-platform-card--many-routes .map-platform-card__route {
+  min-width: 0;
+  padding: 2px 3px;
+  font-size: 17px;
+}
+
 .map-platform-card__route[data-route-id="GO-TRAIN"] {
   padding-left: 6px;
   padding-right: 6px;
@@ -2086,6 +2100,19 @@ body {
   }
 }
 
+/* Shorter cards on narrow map panels: keep the two-by-two routes inside them. */
+@container (max-width: 760px) {
+  .map-platform-card--many-routes .map-platform-card__routes {
+    padding: 2px 4px;
+    gap: 2px;
+  }
+
+  .map-platform-card--many-routes .map-platform-card__route {
+    padding: 1px 2px;
+    font-size: 11px;
+  }
+}
+
 /* Flex gap needs Chrome 84+. The terminal TV (LG 55UM5N signage, see README) lacks it,
    so legacy-layout.js sets .no-flex-gap and these margins space the items instead.
    Grid gap is supported there and needs no fallback. */
@@ -2155,6 +2182,11 @@ body {
 /* row-reverse: the second item sits to the left of the first. */
 .no-flex-gap .platform-card__departure > * + * {
   margin-right: 10px;
+}
+
+/* The many-routes card lays its routes out as a grid, which spaces them already. */
+.no-flex-gap .map-platform-card--many-routes .map-platform-card__routes > * + * {
+  margin-left: 0;
 }
 
 /* Keep the logo pushed to the right edge of its header. */

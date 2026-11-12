@@ -428,6 +428,15 @@ function normalizeRouteIdentity(value) {
 }
 
 function serviceRowMatchesVehicle(row, vehicle) {
+  // Every Ontario Northland route shares route_id ONTC, so match on the route number alone.
+  if (row && row.dataset.routeId === 'ONTC' && row.dataset.sourceRouteId) {
+    if (String(vehicle && vehicle.agency_id || '') !== 'ontario-northland') return false;
+    const routeNumber = normalizeRouteIdentity(row.dataset.sourceRouteId);
+    return [vehicle.source_route_id, vehicle.route_id, vehicle.route_label]
+      .map(normalizeRouteIdentity)
+      .filter((identity) => identity && identity !== 'ONTC' && identity !== 'ON')
+      .includes(routeNumber);
+  }
   const assignmentIdentities = [
     row && row.dataset.routeId,
     row && row.dataset.routeLabel,
@@ -931,6 +940,8 @@ function setupPlatformApp() {
     card.__platformScrub = scrub;
     card.setAttribute('aria-label', platformDisplayName(platform));
     if (position.wide) card.classList.add('map-platform-card--wide');
+    // Ontario Northland has four routes at P8: show them two by two so each number fits.
+    if (assignments.length >= 3) card.classList.add('map-platform-card--many-routes');
 
     const heading = createElement('header', 'map-platform-card__header');
     const title = createElement('strong', 'map-platform-card__title');
