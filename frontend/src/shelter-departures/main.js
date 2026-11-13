@@ -1,4 +1,5 @@
-const REFRESH_INTERVAL_MS = 10_000;
+const REFRESH_INTERVAL_MS = 30_000;
+const PAGE_ROTATION_MS = 10_000;
 const PAGE_SIZE = 3;
 const API_PATH = '/api/shelter-departures';
 const TIME_ZONE = 'America/Toronto';
@@ -265,10 +266,8 @@ function startShelterScreen() {
   }
 
   refresh();
-  window.setInterval(() => {
-    advancePage();
-    refresh();
-  }, REFRESH_INTERVAL_MS);
+  window.setInterval(advancePage, PAGE_ROTATION_MS);
+  window.setInterval(refresh, REFRESH_INTERVAL_MS);
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {

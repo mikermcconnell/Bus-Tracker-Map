@@ -201,6 +201,10 @@ const FEED_DELAYED_AFTER_MS = Number(process.env.FEED_DELAYED_AFTER_MIN || 2) * 
 const FEED_OFFLINE_AFTER_MS = Number(process.env.FEED_STALE_AFTER_MIN || 15) * 60 * 1000;
 const REALTIME_CDN_MAX_AGE_SECONDS = 3;
 const REALTIME_CDN_STALE_SECONDS = 2;
+// Departure boards poll every 30s and render countdowns client-side, so a longer
+// shared CDN window keeps always-on signs from running the function on every poll.
+const DEPARTURES_CDN_MAX_AGE_SECONDS = 20;
+const DEPARTURES_CDN_STALE_SECONDS = 20;
 const BASE_PATH = normalizeBasePath(process.env.BASE_PATH);
 const FRONTEND_DIR = path.join(__dirname, '..', 'frontend', 'dist');
 const CACHE_DIR = path.resolve(process.env.CACHE_DIR || path.join(__dirname, '..', 'cache'));
@@ -315,6 +319,14 @@ function setRealtimeCacheHeaders(res) {
   res.setHeader(
     'Vercel-CDN-Cache-Control',
     `public, max-age=${REALTIME_CDN_MAX_AGE_SECONDS}, stale-while-revalidate=${REALTIME_CDN_STALE_SECONDS}`
+  );
+}
+
+function setDepartureCacheHeaders(res) {
+  res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+  res.setHeader(
+    'Vercel-CDN-Cache-Control',
+    `public, max-age=${DEPARTURES_CDN_MAX_AGE_SECONDS}, stale-while-revalidate=${DEPARTURES_CDN_STALE_SECONDS}`
   );
 }
 
@@ -839,7 +851,7 @@ apiRouter.get('/departures', async (req, res) => {
         limit: 30, board: 'allandale', platform: parsePlatformStopCode(stopCode).platform,
       });
       const data = buildPlatformDeparturePayload({ stopCode, terminalPayload });
-      res.setHeader('Cache-Control', 'public, max-age=5, stale-while-revalidate=5');
+      setDepartureCacheHeaders(res);
       return res.json(data);
     } catch (err) {
       console.error('[platform-departures] Unable to build platform sign:', err.message || err);
@@ -857,7 +869,7 @@ apiRouter.get('/departures', async (req, res) => {
   if (!['allandale', 'downtown'].includes(board)) return res.status(400).json({ error: 'INVALID_BOARD' });
   try {
     const data = await getDepartures({ limit, board });
-    res.setHeader('Cache-Control', 'public, max-age=5, stale-while-revalidate=5');
+    setDepartureCacheHeaders(res);
     res.json(data);
   } catch (err) {
     console.error('[departures] Unable to build departure board:', err.message || err);
@@ -928,7 +940,7 @@ apiRouter.get('/shelter-departures', async (req, res) => {
     feedTimestamp,
     realtimeStatus,
   });
-  res.setHeader('Cache-Control', 'no-store');
+  setDepartureCacheHeaders(res);
   return res.json(payload);
 });
 

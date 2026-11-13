@@ -18,7 +18,8 @@ const AGENCIES = {
   go_transit: { name: 'GO Transit', short: 'GO', logo: 'agency-go-transit.svg' },
   simcoe_linx: { name: 'Simcoe LINX', short: 'LINX', logo: 'agency-simcoe-linx.png' },
 };
-let pollMs = 10000;
+const MIN_DEPARTURES_POLL_MS = 30000;
+let pollMs = MIN_DEPARTURES_POLL_MS;
 let lastGoodAt = 0;
 const startedAt = Date.now();
 
@@ -160,7 +161,7 @@ async function refresh() {
 async function start() {
   try {
     const config = await client.fetchConfig({ timeoutMs: REQUEST_TIMEOUT_MS });
-    if (Number.isFinite(Number(config.poll_ms))) pollMs = Math.max(5000, Number(config.poll_ms));
+    if (Number.isFinite(Number(config.poll_ms))) pollMs = Math.max(MIN_DEPARTURES_POLL_MS, Number(config.poll_ms));
     if (config.base_path) client.setBasePath(config.base_path);
   } catch (error) {
     // The departures request still works at the current origin.
