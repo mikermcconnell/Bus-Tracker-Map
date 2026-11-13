@@ -1,7 +1,11 @@
-// GO train drawn from above in GO livery (design B1), placed along the GO track.
+// GO train placed along the GO track: 3D drawings of each car from the Barrie Simulator models,
+// or a flat view from above in GO livery (design B1) when the drawings cannot load.
+import MANIFEST from './bus-sprites/manifest.json';
 import { DEPARTURE_NOW_GRACE_MS, formatScheduledDeparture, isAtPlatformDepartureEligible } from './model.js';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+const XLINK_NS = 'http://www.w3.org/1999/xlink';
+const MAP_TILT_DEGREES = 40;
 
 // Real car lengths in metres, from the west (Union-bound) end: cab car, bi-level
 // coaches, then the MP40 locomotive.
@@ -89,10 +93,73 @@ function drawLoco(g, len, w) {
 
 const DRAW = { cab: drawCab, coach: drawCoach, loco: drawLoco };
 
-// cars: [{ kind, start: {x, y}, end: {x, y} }] in base-map pixels.
-export function drawGoTrain(svg, cars) {
+export function goTrainSpriteUrl(kind) {
+  return `./assets/bus-sprites/go-train-${kind}.webp`;
+}
+
+// Where a car's drawing goes in base-map pixels. The drawing is centred on the car, sized so the
+// car fills its stretch of track, and turned by the small difference between the angle it was
+// rendered at and the angle of the track on the map.
+export function goTrainSpritePlacement(car) {
+  const dx = car.end.x - car.start.x;
+  const dy = car.end.y - car.start.y;
+  const length = Math.hypot(dx, dy);
+  if (!length) return null;
+  const view = MANIFEST.train.view_metres;
+  const width = length * view.width / car.metres;
+  const height = width * view.height / view.width;
+  const bearing = MANIFEST.train.track_bearing * Math.PI / 180;
+  const renderedAngle = Math.atan2(-Math.cos(bearing) * Math.cos(MAP_TILT_DEGREES * Math.PI / 180), Math.sin(bearing));
+  return {
+    x: (car.start.x + car.end.x) / 2 - width / 2,
+    y: (car.start.y + car.end.y) / 2 - height / 2,
+    width,
+    height,
+    rotation: (Math.atan2(dy, dx) - renderedAngle) * 180 / Math.PI,
+  };
+}
+
+function drawCarSprite(group, car) {
+  const place = goTrainSpritePlacement(car);
+  if (!place) return;
+  const url = goTrainSpriteUrl(car.kind);
+  const centreX = place.x + place.width / 2;
+  const centreY = place.y + place.height / 2;
+  const image = svgElement('image', {
+    x: place.x,
+    y: place.y,
+    width: place.width,
+    height: place.height,
+    preserveAspectRatio: 'none',
+    transform: `rotate(${place.rotation} ${centreX} ${centreY})`,
+    href: url,
+  }, group);
+  image.setAttributeNS(XLINK_NS, 'xlink:href', url); // older TV browsers read only this one
+}
+
+// Loads every car drawing once. Calls back only when all of them are ready, so a train never
+// shows a mix of drawn and flat cars.
+export function preloadGoTrainSprites(onReady) {
+  const kinds = MANIFEST.train.cars;
+  let loaded = 0;
+  kinds.forEach((kind) => {
+    const image = new Image();
+    image.onload = () => {
+      loaded += 1;
+      if (loaded === kinds.length) onReady();
+    };
+    image.src = goTrainSpriteUrl(kind);
+  });
+}
+
+// cars: [{ kind, metres, start: {x, y}, end: {x, y} }] in base-map pixels.
+export function drawGoTrain(svg, cars, useSprites = false) {
   const group = svgElement('g', { class: 'map-go-train' }, svg);
   cars.forEach((car) => {
+    if (useSprites) {
+      drawCarSprite(group, car);
+      return;
+    }
     const dx = car.end.x - car.start.x;
     const dy = car.end.y - car.start.y;
     const length = Math.hypot(dx, dy);

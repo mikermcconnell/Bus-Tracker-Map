@@ -60,7 +60,25 @@ Open [http://localhost:3000](http://localhost:3000) in a browser (or on the Smar
 - A banner if the realtime feed is temporarily unavailable (bus icons are hidden while it is offline).
 - Ontario Northland service alerts are intentionally neither requested nor published; this map is focused on route and live-vehicle tracking.
 
+`/platform.map` draws each live bus as a 3D drawing with a route icon above it. The drawings are rendered from the Barrie Simulator models by `node scripts/render-platform-bus-sprites.js`; the GO train is drawn the same way, one drawing per car, and falls back to its flat view if they cannot load. Grouped vehicles keep their own symbol.
+
 The terminal-focused displays are available at `/platform.map` and `/batt.map`. Both consume the same merged, freshness-checked vehicle endpoint and show Ontario Northland and GO vehicles when they enter the calibrated Allandale platform area. The platform display reads `/api/terminal-layout`, overlays current GTFS-derived bay assignments, keeps live markers aligned at 16:9 and 4:3, and marks Platform 14 as having no scheduled service when it is absent from the current Barrie feed.
+
+### Allandale Terminal TV
+
+`/platform.map` runs on the waiting-area display at Allandale Terminal. Details from its System Information screen (November 2026):
+
+| Setting | Value |
+| --- | --- |
+| Model | LG 55UM5N-EP (55" commercial signage display, not a consumer TV) |
+| webOS version | webOS Signage, build `libertyspikes-lage…` (name is cut off on screen) |
+| S/W version | 03.74.00 |
+| Micom version | V6.05.9 |
+| Network | Ethernet (Wi-Fi not connected) |
+| Smart Energy Saving | On (dims the screen automatically; turn off under General if it looks dim in daytime) |
+| Page size | 1920 x 1080 |
+
+Its built-in browser behaves like Chrome 79-87. It supports CSS grid, `clamp()`, `min()` and `max()`, but not container query units (`cqw`/`cqh`), `aspect-ratio`, `inset` or flex-box `gap`. Rules that use those are ignored there, so `frontend/src/platform-map/legacy-layout.js` sizes the map in pixels and turns on margin fallbacks for flex gap, and `styles.css` puts a plain pixel value before each `cqw` rule. Keep those fallbacks when changing the layout, and check new CSS against Chrome 79 before relying on it.
 
 ## Simcoe regional map
 

@@ -784,6 +784,118 @@ test('platform map calibration stays inside the image at a 4:3 viewport', async 
   expect(bounds.inside).toBe(true);
 });
 
+test('platform map draws a live bus as a sprite with a route icon above it', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.route('**/api/vehicles.json*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      feed_timestamp: nowSeconds,
+      vehicles: [{
+        id: 'sprite-bus',
+        route_id: '7A',
+        route_label: '7A',
+        agency_id: 'barrie-transit',
+        lat: 44.373837,
+        lon: -79.689279,
+        bearing: 270,
+        last_reported: nowSeconds,
+      }],
+      sources: {
+        barrie_transit: { feed_status: 'live' },
+        go_transit: { feed_status: 'live' },
+        ontario_northland: { feed_status: 'live' },
+      },
+    }),
+  }));
+
+  await page.goto('/platform.map');
+  const sprite = page.locator('.vehicle-marker__sprite');
+  await expect(sprite).toHaveAttribute('src', /-12\.webp$/);
+  await expect.poll(() => sprite.evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+  const layout = await page.evaluate(() => {
+    const box = (selector) => globalThis.document.querySelector(selector).getBoundingClientRect();
+    const marker = box('.vehicle-marker');
+    const image = box('.vehicle-marker__sprite');
+    const icon = box('.vehicle-marker__body');
+    return {
+      imageWidth: image.width,
+      iconWidth: icon.width,
+      centred: Math.abs((image.left + image.width / 2) - (marker.left + marker.width / 2)) < 1,
+      iconAbove: icon.top + icon.height / 2 < image.top + image.height / 2,
+    };
+  });
+  expect(layout.iconWidth).toBeLessThan(75);
+  expect(layout.imageWidth).toBeGreaterThan(90);
+  expect(layout.centred).toBe(true);
+  expect(layout.iconAbove).toBe(true);
+  await expect(page.locator('.vehicle-marker__arrow')).toBeHidden();
+});
+
+test('platform map falls back to the full-size icon when a bus sprite cannot load', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.route('**/assets/bus-sprites/**', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.route('**/api/vehicles.json*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      feed_timestamp: nowSeconds,
+      vehicles: [{
+        id: 'sprite-missing-bus',
+        route_id: '7A',
+        route_label: '7A',
+        agency_id: 'barrie-transit',
+        lat: 44.373837,
+        lon: -79.689279,
+        bearing: 270,
+        last_reported: nowSeconds,
+      }],
+      sources: {
+        barrie_transit: { feed_status: 'live' },
+        go_transit: { feed_status: 'live' },
+        ontario_northland: { feed_status: 'live' },
+      },
+    }),
+  }));
+
+  await page.goto('/platform.map');
+  await expect(page.locator('.vehicle-marker')).toHaveCount(1);
+  await expect(page.locator('.vehicle-marker--sprite')).toHaveCount(0);
+  await expect(page.locator('.vehicle-marker__sprite')).toHaveCount(0);
+  await expect(page.locator('.vehicle-marker__body')).toBeVisible();
+});
+
+test('platform map keeps the flat GO train when the car drawings cannot load', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.route('**/assets/bus-sprites/go-train-*', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.route('**/api/vehicles.json*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      feed_timestamp: nowSeconds,
+      vehicles: [{
+        id: 'go-transit:train-1',
+        agency_id: 'go-transit',
+        agency_name: 'GO Transit',
+        route_id: 'GO-TRAIN',
+        route_mode: 'train',
+        lat: 44.37352,
+        lon: -79.6878,
+        last_reported: nowSeconds,
+        terminal_progress_status: 'at_terminal',
+        terminal_stop_id: 'AD',
+      }],
+      sources: platformVehiclePayload(nowSeconds).sources,
+    }),
+  }));
+
+  await page.goto('/platform.map');
+  await expect(page.locator('.map-go-train-layer .map-go-train')).toHaveCount(1);
+  await expect(page.locator('.map-go-train image')).toHaveCount(0);
+  await expect(page.locator('.map-go-train rect').first()).toBeAttached();
+});
+
 test('platform map hides vehicle icons when the live feed goes offline', async ({ page }) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   let pollCount = 0;
@@ -961,6 +1073,8 @@ test('platform map draws a boarding GO train on the simulator map and marks P1 b
   await expect(page.locator('.map-here__dot')).toHaveCount(1);
   await expect(page.locator('.map-legend')).toContainText('You are here');
   await expect(page.locator('.map-go-train-layer .map-go-train')).toHaveCount(1);
+  // One drawing per car: cab, ten coaches and the locomotive.
+  await expect(page.locator('.map-go-train image')).toHaveCount(12);
   await expect(page.locator('.map-go-train-tag')).toContainText('GO Train · Boarding');
   await expect(page.locator('.map-go-train-tag')).toContainText('to Union Station');
   // The train is drawn on the track, not also as a bubble marker.
@@ -1032,4 +1146,44 @@ test('platform map lines up every LIVE badge in one column', async ({ page }) =>
   const lefts = await page.locator('.platform-card__service-source:visible')
     .evaluateAll((badges) => badges.map((badge) => Math.round(badge.getBoundingClientRect().left)));
   expect(new Set(lefts).size).toBe(1);
+});
+
+test('platform map lists every Ontario Northland route at P8 and marks only the live one', async ({ page }) => {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.route('**/api/departures?*', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      departures: [{
+        platform: '8',
+        agency_id: 'ontario-northland',
+        route_id: '202',
+        route_label: '202',
+        destination: 'TORONTO',
+        scheduled_departure_time: nowSeconds + 10 * 60,
+        expected_departure_time: nowSeconds + 10 * 60,
+        departure_source: 'realtime',
+        live_vehicle_id: 'coach-202',
+      }],
+    }),
+  }));
+  await page.goto('/platform.map');
+
+  const rows = page.locator('.platform-card[data-platform="8"] .platform-card__service');
+  await expect(rows).toHaveCount(4);
+  // The board orders P8 by next departure, which depends on the time of day.
+  const boardRoutes = await page.locator('.platform-card[data-platform="8"] .platform-card__route').allTextContents();
+  expect(boardRoutes.slice().sort()).toEqual(['101', '102', '201', '202']);
+  await expect(page.locator('.platform-card[data-platform="8"]')).toContainText('Sudbury');
+  await expect(page.locator('.platform-card[data-platform="8"]')).toContainText('North Bay');
+
+  // Only the 202 row picks up the live prediction, although all four share route_id ONTC.
+  await expect(page.locator('.platform-card[data-platform="8"] .platform-card__service-source:visible')).toHaveCount(1);
+  await expect(page.locator('.platform-card[data-platform="8"] .platform-card__service[data-source-route-id="202"] .platform-card__service-source'))
+    .toBeVisible();
+
+  const mapRoutes = page.locator('.map-platform-card[data-platform="8"] .map-platform-card__route');
+  await expect(mapRoutes).toHaveText(['101', '102', '201', '202']);
+  expect(await mapRoutes.evaluateAll((badges) => badges.every((badge) => badge.scrollWidth <= badge.clientWidth))).toBe(true);
 });

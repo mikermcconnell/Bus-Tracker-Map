@@ -33,6 +33,25 @@ describe('terminal platform resolution', () => {
     }, assignments)).toMatchObject({ platform: '6' });
   });
 
+  test('places Ontario Northland coaches at P8 although every route shares route_id ONTC', () => {
+    const northland = buildTerminalAssignmentIndex({
+      assignments: ['101', '102', '201', '202'].map((route) => ({
+        agency_id: 'ontario-northland',
+        route_id: 'ONTC',
+        route_label: route,
+        source_route_id: route,
+        stop_id: '315',
+        platform: '8',
+      })),
+    });
+    expect(resolveTerminalAssignment({
+      agency_id: 'ontario-northland', route_id: 'ONTC', source_route_id: '201', terminal_stop_id: '315',
+    }, northland)).toMatchObject({ platform: '8', source_route_id: '201' });
+    expect(resolveTerminalAssignment({
+      agency_id: 'ontario-northland', route_id: 'ONTC',
+    }, northland)).toMatchObject({ platform: '8' });
+  });
+
   test('formats platforms, external stops, and unknown assignments safely', () => {
     expect(formatPlatformLabel({ platform: '6' })).toBe('PLATFORM 6');
     expect(formatPlatformLabel({ platform: '14' })).toBe('STOP 14');

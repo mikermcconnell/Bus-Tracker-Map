@@ -1,4 +1,5 @@
 import { createDataClient } from '../data/client.js';
+import { applyLegacyMapSizing, markFlexGapSupport } from './legacy-layout.js';
 import { BATT_COORDS, getTerminalListStatus } from '../map/nearby-vehicles.js';
 import { clusterVehicles, distanceBetweenMeters } from '../map/vehicle-groups.js';
 import feedFreshness from '../../../shared/feed-freshness.js';
@@ -27,8 +28,10 @@ import {
   describeGoTrain,
   drawGoTrain,
   isGoTrain,
+  preloadGoTrainSprites,
 } from './go-train.js';
 import BASEMAP_CALIBRATION from './basemap-calibration.json';
+import { busSpriteUrl, busSpriteWidth } from './bus-sprites.js';
 import {
   fetchText,
   isNewBuild,
@@ -425,6 +428,15 @@ function normalizeRouteIdentity(value) {
 }
 
 function serviceRowMatchesVehicle(row, vehicle) {
+  // Every Ontario Northland route shares route_id ONTC, so match on the route number alone.
+  if (row && row.dataset.routeId === 'ONTC' && row.dataset.sourceRouteId) {
+    if (String(vehicle && vehicle.agency_id || '') !== 'ontario-northland') return false;
+    const routeNumber = normalizeRouteIdentity(row.dataset.sourceRouteId);
+    return [vehicle.source_route_id, vehicle.route_id, vehicle.route_label]
+      .map(normalizeRouteIdentity)
+      .filter((identity) => identity && identity !== 'ONTC' && identity !== 'ON')
+      .includes(routeNumber);
+  }
   const assignmentIdentities = [
     row && row.dataset.routeId,
     row && row.dataset.routeLabel,
@@ -497,6 +509,35 @@ function renderVehicleBubbleLabel(element, vehicle) {
   element.appendChild(createElement('span', 'vehicle-marker__route-text', vehicleRouteCode(vehicle)));
 }
 
+// The bus drawing under the icon. A grouped marker and a train keep the full-size icon, and so
+// does a bus whose drawing cannot load.
+function updateVehicleSprite(marker, vehicle, routeColor, isCluster) {
+  const bearing = normalizeBearing(vehicle.bearing);
+  if (bearing !== null) marker.__spriteBearing = bearing;
+  const url = isCluster ? '' : busSpriteUrl(vehicle, routeColor, marker.__spriteBearing);
+  const usable = Boolean(url) && url !== marker.__spriteFailedUrl;
+  marker.classList.toggle('vehicle-marker--sprite', usable);
+  let sprite = marker.__parts.sprite;
+  if (!usable) {
+    if (sprite) sprite.remove();
+    marker.__parts.sprite = null;
+    return;
+  }
+  if (!sprite) {
+    sprite = createElement('img', 'vehicle-marker__sprite');
+    sprite.alt = '';
+    sprite.addEventListener('error', () => {
+      marker.__spriteFailedUrl = sprite.getAttribute('src');
+      marker.classList.remove('vehicle-marker--sprite');
+      sprite.remove();
+      marker.__parts.sprite = null;
+    });
+    marker.insertBefore(sprite, marker.firstChild);
+    marker.__parts.sprite = sprite;
+  }
+  if (sprite.getAttribute('src') !== url) sprite.src = url;
+}
+
 function createMarker(key) {
   const marker = createElement('div', 'vehicle-marker');
   marker.dataset.markerKey = key;
@@ -515,7 +556,7 @@ function createMarker(key) {
   marker.appendChild(labels);
   const count = createElement('span', 'vehicle-marker__count');
   marker.appendChild(count);
-  marker.__parts = { arrow, body, top, bottom, badge, labels, count };
+  marker.__parts = { arrow, body, top, bottom, badge, labels, count, sprite: null };
   return marker;
 }
 
@@ -527,6 +568,8 @@ function updateMarker(marker, cluster, routeStyles, projectCoordinate) {
 
   marker.style.left = `${Math.min(97, Math.max(3, position.x))}%`;
   marker.style.top = `${Math.min(84.5, Math.max(14.5, position.y))}%`;
+  // Nearer the viewer draws on top, as the buildings do on the 3D base map.
+  marker.style.zIndex = String(Math.round(position.y * 10));
   marker.dataset.agencyId = String(lead.agency_id || 'barrie-transit');
   marker.dataset.vehicleIds = vehicles.map((vehicle) => vehicle.id || vehicle.vehicle_id || '').join(',');
   marker.classList.toggle('vehicle-marker--cluster', vehicles.length > 1);
@@ -536,6 +579,7 @@ function updateMarker(marker, cluster, routeStyles, projectCoordinate) {
   marker.style.setProperty('--route-color', style.color);
   marker.style.setProperty('--route-text-color', style.textColor);
   renderVehicleIcon(marker, lead);
+  updateVehicleSprite(marker, lead, style.color, vehicles.length > 1);
 
   while (marker.__parts.labels.firstChild) {
     marker.__parts.labels.removeChild(marker.__parts.labels.firstChild);
@@ -606,6 +650,9 @@ function setupPlatformApp() {
   const assignmentLayerEl = document.getElementById('assignment-layer');
   const mapStageEl = document.querySelector('.map-stage');
   const mapPlaneEl = document.querySelector('.map-plane');
+  // Older TV browsers cannot size the map from CSS; do it here before anything measures it.
+  markFlexGapSupport(document);
+  applyLegacyMapSizing(mapStageEl, mapPlaneEl);
   const mapPlatformLayerEl = document.getElementById('map-platform-layer');
   const mapLabelLayerEl = document.getElementById('map-label-layer');
   const mapLabelRails = Object.freeze({
@@ -615,8 +662,15 @@ function setupPlatformApp() {
   });
   const serviceNoticeEl = document.getElementById('service-notice');
   const serviceNoticeTextEl = document.getElementById('service-notice-text');
-  const displayLegendEl = document.getElementById('display-legend');
+  const footerEl = document.getElementById('platform-footer');
   let lastVisibleVehicles = [];
+  let goTrainSpritesReady = false;
+  let lastGoTrainDrawing = '';
+  preloadGoTrainSprites(() => {
+    goTrainSpritesReady = true;
+    if (lastVisibleVehicles.length) renderVehicles(lastVisibleVehicles);
+  });
+  window.addEventListener('resize', updateBusSpriteSize);
   let lastTerminalDepartures = [];
 
   function projectCoordinate(lat, lon) {
@@ -886,6 +940,8 @@ function setupPlatformApp() {
     card.__platformScrub = scrub;
     card.setAttribute('aria-label', platformDisplayName(platform));
     if (position.wide) card.classList.add('map-platform-card--wide');
+    // Ontario Northland has four routes at P8: show them two by two so each number fits.
+    if (assignments.length >= 3) card.classList.add('map-platform-card--many-routes');
 
     const heading = createElement('header', 'map-platform-card__header');
     const title = createElement('strong', 'map-platform-card__title');
@@ -1057,10 +1113,10 @@ function setupPlatformApp() {
 
   // Returns the GO trains drawn on the track, so they are not also drawn as bubbles.
   function renderGoTrains(vehicles) {
-    goTrainLayer.textContent = '';
     mapLabelLayerEl.querySelectorAll('.map-go-train-tag').forEach((tag) => tag.remove());
     mapPlatformLayerEl.querySelectorAll('.map-street-label').forEach((label) => { label.style.visibility = ''; });
     const drawn = new Set();
+    const trains = [];
     vehicles.filter(isGoTrain).forEach((vehicle) => {
       const front = goTrainFrontMetres(vehicle);
       if (front === null) return;
@@ -1069,14 +1125,21 @@ function setupPlatformApp() {
         const start = basemapPixel(...trackPoint(GO_TRACK, cursor), BASEMAP_CALIBRATION);
         const end = basemapPixel(...trackPoint(GO_TRACK, cursor + car.metres), BASEMAP_CALIBRATION);
         cursor += car.metres + GO_TRAIN_CAR_GAP_METRES;
-        return { kind: car.kind, start, end };
+        return { kind: car.kind, metres: car.metres, start, end };
       });
       if (cars.some((car) => !car.start || !car.end)) return;
-      drawGoTrain(goTrainLayer, cars);
+      trains.push(cars);
       drawn.add(vehicle);
       const status = describeGoTrain(vehicle);
       if (status) renderGoTrainTag(status, trackPoint(GO_TRACK, Math.max(front, 0)));
     });
+    // A parked train is redrawn only when something changes, so its images do not flicker on each poll.
+    const drawing = JSON.stringify([goTrainSpritesReady, trains]);
+    if (drawing !== lastGoTrainDrawing) {
+      lastGoTrainDrawing = drawing;
+      goTrainLayer.textContent = '';
+      trains.forEach((cars) => drawGoTrain(goTrainLayer, cars, goTrainSpritesReady));
+    }
     return drawn;
   }
 
@@ -1109,7 +1172,17 @@ function setupPlatformApp() {
     });
   }
 
+  function updateBusSpriteSize() {
+    const planeWidth = busLayer.getBoundingClientRect().width;
+    if (!planeWidth) return;
+    const width = `${busSpriteWidth(planeWidth, BASEMAP_CALIBRATION).toFixed(1)}px`;
+    if (busLayer.style.getPropertyValue('--bus-sprite-width') !== width) {
+      busLayer.style.setProperty('--bus-sprite-width', width);
+    }
+  }
+
   function renderVehicles(vehicles, terminalDepartures = null) {
+    updateBusSpriteSize();
     lastVisibleVehicles = Array.isArray(vehicles) ? vehicles : [];
     if (Array.isArray(terminalDepartures)) lastTerminalDepartures = terminalDepartures;
     const drawnTrains = renderGoTrains(lastVisibleVehicles);
@@ -1385,18 +1458,26 @@ function setupPlatformApp() {
         const special = status && status.is_special_service && status.today;
         const message = upcoming || (special && status.message) || '';
         serviceNoticeTextEl.textContent = normalizeServiceNotice(message);
-        serviceNoticeEl.hidden = !serviceNoticeTextEl.textContent;
-        displayLegendEl.hidden = !serviceNoticeEl.hidden;
+        showServiceNotice(Boolean(serviceNoticeTextEl.textContent));
       })
       .catch((err) => {
-        serviceNoticeEl.hidden = true;
-        displayLegendEl.hidden = false;
+        showServiceNotice(false);
         console.warn('Platform service status unavailable:', err);
       });
   }
 
+  // The footer shows only a service notice. With no notice the map and board take its space,
+  // so the map is laid out again whenever the footer appears or goes.
+  function showServiceNotice(visible) {
+    serviceNoticeEl.hidden = !visible;
+    if (footerEl.hidden === !visible) return;
+    footerEl.hidden = !visible;
+    handleResize();
+  }
+
   // 1 at the TV's 1920x1080; smaller when the map is drawn smaller.
   function updateMapScale() {
+    applyLegacyMapSizing(mapStageEl, mapPlaneEl);
     const scale = mapPlaneEl.clientHeight / BASEMAP_CALIBRATION.height;
     if (scale > 0) mapStageEl.style.setProperty('--map-scale', String(Math.min(1.2, scale)));
   }

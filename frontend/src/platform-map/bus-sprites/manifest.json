@@ -1,0 +1,29 @@
+{
+  "source": "Barrie Simulator tools/blender/out",
+  "headings": 16,
+  "view_metres": 18,
+  "barrie_colors": [
+    "000000",
+    "006838",
+    "00C4DC",
+    "2464A2",
+    "681757",
+    "910005",
+    "B2D235",
+    "F58220",
+    "F8A1BE"
+  ],
+  "barrie_default_color": "00457C",
+  "train": {
+    "cars": [
+      "cab",
+      "coach",
+      "loco"
+    ],
+    "track_bearing": 96.2,
+    "view_metres": {
+      "width": 30,
+      "height": 20
+    }
+  }
+}

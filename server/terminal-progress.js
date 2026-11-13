@@ -139,6 +139,30 @@ function resolveTerminalDepartureTime(vehicle, terminalStop, options = {}) {
   };
 }
 
+// A trip that starts at the terminal reports the terminal as its current stop
+// while it waits there. The Metrolinx feed sends no stop sequence or stop status
+// for these trains, so the scheduled departure time decides it: the vehicle is
+// still at the terminal from 20 minutes before departure until 5 minutes after,
+// unless the feed reports it moving or between stops.
+const ORIGIN_WAIT_LEAD_SECONDS = 20 * 60;
+const ORIGIN_WAIT_LATE_SECONDS = 5 * 60;
+const ORIGIN_WAIT_MAX_SPEED_MPS = 2;
+const VEHICLE_STATUS_IN_TRANSIT_TO = 2;
+
+function isWaitingAtOrigin(vehicle, terminalStop, currentSequence, currentStatus, options = {}) {
+  if (!terminalStop || terminalStop.is_departure === false) return false;
+  if (terminalStop.stop_sequence > 1) return false;
+  if (currentSequence !== null && currentSequence !== terminalStop.stop_sequence) return false;
+  if (currentStatus === VEHICLE_STATUS_IN_TRANSIT_TO) return false;
+  const speed = finiteSequence(vehicle && vehicle.speed);
+  if (speed !== null && speed > ORIGIN_WAIT_MAX_SPEED_MPS) return false;
+  const departure = resolveTerminalDepartureTime(vehicle, terminalStop, options);
+  if (departure.time === null) return false;
+  const nowMs = Number.isFinite(Number(options.nowMs)) ? Number(options.nowMs) : Date.now();
+  const leadSeconds = departure.time - nowMs / 1000;
+  return leadSeconds <= ORIGIN_WAIT_LEAD_SECONDS && leadSeconds >= -ORIGIN_WAIT_LATE_SECONDS;
+}
+
 function classifyTerminalProgress(vehicle, options = {}) {
   const terminalStops = normalizeTerminalStops(options.terminalStops);
   const terminalStopIds = new Set(
@@ -160,9 +184,12 @@ function classifyTerminalProgress(vehicle, options = {}) {
       options.inboundHeadsignPattern &&
       !options.inboundHeadsignPattern.test(headsign)
     ) {
+      const terminalStop = terminalStops.find((stop) => stop.stop_id === currentStopId) || null;
       return {
-        status: TERMINAL_PROGRESS.DEPARTED,
-        terminalStop: terminalStops.find((stop) => stop.stop_id === currentStopId) || null,
+        status: isWaitingAtOrigin(vehicle, terminalStop, currentSequence, currentStatus, options)
+          ? TERMINAL_PROGRESS.AT_TERMINAL
+          : TERMINAL_PROGRESS.DEPARTED,
+        terminalStop,
       };
     }
 

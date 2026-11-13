@@ -704,6 +704,9 @@ async function getSimcoeRegionVehiclePayload() {
 
 const router = express.Router();
 const apiRouter = express.Router();
+// The platform map uses only same-origin scripts, images and API calls. Inline
+// styles stay allowed because the map positions cards and vehicles with style rules.
+const PLATFORM_MAP_CSP = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self';";
 const TRAINING_CSP = "default-src 'self'; style-src 'self'; script-src 'self'; media-src 'self'; img-src 'self' data:; connect-src 'self';";
 
 // Serve training video media files
@@ -722,6 +725,8 @@ router.use(express.static(FRONTEND_DIR, {
   setHeaders(res, servedPath) {
     if (path.basename(servedPath) === 'training-videos.html') {
       res.setHeader('Content-Security-Policy', TRAINING_CSP);
+    } else if (path.basename(servedPath) === 'platform.map.html') {
+      res.setHeader('Content-Security-Policy', PLATFORM_MAP_CSP);
     } else if (path.basename(servedPath) === 'notices.html') {
       res.setHeader('Content-Security-Policy', "default-src 'self' data:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';");
     } else {
@@ -1036,7 +1041,7 @@ router.get('/batt.map', (req, res, next) => {
 router.get('/platform.map', (req, res, next) => {
   const platformPath = path.join(FRONTEND_DIR, 'platform.map.html');
   if (!fs.existsSync(platformPath)) return next();
-  res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
+  res.setHeader('Content-Security-Policy', PLATFORM_MAP_CSP);
   res.setHeader('Cache-Control', 'no-cache');
   res.sendFile(platformPath);
 });

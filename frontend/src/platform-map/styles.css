@@ -33,6 +33,7 @@ body {
 .platform-app {
   width: 100vw;
   height: 100vh;
+  padding: var(--safe-gap);
   padding:
     max(var(--safe-gap), env(safe-area-inset-top))
     max(var(--safe-gap), env(safe-area-inset-right))
@@ -52,7 +53,8 @@ body {
   overflow: hidden;
   display: grid;
   --u: min(1vw, 1.7778vh);
-  grid-template-rows: 9.4% 83.6% 7%;
+  --canvas-height: calc(100vh - (var(--safe-gap) * 2));
+  grid-template-rows: 9.4% minmax(0, 1fr) auto;
   background: #fff;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.48);
 }
@@ -73,35 +75,33 @@ body {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  container-type: inline-size;
+  container-type: size;
   background: #dce6e9;
 }
 
+/* The map always covers the stage, centred on the terminal. On the 1920x1080 TV it
+   scales to the stage width (the same framing as the old fixed layout). On taller,
+   narrower stages (4:3) it scales to the stage height instead, so no empty bands show. */
 .map-plane {
   position: absolute;
-  top: -11.59%;
-  left: calc(50% + 24px);
-  width: auto;
-  height: 125.94%;
+  top: 50%;
+  /* Older TV browsers ignore the cqw/aspect-ratio lines; legacy-layout.js sizes the map there. */
+  left: 52.47%;
+  left: calc(50% + 2.47cqw);
+  width: 144.7%;
+  width: max(144.7cqw, 129.4cqh);
+  height: auto;
   aspect-ratio: 11659 / 9010;
-  transform: translateX(-50%);
-}
-
-.map-image {
-  position: absolute;
-  inset: 0;
-  display: none;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  object-fit: fill;
-  pointer-events: none;
+  transform: translate(-50%, -50%);
 }
 
 .platform-basemap {
   position: absolute;
   z-index: 5;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   overflow: hidden;
   background: transparent;
   pointer-events: none;
@@ -109,7 +109,10 @@ body {
 
 .platform-basemap__image {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -124,12 +127,8 @@ body {
   padding: 1px 5px;
   color: #213845;
   background: rgba(255, 255, 255, 0.8);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1.2;
-}
-
-.map-plane--live-basemap .map-image {
-  opacity: 0;
 }
 
 .map-plane--live-basemap .map-platform-scrub,
@@ -242,7 +241,10 @@ body {
 .map-platform-layer,
 .bus-layer {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
 }
 
 .map-platform-layer {
@@ -316,8 +318,11 @@ body {
 /* "You are here": a red dot on the terminal building. */
 .map-here__dot {
   position: absolute;
+  width: 29px;
   width: clamp(18px, 3cqw, 30px);
+  height: 29px;
   height: clamp(18px, 3cqw, 30px);
+  border: 5px solid #fff;
   border: clamp(3px, 0.5cqw, 5px) solid #fff;
   border-radius: 50%;
   background: #d4262c;
@@ -337,13 +342,17 @@ body {
 
 .map-street-label {
   color: #4b5d6e;
+  font-size: 19px;
   font-size: clamp(12px, 2cqw, 20px);
 }
 
 /* GO train drawn along the track, in base-map pixels. */
 .map-go-train-layer {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 20;
   width: 100%;
   height: 100%;
@@ -374,7 +383,9 @@ body {
 }
 
 .map-go-train-tag__logo {
+  width: 46px;
   width: clamp(34px, 4.7cqw, 46px);
+  height: 28px;
   height: clamp(20px, 2.9cqw, 28px);
   padding: 3px 4px;
   border-radius: 5px;
@@ -390,11 +401,13 @@ body {
 }
 
 .map-go-train-tag__copy strong {
+  font-size: 22px;
   font-size: clamp(15px, 2.25cqw, 22px);
   font-weight: 900;
 }
 
 .map-go-train-tag__copy span {
+  font-size: 17px;
   font-size: clamp(12px, 1.75cqw, 17px);
   font-weight: 800;
 }
@@ -403,9 +416,12 @@ body {
 .map-legend {
   position: absolute;
   right: 12px;
+  bottom: 19px;
   bottom: clamp(12px, 2cqw, 24px);
   z-index: 3;
+  width: 116px;
   width: clamp(92px, 12cqw, 116px);
+  min-height: 96px;
   min-height: clamp(64px, 10cqw, 96px);
   padding: 8px 9px;
   display: grid;
@@ -416,6 +432,7 @@ body {
   color: #062235;
   background: #fff;
   box-shadow: 0 3px 7px rgba(19, 48, 62, 0.24);
+  font-size: 15px;
   font-size: clamp(11px, 1.55cqw, 15px);
   font-weight: 900;
   line-height: 1.05;
@@ -442,15 +459,15 @@ body {
 }
 
 .map-legend__symbol--platform {
-  width: 17px;
-  height: 17px;
+  width: 20px;
+  height: 20px;
   display: grid;
   place-items: center;
   border-radius: 50%;
   color: #fff;
   background: #075f86;
   box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px #075f86;
-  font-size: 10px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 950;
   line-height: 1;
@@ -475,7 +492,10 @@ body {
 
 .map-label-layer {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 40;
   pointer-events: none;
 }
@@ -485,30 +505,42 @@ body {
   z-index: 2;
   display: flex;
   align-items: flex-start;
+  gap: 7px;
   gap: clamp(5px, 0.7cqw, 10px);
 }
 
 .map-label-rail--top {
+  top: 19px;
   top: clamp(10px, 2cqw, 22px);
   left: 12px;
-  width: min(calc(100% - 24px), 780px);
+  width: calc(100% - 24px);
+  max-width: 780px;
+}
+
+.map-label-rail--top > [data-platform="9"] {
+  flex-grow: 1.35;
 }
 
 .map-label-rail--top > [data-platform="13"] {
+  margin-right: 5px;
   margin-right: clamp(4px, 0.5cqw, 8px);
 }
 
 .map-label-rail--bottom {
+  bottom: 19px;
   bottom: clamp(12px, 2cqw, 24px);
   left: 12px;
+  width: calc(100% - 150px);
   width: min(calc(100% - 24px - clamp(100px, 13cqw, 128px)), 820px);
 }
 
 .map-label-rail--right {
   top: 42%;
   right: 12px;
+  width: 132px;
   width: clamp(98px, 15cqw, 132px);
   flex-direction: column;
+  gap: 12px;
   gap: clamp(10px, 1.2cqw, 14px);
 }
 
@@ -627,6 +659,7 @@ body {
 }
 
 .map-label-rail .map-platform-card[data-has-schedule="false"][data-live-state=""] {
+  flex: 0 0 61px;
   flex: 0 0 clamp(52px, 6.3cqw, 64px);
   height: 46px;
   grid-template-rows: 1fr;
@@ -810,13 +843,30 @@ body {
 
 .map-platform-card__route:nth-child(2),
 .map-platform-card__route:first-child:nth-last-child(2) {
-  padding-inline: 5px;
+  padding-left: 5px;
+  padding-right: 5px;
   font-size: 24px;
 }
 
 /* "TRAIN" is the longest route label; scale it with the map so it never shows "...". */
+/* Three or more routes (P8 Ontario Northland): a two-column grid with smaller numbers. */
+.map-platform-card--many-routes .map-platform-card__routes {
+  padding: 4px 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+}
+
+.map-platform-card--many-routes .map-platform-card__route {
+  min-width: 0;
+  padding: 2px 3px;
+  font-size: 17px;
+}
+
 .map-platform-card__route[data-route-id="GO-TRAIN"] {
-  padding-inline: 6px;
+  padding-left: 6px;
+  padding-right: 6px;
+  font-size: 23px;
   font-size: clamp(12px, 2.35cqw, 24px);
   text-overflow: clip;
 }
@@ -936,7 +986,7 @@ body {
 .map-connection-card__service-name {
   overflow: hidden;
   color: #004e80;
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.025em;
   line-height: 1;
@@ -961,7 +1011,7 @@ body {
   min-width: 0;
   overflow: hidden;
   color: #17384a;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 800;
   line-height: 1.05;
   text-overflow: ellipsis;
@@ -988,6 +1038,7 @@ body {
 .map-dropoff-card[data-geographic-card="true"] {
   position: absolute;
   z-index: 5;
+  width: 156px;
   width: clamp(138px, 16cqw, 170px);
   min-height: 58px;
   transform: translate(-50%, -100%);
@@ -1434,7 +1485,10 @@ body {
 /* Split circle: operator on top, route below. */
 .vehicle-marker__body {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 2;
   overflow: hidden;
   display: grid;
@@ -1517,6 +1571,58 @@ body {
   filter: drop-shadow(0 0 2px #fff) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.45));
   transform: translateX(-50%) rotate(var(--bearing));
   transform-origin: 50% calc(100% + clamp(22px, 2.5vmin, 39px));
+}
+
+/* A bus drawing stands at the vehicle's position; an icon floats above it to name the route. */
+.vehicle-marker__sprite {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  left: 50%;
+  width: var(--bus-sprite-width, 111px);
+  max-width: none;
+  height: auto;
+  filter: drop-shadow(0 0 1px rgba(10, 25, 45, 0.75));
+  transform: translate(-50%, -50%);
+}
+
+.vehicle-marker--sprite {
+  width: clamp(56px, 6.3vmin, 88px);
+  height: clamp(56px, 6.3vmin, 88px);
+}
+
+.vehicle-marker--sprite .vehicle-marker__arrow {
+  display: none;
+}
+
+.vehicle-marker--sprite .vehicle-marker__body,
+.vehicle-marker--sprite .vehicle-marker__badge {
+  transform: translateY(calc(var(--bus-sprite-width, 111px) * -0.55));
+}
+
+.vehicle-marker--sprite .vehicle-marker__body {
+  z-index: 5;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45);
+}
+
+.vehicle-marker--sprite .vehicle-marker__badge {
+  z-index: 6;
+}
+
+.vehicle-marker--sprite .vehicle-marker__top {
+  padding-bottom: 2px;
+  font-size: clamp(12px, 1.4vmin, 20px);
+}
+
+.vehicle-marker--sprite .vehicle-marker__logo {
+  width: 70%;
+  height: clamp(16px, 1.9vmin, 26px);
+}
+
+.vehicle-marker--sprite .vehicle-marker__bottom,
+.vehicle-marker--sprite .vehicle-marker__bottom--long {
+  padding-top: 2px;
+  font-size: clamp(20px, 2.2vmin, 30px);
 }
 
 .vehicle-marker__labels {
@@ -1624,11 +1730,11 @@ body {
   min-width: 0;
   overflow: hidden;
   color: #fff;
+  height: calc(var(--canvas-height) * 0.07);
   background: #06131d;
   border-top: max(2px, 0.15vmin) solid var(--cyan);
 }
 
-.display-legend,
 .service-notice {
   width: 100%;
   height: 100%;
@@ -1640,29 +1746,11 @@ body {
   font-size: clamp(15px, 1.04vw, 22px);
 }
 
-.display-legend strong,
 .service-notice strong {
   color: #fff;
   font-size: 1.05em;
   font-weight: 900;
   white-space: nowrap;
-}
-
-.display-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5em;
-  color: #c5d6df;
-  font-weight: 700;
-}
-
-.display-legend__vehicle {
-  width: 1.2em;
-  height: 1.2em;
-  border: 2px solid #fff;
-  border-radius: 0.28em;
-  background: #007a33;
-  box-shadow: 0 0 0.4em rgba(74, 222, 128, 0.65);
 }
 
 .service-notice {
@@ -1687,19 +1775,13 @@ body {
     grid-template-columns: minmax(0, 1fr) clamp(520px, 46vw, 620px);
   }
 
-  .map-stage {
-    height: auto;
-    aspect-ratio: calc((11659 / 9010) / 0.794);
-    align-self: center;
-  }
-
   .platform-card__state {
     font-size: clamp(11px, 0.8vw, 15px);
   }
 
-  .display-legend,
   .service-notice {
-    padding-inline: 1.2%;
+    padding-left: 1.2%;
+    padding-right: 1.2%;
   }
 }
 
@@ -1770,11 +1852,11 @@ body {
   }
 
   .map-connection-card__stop {
-    font-size: 9px;
+    font-size: 12px;
   }
 
   .map-connection-card__service-name {
-    font-size: 7px;
+    font-size: 10px;
   }
 
   .map-dropoff-card {
@@ -1865,8 +1947,249 @@ body {
   }
 }
 
+/* Narrow map panel (for example 1024x768): six cards in a row overlap, so wrap
+   them into two rows of three. */
+@container (max-width: 600px) {
+  /* Zoom out a little so the outer platforms stay in view. The thin strips this
+     can leave at the top and bottom sit under the two rows of cards. */
+  .map-plane {
+    width: max(155cqw, 110cqh);
+  }
+
+  .map-label-rail--top,
+  .map-label-rail--bottom {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .map-label-rail--top > *,
+  .map-label-rail--bottom > * {
+    flex: 1 1 calc((100% - 2 * clamp(5px, 0.7cqw, 10px)) / 3 - 1px);
+  }
+
+  .map-label-rail--top > [data-platform="9"] {
+    flex-grow: 1;
+  }
+
+  .map-label-rail--top > [data-platform="13"] {
+    margin-right: 0;
+  }
+}
+
+/* Phones: the page scrolls. The map sits above a one-column board; the board
+   already lists every platform, so the map keeps only its bay numbers. */
+@media (max-width: 700px) {
+  html,
+  body {
+    height: auto;
+    overflow: auto;
+  }
+
+  .platform-app {
+    height: auto;
+    min-height: 100vh;
+    padding: 0;
+    display: block;
+  }
+
+  .platform-canvas {
+    width: 100%;
+    height: auto;
+    --canvas-height: 100vh;
+    grid-template-rows: auto auto auto;
+  }
+
+  .platform-header {
+    min-height: 56px;
+    padding-block: 6px;
+  }
+
+  .platform-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    overflow: visible;
+  }
+
+  .map-stage {
+    height: 80vw;
+  }
+
+  .map-label-rail--top,
+  .map-label-rail--bottom,
+  .map-dropoff-card,
+  .map-legend {
+    display: none;
+  }
+
+  .platform-directory,
+  .assignment-layer {
+    overflow: visible;
+  }
+
+  .platform-directory {
+    border-left: 0;
+  }
+
+  .platform-directory__header h2 {
+    font-size: 26px;
+  }
+
+  .platform-card {
+    min-height: 56px;
+    padding: 6px 10px;
+    grid-template-columns: 52px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .platform-card__agency {
+    display: none;
+  }
+
+  .platform-card__title {
+    font-size: 22px;
+  }
+
+  .platform-card[data-platform="14"] .platform-card__title {
+    font-size: 16px;
+  }
+
+  .platform-card__state {
+    font-size: 10px;
+    white-space: normal;
+  }
+
+  .platform-card__service {
+    grid-template-columns: 54px minmax(0, 1fr) auto;
+    gap: 8px;
+    font-size: 16px;
+  }
+
+  .platform-card__destination {
+    font-size: 15px;
+  }
+
+  .platform-card__departure {
+    gap: 6px;
+  }
+
+  .platform-card__service-source {
+    padding: 2px 4px;
+    font-size: 10px;
+  }
+
+  .platform-card__service-countdown {
+    min-width: 0;
+    font-size: 19px;
+  }
+
+  .platform-card__service-countdown[data-departure-state="future-day"],
+  .platform-card__service-countdown[data-departure-state="unavailable"],
+  .platform-card__service-countdown[data-departure-state="past"] {
+    font-size: 15px;
+  }
+
+  .platform-footer {
+    height: auto;
+    min-height: 48px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .vehicle-marker {
     transition: none;
   }
+}
+
+/* Shorter cards on narrow map panels: keep the two-by-two routes inside them. */
+@container (max-width: 760px) {
+  .map-platform-card--many-routes .map-platform-card__routes {
+    padding: 2px 4px;
+    gap: 2px;
+  }
+
+  .map-platform-card--many-routes .map-platform-card__route {
+    padding: 1px 2px;
+    font-size: 11px;
+  }
+}
+
+/* Flex gap needs Chrome 84+. The terminal TV (LG 55UM5N signage, see README) lacks it,
+   so legacy-layout.js sets .no-flex-gap and these margins space the items instead.
+   Grid gap is supported there and needs no fallback. */
+.no-flex-gap .connection-status > * + * {
+  margin-left: 0.55em;
+}
+
+.no-flex-gap .map-go-train-tag > * + * {
+  margin-left: 10px;
+}
+
+.no-flex-gap .map-legend__item > * + *,
+.no-flex-gap .map-label-rail--top > * + *,
+.no-flex-gap .map-label-rail--bottom > * + *,
+.no-flex-gap .map-connection-card__header > * + *,
+.no-flex-gap .map-connection-card__service > * + * {
+  margin-left: 7px;
+}
+
+.no-flex-gap .map-platform-card__header > * + * {
+  margin-left: 5px;
+}
+
+.no-flex-gap .map-platform-card__title > * + *,
+.no-flex-gap .map-platform-card__routes > * + *,
+.no-flex-gap .map-connection-card__platform > * + * {
+  margin-left: 6px;
+}
+
+.no-flex-gap .map-connection-card__routes > * + * {
+  margin-left: 3px;
+}
+
+.no-flex-gap .map-dropoff-card > * + * {
+  margin-left: 8px;
+}
+
+.no-flex-gap .platform-directory__header > * + * {
+  margin-left: 18px;
+}
+
+.no-flex-gap .service-notice > * + * {
+  margin-left: 1.1em;
+}
+
+.no-flex-gap .map-go-train-tag__copy > * + * {
+  margin-top: 2px;
+}
+
+.no-flex-gap .map-label-rail--right > * + * {
+  margin-top: 12px;
+}
+
+.no-flex-gap .map-connection-card__service-copy > * + * {
+  margin-top: 1px;
+}
+
+.no-flex-gap .platform-card__heading > * + * {
+  margin-top: 0.25em;
+}
+
+/* The LIVE dot is a pseudo-element in front of plain text. */
+.no-flex-gap .platform-card__service-source::before {
+  margin-right: 6px;
+}
+
+/* row-reverse: the second item sits to the left of the first. */
+.no-flex-gap .platform-card__departure > * + * {
+  margin-right: 10px;
+}
+
+/* The many-routes card lays its routes out as a grid, which spaces them already. */
+.no-flex-gap .map-platform-card--many-routes .map-platform-card__routes > * + * {
+  margin-left: 0;
+}
+
+/* Keep the logo pushed to the right edge of its header. */
+.no-flex-gap .map-connection-card__logo {
+  margin-left: auto;
 }

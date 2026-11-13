@@ -119,21 +119,19 @@ function copyBattMapAssets() {
 }
 
 function copyPlatformMapAssets() {
-  const mapSource = path.join(srcDir, 'platform-map', 'map.png');
-  if (fs.existsSync(mapSource)) {
-    fs.copyFileSync(mapSource, path.join(assetsDir, 'map.png'));
-  }
+  // Only the simulator base map and the vehicle drawings are used; the old map
+  // image, SVG map, bus icon and mock data stay in the source folder for the design mockups.
   const simulatorMapSource = path.join(srcDir, 'platform-map', 'allandale-sim-basemap.webp');
   if (fs.existsSync(simulatorMapSource)) {
     fs.copyFileSync(simulatorMapSource, path.join(assetsDir, 'allandale-sim-basemap.webp'));
   }
-  const vectorMapSource = path.join(srcDir, 'platform-map', 'allandale-basemap.svg');
-  if (fs.existsSync(vectorMapSource)) {
-    fs.copyFileSync(vectorMapSource, path.join(assetsDir, 'allandale-basemap.svg'));
-  }
-  const busSource = path.join(srcDir, 'platform-map', 'bus_icon.jpg');
-  if (fs.existsSync(busSource)) {
-    fs.copyFileSync(busSource, path.join(assetsDir, 'bus_icon.jpg'));
+  const busSpriteSource = path.join(srcDir, 'platform-map', 'bus-sprites');
+  if (fs.existsSync(busSpriteSource)) {
+    const busSpriteDest = path.join(assetsDir, 'bus-sprites');
+    fs.mkdirSync(busSpriteDest, { recursive: true });
+    fs.readdirSync(busSpriteSource)
+      .filter((file) => file.endsWith('.webp'))
+      .forEach((file) => fs.copyFileSync(path.join(busSpriteSource, file), path.join(busSpriteDest, file)));
   }
 }
 
