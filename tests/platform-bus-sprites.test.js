@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { busSpriteUrl, busSpriteWidth, spriteHeadingIndex } from '../frontend/src/platform-map/bus-sprites.js';
+import { bayBearing, busSpriteUrl, busSpriteWidth, spriteHeadingIndex } from '../frontend/src/platform-map/bus-sprites.js';
 import { GO_TRAIN_CONSIST, goTrainSpritePlacement, goTrainSpriteUrl } from '../frontend/src/platform-map/go-train.js';
 import manifest from '../frontend/src/platform-map/bus-sprites/manifest.json';
 
@@ -20,6 +20,17 @@ describe('platform map bus sprites', () => {
   test('shows the side view when no direction is known', () => {
     expect(spriteHeadingIndex(undefined)).toBe(4);
     expect(spriteHeadingIndex('unknown')).toBe(4);
+  });
+
+  test('parks a bus parallel to its bay, facing forward', () => {
+    ['6', '7', '8', '9'].forEach((bay) => expect(bayBearing(bay)).toBe(270));
+    ['2', '3', '4', '5'].forEach((bay) => expect(bayBearing(bay)).toBe(90));
+    ['12', '13'].forEach((bay) => expect(bayBearing(bay)).toBe(0));
+    expect(bayBearing('14')).toBe(180);
+    expect(bayBearing('1')).toBeNull();
+    expect(bayBearing('')).toBeNull();
+    expect(busSpriteUrl({ agency_id: 'ontario-northland' }, '', bayBearing('8')))
+      .toBe('./assets/bus-sprites/ontario-northland-12.webp');
   });
 
   test('paints a Barrie bus roof with its route colour', () => {

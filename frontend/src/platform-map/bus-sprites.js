@@ -8,6 +8,21 @@ export const BUS_SPRITE_SCALE = 2.2;
 const DEFAULT_BEARING = 90;
 const AGENCY_SPRITES = Object.freeze(['go-transit', 'simcoe-linx', 'ontario-northland']);
 
+// A bus at a bay parks parallel to the platform, facing forward: the north row faces west,
+// the south row east, the Essa Rd bays north and Stop 14 south.
+const BAY_BEARINGS = Object.freeze({
+  '2': 90, '3': 90, '4': 90, '5': 90,
+  '6': 270, '7': 270, '8': 270, '9': 270,
+  '12': 0, '13': 0,
+  '14': 180,
+});
+
+// The parked direction for a bay, or null for a bay with no set direction.
+export function bayBearing(platform) {
+  const bearing = BAY_BEARINGS[String(platform)];
+  return bearing === undefined ? null : bearing;
+}
+
 export function spriteHeadingIndex(bearing) {
   const degrees = Number(bearing);
   const safe = Number.isFinite(degrees) ? degrees : DEFAULT_BEARING;

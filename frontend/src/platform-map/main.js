@@ -31,7 +31,7 @@ import {
   preloadGoTrainSprites,
 } from './go-train.js';
 import BASEMAP_CALIBRATION from './basemap-calibration.json';
-import { busSpriteUrl, busSpriteWidth } from './bus-sprites.js';
+import { bayBearing, busSpriteUrl, busSpriteWidth } from './bus-sprites.js';
 import {
   fetchText,
   isNewBuild,
@@ -514,7 +514,12 @@ function renderVehicleBubbleLabel(element, vehicle) {
 function updateVehicleSprite(marker, vehicle, routeColor, isCluster) {
   const bearing = normalizeBearing(vehicle.bearing);
   if (bearing !== null) marker.__spriteBearing = bearing;
-  const url = isCluster ? '' : busSpriteUrl(vehicle, routeColor, marker.__spriteBearing);
+  // GPS heading is unreliable or missing while a bus waits, so a bus stopped at its bay
+  // takes the bay's direction.
+  const atBay = String(vehicle.terminal_progress_status || '').toLowerCase() === 'at_terminal';
+  const parked = atBay ? bayBearing(platformForVehicle(vehicle)) : null;
+  const spriteBearing = parked !== null ? parked : marker.__spriteBearing;
+  const url = isCluster ? '' : busSpriteUrl(vehicle, routeColor, spriteBearing);
   const usable = Boolean(url) && url !== marker.__spriteFailedUrl;
   marker.classList.toggle('vehicle-marker--sprite', usable);
   let sprite = marker.__parts.sprite;

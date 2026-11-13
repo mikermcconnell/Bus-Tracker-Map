@@ -10,6 +10,7 @@ import {
   groupPlatformAssignments,
   isAtPlatformDepartureEligible,
   isTerminalDisplayVehicle,
+  normalizeBearing,
   normalizeDepartureBoard,
   projectVehicleToImage,
 } from '../frontend/src/platform-map/model.js';
@@ -39,6 +40,15 @@ describe('platform map model', () => {
     expect(getRouteEightDirection({ route_id: '8A', direction_id: 0, bearing: 180 })).toBe('NORTHBOUND');
     expect(getRouteEightDirection({ route_id: '8B', direction_id: 1, bearing: 0 })).toBe('SOUTHBOUND');
     expect(getRouteEightDirection({ route_id: '7A', direction_id: 0 })).toBe('');
+  });
+
+  test('treats a missing bearing as unknown, not north', () => {
+    expect(normalizeBearing(null)).toBeNull();
+    expect(normalizeBearing(undefined)).toBeNull();
+    expect(normalizeBearing('')).toBeNull();
+    expect(normalizeBearing(0)).toBe(0);
+    expect(normalizeBearing(-90)).toBe(270);
+    expect(getRouteEightDirection({ route_id: '8A', bearing: null })).toBe('');
   });
 
   test('uses feed route colours and computes readable text contrast', () => {

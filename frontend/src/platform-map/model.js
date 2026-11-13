@@ -129,6 +129,8 @@ export function projectVehicleToImage(lat, lon) {
 }
 
 export function normalizeBearing(value) {
+  // Number(null) and Number('') are 0, which would read as "facing north".
+  if (value === null || value === undefined || value === '') return null;
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return null;
   return ((numeric % 360) + 360) % 360;
